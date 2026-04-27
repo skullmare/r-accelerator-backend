@@ -1,5 +1,5 @@
 import authService from '../../services/auth.service.js';
-import { blacklist } from '../../services/token-blacklist.service.js';
+import { isRevoked, revokeToken } from '../../services/token-blacklist.service.js';
 
 const COOKIE_BASE = {
     httpOnly: true,
@@ -16,7 +16,7 @@ async function refreshToken(req, res) {
         return res.error({}, 401, 'Отсутствует refresh токен');
     }
 
-    if (blacklist.has(token)) {
+    if (await isRevoked(token)) {
         return res.error({}, 401, 'Токен отозван');
     }
 
@@ -26,7 +26,7 @@ async function refreshToken(req, res) {
         return res.error({}, 401, 'Недействительный refresh токен');
     }
 
-    blacklist.add(token);
+    await revokeToken(token);
 
     const { accessToken, refreshToken: newRefreshToken } = authService.generateTokens({
         id: payload.id,

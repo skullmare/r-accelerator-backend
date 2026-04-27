@@ -1,22 +1,17 @@
 import 'dotenv/config';
-import express from 'express';
-import expressWinston from 'express-winston';
+import app from './src/app.js';
 import logger from './config/logger.config.js';
-
-const app = express();
-
-app.use(
-  expressWinston.logger({
-    winstonInstance: logger,
-    meta: false,
-    expressFormat: true,
-  })
-);
+import db from './config/mongo.config.js'
 
 const port = process.env.PORT || 3000;
 
-app.listen(port, () => {
-  logger.info(`Сервер запущен на localhost:${port}`);
-});
+try {
+  await db.connectDB();
 
-export default app;
+  app.listen(port, () => {
+    logger.info(`Сервер запущен на localhost:${port}`);
+  });
+} catch (error) {
+  logger.error('Ошибка при запуске сервера:', error);
+  process.exit(1);
+}

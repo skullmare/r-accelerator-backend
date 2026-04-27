@@ -1,4 +1,4 @@
-const jwt = require('jsonwebtoken');
+import jwt from 'jsonwebtoken';
 
 class AuthService {
     generateTokens(payload) {
@@ -29,4 +29,4 @@ class AuthService {
     }
 }
 
-module.exports = new AuthService();
+export default new AuthService();

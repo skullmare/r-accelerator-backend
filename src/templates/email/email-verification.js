@@ -99,7 +99,7 @@ const emailVerificationTemplate = (code) => {
                                         <tr>
                                             <td style="padding:16px 20px;">
                                                 <p style="margin:0; font-size:14px; color:#C0611B; line-height:1.5;">
-                                                    ⚠️ <strong>Вы не запрашивали код?</strong> Ваш аккаунт может быть в опасности. Немедленно <a href="${process.env.RESET_PASSWORD_URL}" style="color:#E67E22; text-decoration:underline;">смените пароль</a> и свяжитесь со службой поддержки.
+                                                    ⚠️ <strong>Вы не запрашивали код?</strong> Ваш аккаунт может быть в опасности. Немедленно свяжитесь со службой поддержки.
                                                 </p>
                                             </td>
                                         </tr>

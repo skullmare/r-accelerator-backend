@@ -6,7 +6,7 @@ export async function isRevoked(token) {
 }
 
 export async function revokeToken(token) {
-    const decoded = jwt.decode(token);
+    const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET, { ignoreExpiration: true });
     const expiresAt = decoded?.exp
         ? new Date(decoded.exp * 1000)
         : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);

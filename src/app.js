@@ -10,7 +10,7 @@ import authRouter from './routes/auth.routes.js';
 const app = express();
 
 const isDev = process.env.NODE_ENV === 'development';
-const allowedOrigins = isDev ? ['http://localhost:5173'] : ['https://production.domain.ru'];
+const allowedOrigins = isDev ? ['/^http:\/\/localhost:\d+$/'] : ['https://production.domain.ru'];
 
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 

@@ -5,9 +5,9 @@ import User from './../../models/user.model.js';
 import sendEmail from '../../services/email.service.js';
 import emailVerificationTemplate from '../../templates/email/email-verification.js';
 
-const CODE_TTL_MS = 15 * 60 * 1000;
+import { CODE_TTL_MS } from '../../constants/auth.constants.js';
 
-async function sendCodeToEmail(req, res) {
+export async function sendCodeToEmail(req, res) {
     const validatedData = req.validatedData;
 
     // 1. Проверяем, есть ли пользователь с действительным кодом
@@ -56,5 +56,3 @@ async function sendCodeToEmail(req, res) {
 
     return res.success(user, "Код подтверждения отправлен на почту", 200);
 }
-
-export default sendCodeToEmail;

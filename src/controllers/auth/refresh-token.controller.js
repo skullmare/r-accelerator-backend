@@ -1,23 +1,11 @@
 import authService from '../../services/auth.service.js';
-import { isRevoked, revokeToken } from '../../services/token-blacklist.service.js';
+import { COOKIE_BASE, COOKIE_REFRESH } from '../../constants/auth.constants.js';
 
-const COOKIE_BASE = {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'none',
-    path: '/',
-    domain: process.env.MAIN_DOMAIN,
-};
-
-async function refreshToken(req, res) {
+export async function refreshToken(req, res) {
     const token = req.cookies?.refreshToken;
 
     if (!token) {
         return res.error({}, 401, 'Отсутствует refresh токен');
-    }
-
-    if (await isRevoked(token)) {
-        return res.error({}, 401, 'Токен отозван');
     }
 
     const payload = authService.validateRefreshToken(token);
@@ -25,8 +13,6 @@ async function refreshToken(req, res) {
     if (!payload) {
         return res.error({}, 401, 'Недействительный refresh токен');
     }
-
-    await revokeToken(token);
 
     const { accessToken, refreshToken: newRefreshToken } = authService.generateTokens({
         id: payload.id,
@@ -38,11 +24,9 @@ async function refreshToken(req, res) {
         expires: new Date(Date.now() + 15 * 60 * 1000),
     });
     res.cookie('refreshToken', newRefreshToken, {
-        ...COOKIE_BASE,
+        ...COOKIE_REFRESH,
         expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
 
     return res.success({ id: payload.id, email: payload.email }, 'Токены обновлены', 200);
 }
-
-export default refreshToken;

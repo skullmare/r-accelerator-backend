@@ -1,4 +1,4 @@
-const validate = (schema) => async (req, res, next) => {
+export const validate = (schema) => async (req, res, next) => {
     const validation = await schema.safeParseAsync({
         body: req.body,
         params: req.params,
@@ -12,5 +12,3 @@ const validate = (schema) => async (req, res, next) => {
     req.validatedData = validation.data; 
     next();
 };
-
-export default validate;

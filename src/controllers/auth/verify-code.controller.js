@@ -2,17 +2,9 @@ import bcrypt from 'bcryptjs';
 import User from '../../models/user.model.js';
 import authService from '../../services/auth.service.js';
 
-const MAX_ATTEMPTS = 3;
+import { COOKIE_BASE, COOKIE_REFRESH, MAX_ATTEMPTS } from '../../constants/auth.constants.js';
 
-const COOKIE_BASE = {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'none',
-    path: '/',
-    domain: process.env.MAIN_DOMAIN,
-};
-
-async function verificationCode(req, res) {
+export async function verificationCode(req, res) {
     const { email, code } = req.validatedData.body;
 
     const user = await User.findOne(
@@ -50,11 +42,9 @@ async function verificationCode(req, res) {
         expires: new Date(Date.now() + 15 * 60 * 1000),
     });
     res.cookie('refreshToken', refreshToken, {
-        ...COOKIE_BASE,
+        ...COOKIE_REFRESH,
         expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
 
     return res.success({ id: user._id, email: user.email }, 'Авторизация прошла успешно', 200);
 }
-
-export default verificationCode;

@@ -1,9 +1,9 @@
 import express from "express";
-import sendCodeToEmail from "../controllers/auth/send-code.controller.js";
-import verificationCode from "../controllers/auth/verify-code.controller.js";
-import refreshToken from "../controllers/auth/refresh-token.controller.js";
-import logout from "../controllers/auth/logout.controller.js";
-import validate from "../middlewares/validate.middleware.js";
+import { sendCodeToEmail } from "../controllers/auth/send-code.controller.js";
+import { verificationCode } from "../controllers/auth/verify-code.controller.js";
+import { refreshToken } from "../controllers/auth/refresh-token.controller.js";
+import { logout } from "../controllers/auth/logout.controller.js";
+import { validate } from "../middlewares/validate.middleware.js";
 import authSchemas from "../schemas/auth.schema.js";
 
 const router = express.Router();

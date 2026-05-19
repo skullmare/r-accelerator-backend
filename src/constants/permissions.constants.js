@@ -5,14 +5,11 @@ const PERMISSIONS_CONFIG = {
             READ: {
                 key: 'users.read', label: 'Просмотр списка пользователей'
             },
-            CREATE: {
-                key: 'users.create', label: 'Создание пользователя'
+            UPDATE_ROLE: {
+                key: 'users.update', label: 'Редактирование роли пользователей'
             },
             UPDATE: {
-                key: 'users.update', label: 'Редактирование пользователя'
-            },
-            DELETE: {
-                key: 'users.delete', label: 'Удаление пользователя'
+                key: 'users.update', label: 'Редактирование пользователей'
             }
         }
     },
@@ -30,6 +27,14 @@ const PERMISSIONS_CONFIG = {
             },
             DELETE: {
                 key: 'agents.delete', label: 'Удаление агента'
+            }
+        }
+    },
+    ASSISTANTS: {
+        label: "Ассистенты",
+        actions: {
+            READ: {
+                key: 'assistants.read', label: 'Просмотр списка ассистентов'
             }
         }
     },
@@ -79,4 +84,4 @@ const getPermissionsForUI = () => {
     }));
 };
 
-export {PERMISSIONS_CONFIG, ALL_PERMISSIONS, getPermissionsForUI};
+export { PERMISSIONS_CONFIG, ALL_PERMISSIONS, getPermissionsForUI };

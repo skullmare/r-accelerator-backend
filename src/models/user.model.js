@@ -13,6 +13,18 @@ const UserSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Role'
     },
+    firstName: {
+        type: String
+    },
+    profession: {
+        type: String
+    },
+    fieldOfActivity: {
+        type: String
+    },
+    city: {
+        type: String
+    },
     courseGroup: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'CourseGroup'

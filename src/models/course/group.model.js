@@ -15,6 +15,11 @@ const CourseGroupSchema = new mongoose.Schema({
         type: Boolean,
         required: true,
         default: true
+    },
+    qrCode: {
+        type: String,
+        required: true,
+        unique: true,
     }
 }, {
     timestamps: true

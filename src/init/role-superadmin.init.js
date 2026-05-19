@@ -6,7 +6,7 @@ export async function initSuperadminRole() {
     await Role.findOneAndUpdate(
         { name: 'superadmin' },
         { name: 'superadmin', permissions: ALL_PERMISSIONS, isSystem: true },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
     );
     logger.info('Роль superadmin инициализирована');
 }

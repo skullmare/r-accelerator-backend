@@ -98,6 +98,29 @@
  *           type: string
  *         name:
  *           type: string
+ *     Pagination:
+ *       type: object
+ *       properties:
+ *         page:
+ *           type: integer
+ *           description: Текущая страница
+ *           example: 1
+ *         limit:
+ *           type: integer
+ *           description: Количество элементов на странице
+ *           example: 10
+ *         total:
+ *           type: integer
+ *           description: Общее количество элементов
+ *           example: 42
+ *         totalPages:
+ *           type: integer
+ *           description: Общее количество страниц
+ *           example: 5
+ *         hasMore:
+ *           type: boolean
+ *           description: Есть ли ещё страницы
+ *           example: true
  *     Error:
  *       type: object
  *       properties:

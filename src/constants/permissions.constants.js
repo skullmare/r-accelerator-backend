@@ -17,16 +17,16 @@ const PERMISSIONS_CONFIG = {
         label: "Агенты",
         actions: {
             READ: {
-                key: 'agents.read', label: 'Просмотр списка агентов'
+                key: 'course_agents.read', label: 'Просмотр списка агентов'
             },
             CREATE: {
-                key: 'agents.create', label: 'Создание агента'
+                key: 'course_agents.create', label: 'Создание агента'
             },
             UPDATE: {
-                key: 'agents.update', label: 'Редактирование агента'
+                key: 'course_agents.update', label: 'Редактирование агента'
             },
             DELETE: {
-                key: 'agents.delete', label: 'Удаление агента'
+                key: 'course_agents.delete', label: 'Удаление агента'
             }
         }
     },
@@ -34,7 +34,7 @@ const PERMISSIONS_CONFIG = {
         label: "Ассистенты",
         actions: {
             READ: {
-                key: 'assistants.read', label: 'Просмотр списка ассистентов'
+                key: 'openai_assistants.read', label: 'Просмотр списка ассистентов'
             }
         }
     },

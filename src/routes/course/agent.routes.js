@@ -32,7 +32,7 @@ const router = express.Router();
  *       403:
  *         description: Недостаточно прав
  */
-router.get('/assistants', authMiddleware, checkPermission('assistants.read'), listOpenAiAssistants);
+router.get('/assistants', authMiddleware, checkPermission('openai_assistants.read'), listOpenAiAssistants);
 
 /**
  * @swagger
@@ -72,7 +72,7 @@ router.get('/accessible', authMiddleware, accessibleAgents);
  *       403:
  *         description: Недостаточно прав
  */
-router.get('/', authMiddleware, checkPermission('agents.read'), listAgents);
+router.get('/', authMiddleware, checkPermission('course_agents.read'), listAgents);
 
 /**
  * @swagger
@@ -112,7 +112,7 @@ router.get('/', authMiddleware, checkPermission('agents.read'), listAgents);
  *       400:
  *         description: Ошибка валидации
  */
-router.post('/', authMiddleware, checkPermission('agents.create'), validate(agentSchemas.createAgentSchema), createAgent);
+router.post('/', authMiddleware, checkPermission('course_agents.create'), validate(agentSchemas.createAgentSchema), createAgent);
 
 /**
  * @swagger
@@ -137,7 +137,7 @@ router.post('/', authMiddleware, checkPermission('agents.create'), validate(agen
  *       404:
  *         description: Агент не найден
  */
-router.get('/:id', authMiddleware, checkPermission('agents.read'), validate(agentSchemas.agentIdSchema), getAgent);
+router.get('/:id', authMiddleware, checkPermission('course_agents.read'), validate(agentSchemas.agentIdSchema), getAgent);
 
 /**
  * @swagger
@@ -182,7 +182,7 @@ router.get('/:id', authMiddleware, checkPermission('agents.read'), validate(agen
  *       404:
  *         description: Агент не найден
  */
-router.put('/:id', authMiddleware, checkPermission('agents.update'), validate(agentSchemas.updateAgentSchema), updateAgent);
+router.put('/:id', authMiddleware, checkPermission('course_agents.update'), validate(agentSchemas.updateAgentSchema), updateAgent);
 
 /**
  * @swagger
@@ -203,6 +203,6 @@ router.put('/:id', authMiddleware, checkPermission('agents.update'), validate(ag
  *       404:
  *         description: Агент не найден
  */
-router.delete('/:id', authMiddleware, checkPermission('agents.delete'), validate(agentSchemas.agentIdSchema), deleteAgent);
+router.delete('/:id', authMiddleware, checkPermission('course_agents.delete'), validate(agentSchemas.agentIdSchema), deleteAgent);
 
 export default router;

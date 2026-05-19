@@ -165,7 +165,7 @@ router.get('/:id', authMiddleware, checkPermission('users.read'), validate(userS
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put('/:id/role', authMiddleware, checkPermission('users.update'), validate(userSchemas.updateUserRoleSchema), updateUserRole);
+router.put('/:id/role', authMiddleware, checkPermission('users_role.update'), validate(userSchemas.updateUserRoleSchema), updateUserRole);
 
 /**
  * @swagger

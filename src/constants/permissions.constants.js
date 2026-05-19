@@ -6,7 +6,7 @@ const PERMISSIONS_CONFIG = {
                 key: 'users.read', label: 'Просмотр списка пользователей'
             },
             UPDATE_ROLE: {
-                key: 'users.update', label: 'Редактирование роли пользователей'
+                key: 'users_role.update', label: 'Редактирование роли пользователей'
             },
             UPDATE: {
                 key: 'users.update', label: 'Редактирование пользователей'

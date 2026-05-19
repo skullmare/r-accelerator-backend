@@ -9,7 +9,7 @@ export async function updateGroup(req, res) {
         rest.qrCode = crypto.randomBytes(32).toString('hex');
     }
 
-    const group = await CourseGroup.findByIdAndUpdate(id, rest, { new: true });
+    const group = await CourseGroup.findByIdAndUpdate(id, rest, { returnDocument: 'after' });
     if (!group) return res.error({}, 404, 'Группа не найдена');
     return res.success(group, 'Группа обновлена', 200);
 }

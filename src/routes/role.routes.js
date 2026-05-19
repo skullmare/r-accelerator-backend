@@ -97,7 +97,7 @@ router.get('/:id', authMiddleware, checkPermission('roles.read'), validate(roleS
  *   put:
  *     tags: [Roles]
  *     summary: Обновить роль
- *     description: Требует право `roles.update`. Системные роли (`isSystem: true`) нельзя изменить.
+ *     description: Требует право `roles.update`. Системные роли (isSystem=true) нельзя изменить.
  *     parameters:
  *       - in: path
  *         name: id
@@ -137,7 +137,7 @@ router.put('/:id', authMiddleware, checkPermission('roles.update'), validate(rol
  *   delete:
  *     tags: [Roles]
  *     summary: Удалить роль
- *     description: Требует право `roles.delete`. Системные роли (`isSystem: true`) нельзя удалить.
+ *     description: Требует право `roles.delete`. Системные роли (isSystem=true) нельзя удалить.
  *     parameters:
  *       - in: path
  *         name: id

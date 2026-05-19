@@ -126,7 +126,7 @@ router.get('/:id', authMiddleware, checkPermission('course_groups.read'), valida
  *   put:
  *     tags: [Course / Groups]
  *     summary: Обновить группу
- *     description: Требует право `course_groups.update`. Передайте `updateQRCode: true` для генерации нового QR-кода.
+ *     description: Требует право `course_groups.update`. Передайте updateQRCode=true для генерации нового QR-кода.
  *     parameters:
  *       - in: path
  *         name: id

@@ -10,6 +10,6 @@ export async function initSuperadmin() {
     if (existing) return;
 
     const role = await Role.findOne({ name: 'superadmin' });
-    await User.create({ email, role: role._id });
+    await User.create({ email, role: role._id, isSystem: true });
     logger.info('Суперадмин создан');
 }

@@ -2,8 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import expressWinston from 'express-winston';
+import swaggerUi from 'swagger-ui-express';
 import { attachHelpers, errorMiddleware } from 'resify-express';
 import logger from '../config/logger.config.js';
+import { swaggerSpec } from '../config/swagger.config.js';
 import authRouter from './routes/auth.routes.js';
 import profileRouter from './routes/profile.routes.js';
 import userRouter from './routes/user.routes.js';
@@ -32,6 +34,8 @@ app.use(
 );
 
 app.use(attachHelpers);
+
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/profile', profileRouter);

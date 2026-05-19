@@ -31,6 +31,6 @@ export async function refreshToken(req, res) {
 
         return res.success({ id: payload.id, email: payload.email }, 'Токены обновлены', 200);
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при обновлении токенов');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при обновлении токенов');
     }
 }

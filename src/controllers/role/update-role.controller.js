@@ -13,6 +13,6 @@ export async function updateRole(req, res) {
 
         return res.success(role, 'Роль обновлена', 200);
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при обновлении роли');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при обновлении роли');
     }
 }

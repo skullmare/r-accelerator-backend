@@ -6,6 +6,6 @@ export async function createRole(req, res) {
         const role = await Role.create({ name, permissions });
         return res.success(role, 'Роль создана', 201);
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при создании роли');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при создании роли');
     }
 }

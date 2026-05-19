@@ -5,6 +5,6 @@ export async function listAgents(req, res) {
         const agents = await CourseAgent.find();
         return res.success(agents, 'Список агентов получен', 200);
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при получении агентов');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при получении агентов');
     }
 }

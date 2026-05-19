@@ -5,6 +5,8 @@ import expressWinston from 'express-winston';
 import { attachHelpers, errorMiddleware } from 'resify-express';
 import logger from '../config/logger.config.js';
 import authRouter from './routes/auth.routes.js';
+import profileRouter from './routes/profile.routes.js';
+import userRouter from './routes/user.routes.js';
 import courseAgentRouter from './routes/course/agent.routes.js';
 import courseGroupRouter from './routes/course/group.routes.js';
 import courseMessageRouter from './routes/course/message.routes.js';
@@ -31,6 +33,8 @@ app.use(
 app.use(attachHelpers);
 
 app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/profile', profileRouter);
+app.use('/api/v1/users', userRouter);
 app.use('/api/v1/course/agents', courseAgentRouter);
 app.use('/api/v1/course/groups', courseGroupRouter);
 app.use('/api/v1/course/messages', courseMessageRouter);

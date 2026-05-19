@@ -9,10 +9,12 @@ import { listAgents } from '../../controllers/course/agent/list-agents.controlle
 import { updateAgent } from '../../controllers/course/agent/update-agent.controller.js';
 import { deleteAgent } from '../../controllers/course/agent/delete-agent.controller.js';
 import { listOpenAiAssistants } from '../../controllers/course/agent/list-assistants.controller.js';
+import { accessibleAgents } from '../../controllers/course/agent/accessible-agents.controller.js';
 
 const router = express.Router();
 
 router.get('/assistants', authMiddleware, checkPermission('assistants.read'), listOpenAiAssistants);
+router.get('/accessible', authMiddleware, accessibleAgents);
 router.get('/', authMiddleware, checkPermission('agents.read'), listAgents);
 router.post('/', authMiddleware, checkPermission('agents.create'), validate(agentSchemas.createAgentSchema), createAgent);
 router.get('/:id', authMiddleware, checkPermission('agents.read'), validate(agentSchemas.agentIdSchema), getAgent);

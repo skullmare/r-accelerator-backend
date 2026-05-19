@@ -9,6 +9,17 @@ const UserSchema = new mongoose.Schema({
         lowercase: true,
         match: [/^\S+@\S+\.\S+$/, 'Пожалуйста, введите корректный email']
     },
+    role: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Role'
+    },
+    courseGroup: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'CourseGroup'
+    },
+    openAiThreadId: {
+        type: String
+    },
     authCodeHashed: {
         type: String,
         required: false,

@@ -34,7 +34,7 @@ app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/course/agents', courseAgentRouter);
 app.use('/api/v1/course/groups', courseGroupRouter);
 app.use('/api/v1/course/messages', courseMessageRouter);
-app.use('/api/v1/upload', fileRouter);
+app.use('/api/v1/file', fileRouter);
 
 app.use((req, res) => {
     return res.error({}, 404, `Маршрут ${req.method} ${req.url} не найден`);

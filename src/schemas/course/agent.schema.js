@@ -8,7 +8,7 @@ const createAgentSchema = z.object({
         description: z.string().min(1).max(500),
         avatar: z.string().url(),
         openAiAssistantId: z.string().min(1),
-        baseMessages: z.array(z.string()).optional()
+        baseMessages: z.array(z.string().min(1).max(100)).optional()
     })
 });
 
@@ -19,7 +19,7 @@ const updateAgentSchema = z.object({
         description: z.string().min(1).max(500).optional(),
         avatar: z.string().url().optional(),
         openAiAssistantId: z.string().min(1).optional(),
-        baseMessages: z.array(z.string()).optional()
+        baseMessages: z.array(z.string().min(1).max(100)).optional()
     })
 });
 

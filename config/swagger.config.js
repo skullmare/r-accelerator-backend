@@ -8,7 +8,7 @@ const options = {
             version: '1.0.0',
             description: 'API платформы Rocketmind'
         },
-        servers: [{ url: `${process.env.HOST}:${process.env.PORT}/api/v1` }],
+        servers: [{ url: `${process.env.HOST}/api/v1` }],
         components: {
             securitySchemes: {
                 cookieAuth: {

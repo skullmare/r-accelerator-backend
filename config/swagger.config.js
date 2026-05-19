@@ -6,9 +6,9 @@ const options = {
         info: {
             title: 'Rocketmind API',
             version: '1.0.0',
-            description: 'API платформы Rocketmind — модуль Course'
+            description: 'API платформы Rocketmind'
         },
-        servers: [{ url: '/api/v1' }],
+        servers: [{ url: `${process.env.HOST}:${process.env.PORT}/api/v1` }],
         components: {
             securitySchemes: {
                 cookieAuth: {

@@ -55,8 +55,23 @@ export async function sendCodeToEmail(req, res) {
             html: emailVerificationTemplate(code)
         });
     } catch (error) {
+        await User.findOneAndUpdate(
+            { email: validatedData.body.email },
+            {
+                $set: {
+                    email: validatedData.body.email,
+                    authCodeHashed: null,
+                    authCodeExpires: null,
+                    authCodeAttempts: 0
+                },
+            },
+            {
+                upsert: true,
+                returnDocument: 'after'
+            }
+        );
         return res.error(
-            {error}, 429, "Ошибка отправки письма."
+            { error }, 429, "Ошибка отправки письма."
         );
     }
 

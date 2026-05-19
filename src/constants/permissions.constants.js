@@ -13,7 +13,7 @@ const PERMISSIONS_CONFIG = {
             }
         }
     },
-    AGENTS: {
+    COURSE_AGENTS: {
         label: "Агенты",
         actions: {
             READ: {
@@ -30,7 +30,7 @@ const PERMISSIONS_CONFIG = {
             }
         }
     },
-    ASSISTANTS: {
+    OPENAI_ASSISTANTS: {
         label: "Ассистенты",
         actions: {
             READ: {

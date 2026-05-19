@@ -12,8 +12,11 @@ const router = express.Router();
  * /course/messages:
  *   get:
  *     tags: [Course / Messages]
- *     summary: История сообщений с агентом
- *     description: Возвращает сообщения текущего пользователя с указанным агентом, отсортированные по возрастанию даты.
+ *     summary: История сообщений с агентом (с пагинацией)
+ *     description: |
+ *       Возвращает сообщения текущего пользователя с указанным агентом, отсортированные по возрастанию даты.
+ *       Поддерживает постраничную загрузку (по 10 сообщений) для реализации бесконечного скролла на клиенте.
+ *       При достижении последней страницы поле `hasMore` вернёт `false`.
  *     parameters:
  *       - in: query
  *         name: agentId
@@ -21,17 +24,53 @@ const router = express.Router();
  *         schema:
  *           type: string
  *         description: ID агента
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Номер страницы
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 10
+ *         description: Количество сообщений на странице
  *     responses:
  *       200:
- *         description: Список сообщений
+ *         description: Список сообщений с метаданными пагинации
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/CourseMessage'
+ *               type: object
+ *               properties:
+ *                 messages:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/CourseMessage'
+ *                 pagination:
+ *                   $ref: '#/components/schemas/Pagination'
  *       400:
  *         description: Ошибка валидации (agentId не передан или некорректен)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Не авторизован
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Внутренняя ошибка сервера
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/', authMiddleware, validate(messageSchemas.listMessagesSchema), listMessages);
 
@@ -70,10 +109,36 @@ router.get('/', authMiddleware, validate(messageSchemas.listMessagesSchema), lis
  *                   $ref: '#/components/schemas/CourseMessage'
  *                 agentMessage:
  *                   $ref: '#/components/schemas/CourseMessage'
+ *       400:
+ *         description: Ошибка валидации данных
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Не авторизован
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       403:
  *         description: Нет доступа к агенту или группа неактивна
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         description: Агент не найден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Внутренняя ошибка сервера
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/', authMiddleware, validate(messageSchemas.createMessageSchema), createMessage);
 

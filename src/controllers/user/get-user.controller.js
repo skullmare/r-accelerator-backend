@@ -7,6 +7,6 @@ export async function getUser(req, res) {
         if (!user) return res.error({}, 404, 'Пользователь не найден');
         return res.success(user, 'Пользователь получен', 200);
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при получении пользователя');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при получении пользователя');
     }
 }

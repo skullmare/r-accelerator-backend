@@ -7,6 +7,6 @@ export async function logout(req, res) {
 
         return res.success({}, 'Выход выполнен успешно', 200);
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при выходе из системы');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при выходе из системы');
     }
 }

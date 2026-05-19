@@ -11,6 +11,6 @@ export async function addToGroup(req, res) {
         await User.findByIdAndUpdate(req.user.id, { courseGroup: group._id });
         return res.success({ groupId: group._id }, 'Вы добавлены в группу', 200);
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при вступлении в группу');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при вступлении в группу');
     }
 }

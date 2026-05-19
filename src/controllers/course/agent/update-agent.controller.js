@@ -7,6 +7,6 @@ export async function updateAgent(req, res) {
         if (!agent) return res.error({}, 404, 'Агент не найден');
         return res.success(agent, 'Агент обновлён', 200);
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при обновлении агента');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при обновлении агента');
     }
 }

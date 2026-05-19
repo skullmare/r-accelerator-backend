@@ -49,6 +49,6 @@ export async function verificationCode(req, res) {
 
         return res.success({ id: user._id, email: user.email }, 'Авторизация прошла успешно', 200);
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при верификации кода');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при верификации кода');
     }
 }

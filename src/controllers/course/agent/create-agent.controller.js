@@ -6,6 +6,6 @@ export async function createAgent(req, res) {
         const agent = await CourseAgent.create({ name, description, avatar, openAiAssistantId, baseMessages });
         return res.success(agent, 'Агент создан', 201);
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при создании агента');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при создании агента');
     }
 }

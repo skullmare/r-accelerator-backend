@@ -9,6 +9,6 @@ export async function listOpenAiAssistants(req, res) {
             200
         );
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при получении ассистентов OpenAI');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при получении ассистентов OpenAI');
     }
 }

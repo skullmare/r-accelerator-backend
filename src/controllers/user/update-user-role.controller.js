@@ -10,6 +10,6 @@ export async function updateUserRole(req, res) {
         const updatedUser = await User.findByIdAndUpdate(id, { role }, { returnDocument: 'after' }).populate('role', 'name permissions');
         return res.success(updatedUser, 'Роль пользователя обновлена', 200);
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при обновлении роли пользователя');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при обновлении роли пользователя');
     }
 }

@@ -40,6 +40,6 @@ export async function createMessage(req, res) {
 
         return res.success({ userMessage, agentMessage }, 'Сообщение отправлено', 201);
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при отправке сообщения');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при отправке сообщения');
     }
 }

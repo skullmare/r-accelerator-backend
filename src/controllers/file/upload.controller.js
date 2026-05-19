@@ -12,6 +12,6 @@ export async function uploadFileController(req, res) {
 
         return res.success({ url }, 'Файл загружен', 200);
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при загрузке файла');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при загрузке файла');
     }
 }

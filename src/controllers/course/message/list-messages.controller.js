@@ -23,6 +23,6 @@ export async function listMessages(req, res) {
             200
         );
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при получении сообщений');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при получении сообщений');
     }
 }

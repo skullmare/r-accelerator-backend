@@ -69,6 +69,6 @@ export async function sendCodeToEmail(req, res) {
 
         return res.success(user, "Код подтверждения отправлен на почту", 200);
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при отправке кода подтверждения');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при отправке кода подтверждения');
     }
 }

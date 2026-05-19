@@ -7,6 +7,6 @@ export async function getRole(req, res) {
         if (!role) return res.error({}, 404, 'Роль не найдена');
         return res.success(role, 'Роль получена', 200);
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при получении роли');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при получении роли');
     }
 }

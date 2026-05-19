@@ -5,6 +5,6 @@ export async function listGroups(req, res) {
         const groups = await CourseGroup.find().populate('agents');
         return res.success(groups, 'Список групп получен', 200);
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при получении групп');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при получении групп');
     }
 }

@@ -8,6 +8,6 @@ export async function createGroup(req, res) {
         const group = await CourseGroup.create({ name, agents, active, qrCode });
         return res.success(group, 'Группа создана', 201);
     } catch (error) {
-        return res.error({}, 500, 'Ошибка при создании группы');
+        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при создании группы');
     }
 }

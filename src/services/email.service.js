@@ -27,6 +27,7 @@ const sendEmail = async (options) => {
         return info;
     } catch (error) {
         logger.error('Ошибка отправки письма с кодом авторизации:', error);
+        throw error;
     }
 };
 

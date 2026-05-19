@@ -15,7 +15,7 @@ export async function sendCodeToEmail(req, res) {
         { email: validatedData.body.email },
         '+authCodeExpires'
     );
-    
+
     // Если пользователь существует И у него есть действительный код
     if (existingUser && existingUser.authCodeExpires && existingUser.authCodeExpires > new Date()) {
         return res.error(
@@ -48,11 +48,33 @@ export async function sendCodeToEmail(req, res) {
     );
 
     // 4. Отправляем email
-    await sendEmail({
-        email: user.email,
-        subject: 'Код подтверждения входа — Rocketmind',
-        html: emailVerificationTemplate(code)
-    });
+    try {
+        await sendEmail({
+            email: user.email,
+            subject: 'Код подтверждения входа — Rocketmind',
+            html: emailVerificationTemplate(code)
+        });
+    } catch (error) {
+        await User.findOneAndUpdate(
+            { email: validatedData.body.email },
+            {
+                $set: {
+                    email: validatedData.body.email,
+                    authCodeHashed: null,
+                    authCodeExpires: null,
+                    authCodeAttempts: 0
+                },
+            },
+            {
+                upsert: true,
+                returnDocument: 'after'
+            }
+        );
+        return res.error(
+            { error }, 429, "Ошибка отправки письма."
+        );
+    }
+
 
     return res.success(user, "Код подтверждения отправлен на почту", 200);
 }

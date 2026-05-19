@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { type } from "os";
 
 const UserSchema = new mongoose.Schema({
     email: {
@@ -53,6 +54,10 @@ const UserSchema = new mongoose.Schema({
     },
     lastLogin: {
         type: Date
+    },
+    isSystem: {
+        type: Boolean,
+        default: false
     }
 }, {
     timestamps: true 

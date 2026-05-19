@@ -1,6 +1,5 @@
-import openai from '../../../config/openai.config.js'
-import logger from '../../../config/logger.config';
-
+import openai from '../../../config/openai.config.js';
+import logger from '../../../config/logger.config.js';
 
 export async function listAssistants() {
     try {

@@ -20,6 +20,7 @@
   },
   "homepage": "https://github.com/skullmare/r-accelerator-backend#readme",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.0.0",
     "axios": "^1.16.1",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
@@ -29,6 +30,7 @@
     "express-winston": "^4.2.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.5.0",
+    "multer": "^2.1.1",
     "nodemailer": "^8.0.6",
     "openai": "^6.38.0",
     "resify-express": "^1.0.3",

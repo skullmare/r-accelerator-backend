@@ -8,8 +8,47 @@ import { getRole } from '../controllers/role/get-role.controller.js';
 import { createRole } from '../controllers/role/create-role.controller.js';
 import { updateRole } from '../controllers/role/update-role.controller.js';
 import { deleteRole } from '../controllers/role/delete-role.controller.js';
+import { listPermissions } from '../controllers/role/list-permissions.controller.js';
 
 const router = express.Router();
+
+/**
+ * @swagger
+ * /roles/permissions:
+ *   get:
+ *     tags: [Roles]
+ *     summary: Список всех возможных прав
+ *     description: Возвращает все доступные права, сгруппированные по категориям. Требует право `roles.read`.
+ *     responses:
+ *       200:
+ *         description: Список прав по группам
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   group:
+ *                     type: string
+ *                     example: Роли
+ *                   actions:
+ *                     type: array
+ *                     items:
+ *                       type: object
+ *                       properties:
+ *                         key:
+ *                           type: string
+ *                           example: roles.read
+ *                         label:
+ *                           type: string
+ *                           example: Просмотр списка ролей
+ *       401:
+ *         description: Не авторизован
+ *       403:
+ *         description: Недостаточно прав
+ */
+router.get('/permissions', authMiddleware, checkPermission('roles.read'), listPermissions);
 
 /**
  * @swagger

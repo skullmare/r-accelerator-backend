@@ -11,6 +11,11 @@ const CourseAgentSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    role: {
+        type: String,
+        maxlength: 100,
+        default: null
+    },
     avatar: {
         type: String,
         required: true

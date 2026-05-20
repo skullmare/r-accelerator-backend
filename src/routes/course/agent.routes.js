@@ -93,6 +93,10 @@ router.get('/', authMiddleware, checkPermission('course_agents.read'), listAgent
  *                 type: string
  *               description:
  *                 type: string
+ *               role:
+ *                 type: string
+ *                 maxLength: 100
+ *                 description: Роль агента (например, "Ментор", "Куратор")
  *               avatar:
  *                 type: string
  *                 format: uri
@@ -163,6 +167,11 @@ router.get('/:id', authMiddleware, checkPermission('course_agents.read'), valida
  *                 type: string
  *               description:
  *                 type: string
+ *               role:
+ *                 type: string
+ *                 maxLength: 100
+ *                 nullable: true
+ *                 description: Роль агента (например, "Ментор", "Куратор")
  *               avatar:
  *                 type: string
  *                 format: uri

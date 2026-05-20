@@ -79,11 +79,17 @@ router.get('/', authMiddleware, validate(messageSchemas.listMessagesSchema), lis
  * /course/messages:
  *   post:
  *     tags: [Course / Messages]
- *     summary: Отправить сообщение агенту
+ *     summary: Отправить сообщение агенту (SSE-стриминг)
  *     description: |
- *       Отправляет сообщение агенту через OpenAI Assistants API и сохраняет оба сообщения (пользователя и агента) в БД.
+ *       Отправляет сообщение агенту через OpenAI Assistants API и стримит ответ по протоколу Server-Sent Events.
  *       При первом обращении создаётся OpenAI thread для пользователя.
  *       Пользователь должен состоять в активной группе, в которую входит выбранный агент.
+ *
+ *       **Формат событий SSE:**
+ *       - `message_created` — сохранённое сообщение пользователя: `{ userMessage }`
+ *       - `delta` — фрагмент ответа агента: `{ text: "..." }`
+ *       - `done` — финальное сохранённое сообщение агента: `{ agentMessage }`
+ *       - `error` — ошибка в процессе стриминга: `{ message, code }`
  *     requestBody:
  *       required: true
  *       content:
@@ -98,17 +104,12 @@ router.get('/', authMiddleware, validate(messageSchemas.listMessagesSchema), lis
  *                 type: string
  *                 maxLength: 4000
  *     responses:
- *       201:
- *         description: Сообщение отправлено, ответ агента получен
+ *       200:
+ *         description: SSE-поток с событиями стриминга
  *         content:
- *           application/json:
+ *           text/event-stream:
  *             schema:
- *               type: object
- *               properties:
- *                 userMessage:
- *                   $ref: '#/components/schemas/CourseMessage'
- *                 agentMessage:
- *                   $ref: '#/components/schemas/CourseMessage'
+ *               type: string
  *       400:
  *         description: Ошибка валидации данных
  *         content:
@@ -129,12 +130,6 @@ router.get('/', authMiddleware, validate(messageSchemas.listMessagesSchema), lis
  *               $ref: '#/components/schemas/Error'
  *       404:
  *         description: Агент не найден
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       500:
- *         description: Внутренняя ошибка сервера
  *         content:
  *           application/json:
  *             schema:

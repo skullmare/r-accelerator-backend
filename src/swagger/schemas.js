@@ -50,6 +50,10 @@
  *           type: string
  *         description:
  *           type: string
+ *         role:
+ *           type: string
+ *           maxLength: 100
+ *           nullable: true
  *         avatar:
  *           type: string
  *           format: uri

@@ -25,6 +25,12 @@ app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+
+
+app.use(attachHelpers);
+
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
 app.use(
     expressWinston.logger({
         winstonInstance: logger,
@@ -32,10 +38,6 @@ app.use(
         expressFormat: true,
     })
 );
-
-app.use(attachHelpers);
-
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/profile', profileRouter);

@@ -1,22 +1,25 @@
 import openai from '../../../config/openai.config.js';
-import { cancelActiveRuns } from './cancel-active-runs.js';
+
+export class StuckThreadError extends Error {
+    constructor() { super('STUCK_THREAD'); this.name = 'StuckThreadError'; }
+}
 
 /**
  * Streams assistant response via SSE. Calls onDelta(text) for each chunk,
  * resolves with the full response text when done.
  */
-export class StuckThreadError extends Error {
-    constructor() { super('STUCK_THREAD'); this.name = 'StuckThreadError'; }
-}
-
 export async function sendMessageAssistantStream({ threadId, assistantId, message, onDelta }) {
-    const cleared = await cancelActiveRuns(threadId);
-    if (!cleared) throw new StuckThreadError();
-
-    await openai.beta.threads.messages.create(threadId, {
-        role: 'user',
-        content: message
-    });
+    try {
+        await openai.beta.threads.messages.create(threadId, {
+            role: 'user',
+            content: message
+        });
+    } catch (err) {
+        if (err?.status === 400 && err?.message?.includes('while a run') && err?.message?.includes('is active')) {
+            throw new StuckThreadError();
+        }
+        throw err;
+    }
 
     let fullText = '';
 

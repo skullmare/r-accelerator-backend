@@ -1,6 +1,9 @@
 import openai from '../../../config/openai.config.js';
+import { cancelActiveRuns } from './cancel-active-runs.js';
 
 export async function sendMessageAssistant({ threadId, assistantId, message }) {
+    await cancelActiveRuns(threadId);
+
     await openai.beta.threads.messages.create(threadId, {
         role: 'user',
         content: message

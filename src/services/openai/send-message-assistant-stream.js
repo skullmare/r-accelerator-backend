@@ -1,10 +1,13 @@
 import openai from '../../../config/openai.config.js';
+import { cancelActiveRuns } from './cancel-active-runs.js';
 
 /**
  * Streams assistant response via SSE. Calls onDelta(text) for each chunk,
  * resolves with the full response text when done.
  */
 export async function sendMessageAssistantStream({ threadId, assistantId, message, onDelta }) {
+    await cancelActiveRuns(threadId);
+
     await openai.beta.threads.messages.create(threadId, {
         role: 'user',
         content: message

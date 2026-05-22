@@ -3,7 +3,7 @@ import CourseAgent from '../../../models/course/agent.model.js';
 import CourseGroup from '../../../models/course/group.model.js';
 import CourseMessage from '../../../models/course/message.model.js';
 import { createThreadAssistant } from '../../../services/openai/create-thread-assistant.js';
-import { sendMessageAssistantStream } from '../../../services/openai/send-message-assistant-stream.js';
+import { sendMessageAssistantStream, StuckThreadError } from '../../../services/openai/send-message-assistant-stream.js';
 
 export async function createMessage(req, res) {
     const { agentId, messageText } = req.validatedData.body;
@@ -56,12 +56,25 @@ export async function createMessage(req, res) {
             ? `[Контекст о пользователе: ${userContextParts.join(', ')}]\n\n${messageText}`
             : messageText;
 
-        const responseText = await sendMessageAssistantStream({
-            threadId,
-            assistantId: agent.openAiAssistantId,
-            message: messageWithContext,
-            onDelta: (chunk) => sendEvent('delta', { text: chunk })
-        });
+        let responseText;
+        try {
+            responseText = await sendMessageAssistantStream({
+                threadId,
+                assistantId: agent.openAiAssistantId,
+                message: messageWithContext,
+                onDelta: (chunk) => sendEvent('delta', { text: chunk })
+            });
+        } catch (err) {
+            if (!(err instanceof StuckThreadError)) throw err;
+            threadId = await createThreadAssistant();
+            await User.findByIdAndUpdate(req.user.id, { openAiThreadId: threadId });
+            responseText = await sendMessageAssistantStream({
+                threadId,
+                assistantId: agent.openAiAssistantId,
+                message: messageWithContext,
+                onDelta: (chunk) => sendEvent('delta', { text: chunk })
+            });
+        }
 
         const agentMessage = await CourseMessage.create({
             messageText: responseText,

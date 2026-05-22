@@ -46,10 +46,20 @@ export async function createMessage(req, res) {
 
         sendEvent('message_created', { userMessage });
 
+        const userContextParts = [];
+        if (user.firstName || user.lastName) userContextParts.push(`Имя пользователя: ${[user.firstName, user.lastName].filter(Boolean).join(' ')}`);
+        if (user.profession) userContextParts.push(`Профессия: ${user.profession}`);
+        if (user.fieldOfActivity) userContextParts.push(`Сфера деятельности: ${user.fieldOfActivity}`);
+        if (user.city) userContextParts.push(`Город: ${user.city}`);
+
+        const messageWithContext = userContextParts.length > 0
+            ? `[Контекст о пользователе: ${userContextParts.join(', ')}]\n\n${messageText}`
+            : messageText;
+
         const responseText = await sendMessageAssistantStream({
             threadId,
             assistantId: agent.openAiAssistantId,
-            message: messageText,
+            message: messageWithContext,
             onDelta: (chunk) => sendEvent('delta', { text: chunk })
         });
 

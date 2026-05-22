@@ -40,6 +40,8 @@ router.get('/', authMiddleware, getProfile);
  *             properties:
  *               firstName:
  *                 type: string
+ *               lastName:
+ *                 type: string
  *               profession:
  *                 type: string
  *               fieldOfActivity:

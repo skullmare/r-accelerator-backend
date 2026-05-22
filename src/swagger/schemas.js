@@ -12,6 +12,8 @@
  *           format: email
  *         firstName:
  *           type: string
+ *         lastName:
+ *           type: string
  *         profession:
  *           type: string
  *         fieldOfActivity:

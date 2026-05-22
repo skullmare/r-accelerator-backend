@@ -189,6 +189,8 @@ router.put('/:id/role', authMiddleware, checkPermission('users_role.update'), va
  *             properties:
  *               firstName:
  *                 type: string
+ *               lastName:
+ *                 type: string
  *               profession:
  *                 type: string
  *               fieldOfActivity:

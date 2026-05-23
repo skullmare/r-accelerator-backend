@@ -25,7 +25,7 @@ async function cancelIfActive(threadId, runId) {
  * Streams assistant response via SSE. Calls onDelta(text) for each chunk,
  * resolves with { text, runId } when done.
  */
-export async function sendMessageAssistantStream({ threadId, assistantId, message, runId, onDelta }) {
+export async function sendMessageAssistantStream({ threadId, assistantId, message, runId, onDelta, onRunCreated }) {
     await cancelIfActive(threadId, runId);
 
     await openai.beta.threads.messages.create(threadId, {
@@ -34,6 +34,7 @@ export async function sendMessageAssistantStream({ threadId, assistantId, messag
     });
 
     let fullText = '';
+    let runIdSaved = false;
 
     const stream = openai.beta.threads.runs.stream(threadId, {
         assistant_id: assistantId
@@ -41,6 +42,12 @@ export async function sendMessageAssistantStream({ threadId, assistantId, messag
 
     await new Promise((resolve, reject) => {
         stream
+            .on('run', (run) => {
+                if (!runIdSaved && run.id) {
+                    runIdSaved = true;
+                    onRunCreated?.(run.id);
+                }
+            })
             .on('textDelta', (delta) => {
                 const chunk = delta.value ?? '';
                 if (chunk) {
@@ -56,5 +63,5 @@ export async function sendMessageAssistantStream({ threadId, assistantId, messag
         throw new Error('Пустой ответ от ассистента');
     }
 
-    return { text: fullText, runId: stream.currentRun()?.id };
+    return fullText;
 }

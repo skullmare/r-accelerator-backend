@@ -58,17 +58,14 @@ export async function createMessage(req, res) {
             ? `[Контекст о пользователе: ${userContextParts.join(', ')}]\n\n${messageText}`
             : messageText;
 
-        const { text: responseText, runId: newRunId } = await sendMessageAssistantStream({
+        const responseText = await sendMessageAssistantStream({
             threadId,
             assistantId: agent.openAiAssistantId,
             message: messageWithContext,
             runId: existingRunId,
-            onDelta: (chunk) => sendEvent('delta', { text: chunk })
+            onDelta: (chunk) => sendEvent('delta', { text: chunk }),
+            onRunCreated: (id) => User.findByIdAndUpdate(req.user.id, { openAiRunId: id })
         });
-
-        if (newRunId) {
-            await User.findByIdAndUpdate(req.user.id, { openAiRunId: newRunId });
-        }
 
         const agentMessage = await CourseMessage.create({
             messageText: responseText,

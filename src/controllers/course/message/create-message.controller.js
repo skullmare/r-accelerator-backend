@@ -3,7 +3,7 @@ import CourseAgent from '../../../models/course/agent.model.js';
 import CourseGroup from '../../../models/course/group.model.js';
 import CourseMessage from '../../../models/course/message.model.js';
 import { createThreadAssistant } from '../../../services/openai/create-thread-assistant.js';
-import { sendMessageAssistantStream, StuckThreadError } from '../../../services/openai/send-message-assistant-stream.js';
+import { sendMessageAssistantStream } from '../../../services/openai/send-message-assistant-stream.js';
 
 export async function createMessage(req, res) {
     const { agentId, messageText } = req.validatedData.body;
@@ -25,6 +25,8 @@ export async function createMessage(req, res) {
         threadId = await createThreadAssistant();
         await User.findByIdAndUpdate(req.user.id, { openAiThreadId: threadId });
     }
+
+    const existingRunId = user.openAiRunId;
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -56,24 +58,16 @@ export async function createMessage(req, res) {
             ? `[Контекст о пользователе: ${userContextParts.join(', ')}]\n\n${messageText}`
             : messageText;
 
-        let responseText;
-        try {
-            responseText = await sendMessageAssistantStream({
-                threadId,
-                assistantId: agent.openAiAssistantId,
-                message: messageWithContext,
-                onDelta: (chunk) => sendEvent('delta', { text: chunk })
-            });
-        } catch (err) {
-            if (!(err instanceof StuckThreadError)) throw err;
-            threadId = await createThreadAssistant();
-            await User.findByIdAndUpdate(req.user.id, { openAiThreadId: threadId });
-            responseText = await sendMessageAssistantStream({
-                threadId,
-                assistantId: agent.openAiAssistantId,
-                message: messageWithContext,
-                onDelta: (chunk) => sendEvent('delta', { text: chunk })
-            });
+        const { text: responseText, runId: newRunId } = await sendMessageAssistantStream({
+            threadId,
+            assistantId: agent.openAiAssistantId,
+            message: messageWithContext,
+            runId: existingRunId,
+            onDelta: (chunk) => sendEvent('delta', { text: chunk })
+        });
+
+        if (newRunId) {
+            await User.findByIdAndUpdate(req.user.id, { openAiRunId: newRunId });
         }
 
         const agentMessage = await CourseMessage.create({

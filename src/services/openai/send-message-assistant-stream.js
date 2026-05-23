@@ -1,25 +1,37 @@
 import openai from '../../../config/openai.config.js';
 
-export class StuckThreadError extends Error {
-    constructor() { super('STUCK_THREAD'); this.name = 'StuckThreadError'; }
+const ACTIVE_STATUSES = new Set(['queued', 'in_progress']);
+
+async function cancelIfActive(threadId, runId) {
+    if (!runId) return;
+    try {
+        const run = await openai.beta.threads.runs.retrieve(runId, { thread_id: threadId });
+        if (!ACTIVE_STATUSES.has(run.status)) return;
+
+        await openai.beta.threads.runs.cancel(runId, { thread_id: threadId });
+
+        // Poll until run leaves 'cancelling' state (max 5s)
+        for (let i = 0; i < 10; i++) {
+            await new Promise(r => setTimeout(r, 500));
+            const updated = await openai.beta.threads.runs.retrieve(runId, { thread_id: threadId });
+            if (updated.status !== 'cancelling') break;
+        }
+    } catch {
+        // Run not found or already terminal — safe to proceed
+    }
 }
 
 /**
  * Streams assistant response via SSE. Calls onDelta(text) for each chunk,
- * resolves with the full response text when done.
+ * resolves with { text, runId } when done.
  */
-export async function sendMessageAssistantStream({ threadId, assistantId, message, onDelta }) {
-    try {
-        await openai.beta.threads.messages.create(threadId, {
-            role: 'user',
-            content: message
-        });
-    } catch (err) {
-        if (err?.status === 400 && err?.message?.includes('while a run') && err?.message?.includes('is active')) {
-            throw new StuckThreadError();
-        }
-        throw err;
-    }
+export async function sendMessageAssistantStream({ threadId, assistantId, message, runId, onDelta }) {
+    await cancelIfActive(threadId, runId);
+
+    await openai.beta.threads.messages.create(threadId, {
+        role: 'user',
+        content: message
+    });
 
     let fullText = '';
 
@@ -44,5 +56,5 @@ export async function sendMessageAssistantStream({ threadId, assistantId, messag
         throw new Error('Пустой ответ от ассистента');
     }
 
-    return fullText;
+    return { text: fullText, runId: stream.currentRun()?.id };
 }

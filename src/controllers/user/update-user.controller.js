@@ -5,7 +5,7 @@ export async function updateUser(req, res) {
         const { id } = req.validatedData.params;
         const user = await User.findById(id);
         if (!user) return res.error({}, 404, 'Пользователь не найден');
-        if (user.isSystem) return res.error({}, 400, 'Нельзя обновить суперадмина');
+        if (user.isSystem) return res.error({}, 400, 'Нельзя обновить системного пользователя');
 
         const { courseGroup, ...rest } = req.validatedData.body;
         const update = {};

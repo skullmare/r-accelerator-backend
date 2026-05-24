@@ -6,7 +6,7 @@ export async function updateUserRole(req, res) {
         const { role } = req.validatedData.body;
         const user = await User.findById(id);
         if (!user) return res.error({}, 404, 'Пользователь не найден');
-        if (user.isSystem) return res.error({}, 400, 'Нельзя обновить роль суперадмина');
+        if (user.isSystem) return res.error({}, 400, 'Нельзя обновить системную роль');
         const update = role === null ? { $unset: { role: 1 } } : { $set: { role } };
         const updatedUser = await User.findByIdAndUpdate(id, update, { returnDocument: 'after' }).populate('role', 'name permissions');
         return res.success(updatedUser, 'Роль пользователя обновлена', 200);

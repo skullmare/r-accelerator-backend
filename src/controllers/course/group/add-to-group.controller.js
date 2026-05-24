@@ -5,8 +5,8 @@ export async function addToGroup(req, res) {
     try {
         const { qrCode } = req.validatedData.body;
 
-        const group = await CourseGroup.findOne({ qrCode, active: true });
-        if (!group) return res.error({}, 404, 'Группа не найдена или неактивна');
+        const group = await CourseGroup.findOne({ qrCode });
+        if (!group) return res.error({}, 404, 'Группа не найдена');
 
         await User.findByIdAndUpdate(req.user.id, { courseGroup: group._id });
         return res.success({ groupId: group._id }, 'Вы добавлены в группу', 200);

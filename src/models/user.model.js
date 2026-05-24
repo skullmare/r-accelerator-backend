@@ -36,9 +36,6 @@ const UserSchema = new mongoose.Schema({
     openAiThreadId: {
         type: String
     },
-    openAiRunId: {
-        type: String
-    },
     authCodeHashed: {
         type: String,
         required: false,

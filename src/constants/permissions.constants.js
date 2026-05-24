@@ -30,14 +30,6 @@ const PERMISSIONS_CONFIG = {
             }
         }
     },
-    OPENAI_ASSISTANTS: {
-        label: "Ассистенты",
-        actions: {
-            READ: {
-                key: 'openai_assistants.read', label: 'Просмотр списка ассистентов'
-            }
-        }
-    },
     ROLES: {
         label: "Роли",
         actions: {

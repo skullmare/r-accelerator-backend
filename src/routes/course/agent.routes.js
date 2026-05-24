@@ -19,7 +19,7 @@ const router = express.Router();
  *   get:
  *     tags: [Course / Agents]
  *     summary: Список ассистентов OpenAI
- *     description: Возвращает id и имя каждого ассистента из OpenAI для привязки к агенту. Требует право `assistants.read`.
+ *     description: Возвращает id и имя каждого ассистента из OpenAI для привязки к агенту. Требует одно из прав `course_agents.read`, `course_agents.create`, `course_agents.update`.
  *     responses:
  *       200:
  *         description: Список ассистентов
@@ -32,7 +32,7 @@ const router = express.Router();
  *       403:
  *         description: Недостаточно прав
  */
-router.get('/assistants', authMiddleware, checkPermission('openai_assistants.read'), listOpenAiAssistants);
+router.get('/assistants', authMiddleware, checkPermission(['course_agents.read', 'course_agents.create', 'course_agents.update'], 'any'), listOpenAiAssistants);
 
 /**
  * @swagger

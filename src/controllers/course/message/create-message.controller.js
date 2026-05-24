@@ -26,8 +26,6 @@ export async function createMessage(req, res) {
         await User.findByIdAndUpdate(req.user.id, { openAiThreadId: threadId });
     }
 
-    const existingRunId = user.openAiRunId;
-
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -58,14 +56,29 @@ export async function createMessage(req, res) {
             ? `[Контекст о пользователе: ${userContextParts.join(', ')}]\n\n${messageText}`
             : messageText;
 
-        const responseText = await sendMessageAssistantStream({
+        const { text: responseText, threadId: usedThreadId } = await sendMessageAssistantStream({
             threadId,
             assistantId: agent.openAiAssistantId,
             message: messageWithContext,
-            runId: existingRunId,
-            onDelta: (chunk) => sendEvent('delta', { text: chunk }),
-            onRunCreated: (id) => User.findByIdAndUpdate(req.user.id, { openAiRunId: id })
+            getMessages: async () => {
+                const messages = await CourseMessage.find({
+                    user: req.user.id,
+                    _id: { $ne: userMessage._id }
+                }).sort({ createdAt: -1 }).limit(32).lean();
+
+                messages.reverse();
+
+                return messages.map(m => ({
+                    role: m.author === 'user' ? 'user' : 'assistant',
+                    content: m.messageText
+                }));
+            },
+            onDelta: (chunk) => sendEvent('delta', { text: chunk })
         });
+
+        if (usedThreadId !== threadId) {
+            await User.findByIdAndUpdate(req.user.id, { openAiThreadId: usedThreadId });
+        }
 
         const agentMessage = await CourseMessage.create({
             messageText: responseText,

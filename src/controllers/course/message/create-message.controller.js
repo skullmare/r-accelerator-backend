@@ -64,7 +64,9 @@ export async function createMessage(req, res) {
                 const messages = await CourseMessage.find({
                     user: req.user.id,
                     _id: { $ne: userMessage._id }
-                }).sort({ createdAt: 1 }).lean();
+                }).sort({ createdAt: -1 }).limit(32).lean();
+
+                messages.reverse();
 
                 return messages.map(m => ({
                     role: m.author === 'user' ? 'user' : 'assistant',

@@ -32,7 +32,7 @@ const router = express.Router();
  *       403:
  *         description: Недостаточно прав
  */
-router.get('/assistants', authMiddleware, checkPermission('openai_assistants.read'), listOpenAiAssistants);
+router.get('/assistants', authMiddleware, checkPermission(['course_agents.read', 'course_agents.create', 'course_agents.update'], 'any'), listOpenAiAssistants);
 
 /**
  * @swagger

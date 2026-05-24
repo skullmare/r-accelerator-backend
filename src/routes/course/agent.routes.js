@@ -19,7 +19,7 @@ const router = express.Router();
  *   get:
  *     tags: [Course / Agents]
  *     summary: Список ассистентов OpenAI
- *     description: Возвращает id и имя каждого ассистента из OpenAI для привязки к агенту. Требует право `assistants.read`.
+ *     description: Возвращает id и имя каждого ассистента из OpenAI для привязки к агенту. Требует одно из прав `course_agents.read`, `course_agents.create`, `course_agents.update`.
  *     responses:
  *       200:
  *         description: Список ассистентов

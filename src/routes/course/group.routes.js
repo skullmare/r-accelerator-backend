@@ -18,7 +18,7 @@ const router = express.Router();
  *   post:
  *     tags: [Course / Groups]
  *     summary: Вступить в группу по QR-коду
- *     description: Привязывает текущего пользователя к группе по её секретному QR-коду. Группа должна быть активна.
+ *     description: Привязывает текущего пользователя к группе по её секретному QR-коду.
  *     requestBody:
  *       required: true
  *       content:
@@ -33,7 +33,7 @@ const router = express.Router();
  *       200:
  *         description: Вы добавлены в группу
  *       404:
- *         description: Группа не найдена или неактивна
+ *         description: Группа не найдена
  */
 router.post('/join', authMiddleware, validate(groupSchemas.addToGroupSchema), addToGroup);
 

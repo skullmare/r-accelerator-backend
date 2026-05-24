@@ -10,13 +10,7 @@ const RoleSchema = new mongoose.Schema({
     },
     permissions: {
         type: [String],
-        enum: ALL_PERMISSIONS,
-        validate: {
-            validator: function (v) {
-                return v && v.length > 0;
-            },
-            message: 'Список прав не может быть пустым'
-        }
+        enum: ALL_PERMISSIONS
     },
     isSystem: {
         type: Boolean,

@@ -29,7 +29,7 @@ const updateUserSchema = z.object({
 const updateUserRoleSchema = z.object({
     params: z.object({ id: objectId }),
     body: z.object({
-        role: objectId
+        role: objectId.nullable()
     })
 });
 

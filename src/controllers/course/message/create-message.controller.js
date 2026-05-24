@@ -26,12 +26,6 @@ export async function createMessage(req, res) {
         await User.findByIdAndUpdate(req.user.id, { openAiThreadId: threadId });
     }
 
-    const previousMessages = await CourseMessage.find({ user: req.user.id, agent: agentId })
-        .sort({ createdAt: -1 })
-        .limit(10)
-        .lean();
-    previousMessages.reverse();
-
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -66,7 +60,17 @@ export async function createMessage(req, res) {
             threadId,
             assistantId: agent.openAiAssistantId,
             message: messageWithContext,
-            previousMessages,
+            getMessages: async () => {
+                const messages = await CourseMessage.find({
+                    user: req.user.id,
+                    _id: { $ne: userMessage._id }
+                }).sort({ createdAt: 1 }).lean();
+
+                return messages.map(m => ({
+                    role: m.author === 'user' ? 'user' : 'assistant',
+                    content: m.messageText
+                }));
+            },
             onDelta: (chunk) => sendEvent('delta', { text: chunk })
         });
 

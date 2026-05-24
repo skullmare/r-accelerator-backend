@@ -1,8 +1,9 @@
 import openai from '../../../config/openai.config.js';
+import { createThreadAssistant } from './create-thread-assistant.js';
 
 const ACTIVE_STATUSES = new Set(['queued', 'in_progress', 'requires_action', 'cancelling']);
 
-async function resolveThreadId(threadId, previousMessages) {
+async function resolveThreadId(threadId, getMessages) {
     const { data } = await openai.beta.threads.runs.list(threadId, { limit: 1, order: 'desc' });
     const lastRun = data[0];
 
@@ -10,21 +11,16 @@ async function resolveThreadId(threadId, previousMessages) {
         return threadId;
     }
 
-    const messages = previousMessages.map(m => ({
-        role: m.author === 'user' ? 'user' : 'assistant',
-        content: m.messageText
-    }));
-
-    const thread = await openai.beta.threads.create(messages.length ? { messages } : {});
-    return thread.id;
+    const messages = await getMessages();
+    return createThreadAssistant(messages);
 }
 
 /**
  * Streams assistant response via SSE. Calls onDelta(text) for each chunk,
  * resolves with { text, threadId } when done.
  */
-export async function sendMessageAssistantStream({ threadId, assistantId, message, previousMessages, onDelta }) {
-    const resolvedThreadId = await resolveThreadId(threadId, previousMessages);
+export async function sendMessageAssistantStream({ threadId, assistantId, message, getMessages, onDelta }) {
+    const resolvedThreadId = await resolveThreadId(threadId, getMessages);
 
     await openai.beta.threads.messages.create(resolvedThreadId, {
         role: 'user',

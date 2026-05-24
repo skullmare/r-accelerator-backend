@@ -33,7 +33,7 @@ const router = express.Router();
  *       200:
  *         description: Вы добавлены в группу
  *       404:
- *         description: Группа не найдена или неактивна
+ *         description: Группа не найдена
  */
 router.post('/join', authMiddleware, validate(groupSchemas.addToGroupSchema), addToGroup);
 

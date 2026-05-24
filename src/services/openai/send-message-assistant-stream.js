@@ -1,32 +1,32 @@
 import openai from '../../../config/openai.config.js';
 
-const ACTIVE_STATUSES = new Set(['queued', 'in_progress']);
+async function cancelLastRun(threadId) {
+    const { data } = await openai.beta.threads.runs.list(threadId, { limit: 1, order: 'desc' });
+    const run = data[0];
+    if (!run) return;
 
-async function cancelIfActive(threadId, runId) {
-    if (!runId) return;
     try {
-        const run = await openai.beta.threads.runs.retrieve(runId, { thread_id: threadId });
-        if (!ACTIVE_STATUSES.has(run.status)) return;
-
-        await openai.beta.threads.runs.cancel(runId, { thread_id: threadId });
-
-        // Poll until run leaves 'cancelling' state (max 5s)
-        for (let i = 0; i < 10; i++) {
-            await new Promise(r => setTimeout(r, 500));
-            const updated = await openai.beta.threads.runs.retrieve(runId, { thread_id: threadId });
-            if (updated.status !== 'cancelling') break;
-        }
+        await openai.beta.threads.runs.cancel(run.id, { thread_id: threadId });
     } catch {
-        // Run not found or already terminal — safe to proceed
+        // Run already in terminal state — thread is free
+        return;
     }
+
+    for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 500));
+        const updated = await openai.beta.threads.runs.retrieve(run.id, { thread_id: threadId });
+        if (updated.status !== 'cancelling') return;
+    }
+
+    throw new Error('Предыдущий запрос завис и не может быть отменён, попробуйте позже');
 }
 
 /**
  * Streams assistant response via SSE. Calls onDelta(text) for each chunk,
- * resolves with { text, runId } when done.
+ * resolves with the full response text when done.
  */
-export async function sendMessageAssistantStream({ threadId, assistantId, message, runId, onDelta, onRunCreated }) {
-    await cancelIfActive(threadId, runId);
+export async function sendMessageAssistantStream({ threadId, assistantId, message, onDelta }) {
+    await cancelLastRun(threadId);
 
     await openai.beta.threads.messages.create(threadId, {
         role: 'user',
@@ -34,7 +34,6 @@ export async function sendMessageAssistantStream({ threadId, assistantId, messag
     });
 
     let fullText = '';
-    let runIdSaved = false;
 
     const stream = openai.beta.threads.runs.stream(threadId, {
         assistant_id: assistantId
@@ -42,12 +41,6 @@ export async function sendMessageAssistantStream({ threadId, assistantId, messag
 
     await new Promise((resolve, reject) => {
         stream
-            .on('run', (run) => {
-                if (!runIdSaved && run.id) {
-                    runIdSaved = true;
-                    onRunCreated?.(run.id);
-                }
-            })
             .on('textDelta', (delta) => {
                 const chunk = delta.value ?? '';
                 if (chunk) {

@@ -26,8 +26,6 @@ export async function createMessage(req, res) {
         await User.findByIdAndUpdate(req.user.id, { openAiThreadId: threadId });
     }
 
-    const existingRunId = user.openAiRunId;
-
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -62,9 +60,7 @@ export async function createMessage(req, res) {
             threadId,
             assistantId: agent.openAiAssistantId,
             message: messageWithContext,
-            runId: existingRunId,
-            onDelta: (chunk) => sendEvent('delta', { text: chunk }),
-            onRunCreated: (id) => User.findByIdAndUpdate(req.user.id, { openAiRunId: id })
+            onDelta: (chunk) => sendEvent('delta', { text: chunk })
         });
 
         const agentMessage = await CourseMessage.create({

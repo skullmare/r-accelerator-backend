@@ -138,7 +138,8 @@ router.get('/:id', authMiddleware, checkPermission('users.read'), validate(userS
  *             properties:
  *               role:
  *                 type: string
- *                 description: ID роли
+ *                 nullable: true
+ *                 description: ID роли. Передайте null, чтобы убрать роль у пользователя
  *     responses:
  *       200:
  *         description: Роль пользователя обновлена
@@ -199,7 +200,8 @@ router.put('/:id/role', authMiddleware, checkPermission('users_role.update'), va
  *                 type: string
  *               courseGroup:
  *                 type: string
- *                 description: ID группы (или null для сброса)
+ *                 nullable: true
+ *                 description: ID группы. Передайте null, чтобы убрать группу у пользователя
  *     responses:
  *       200:
  *         description: Пользователь обновлён

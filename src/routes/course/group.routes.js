@@ -18,7 +18,7 @@ const router = express.Router();
  *   post:
  *     tags: [Course / Groups]
  *     summary: Вступить в группу по QR-коду
- *     description: Привязывает текущего пользователя к группе по её секретному QR-коду. Группа должна быть активна.
+ *     description: Привязывает текущего пользователя к группе по её секретному QR-коду.
  *     requestBody:
  *       required: true
  *       content:

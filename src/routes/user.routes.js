@@ -121,7 +121,7 @@ router.get('/:id', authMiddleware, checkPermission('users.read'), validate(userS
  *   put:
  *     tags: [Users]
  *     summary: Обновить роль пользователя
- *     description: Требует право `users.update`.
+ *     description: Требует право `users_role.update`.
  *     parameters:
  *       - in: path
  *         name: id

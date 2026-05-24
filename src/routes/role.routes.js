@@ -18,7 +18,7 @@ const router = express.Router();
  *   get:
  *     tags: [Roles]
  *     summary: Список всех возможных прав
- *     description: Возвращает все доступные права, сгруппированные по категориям. Требует право `roles.read`.
+ *     description: Возвращает все доступные права, сгруппированные по категориям. Требует одно из прав `roles.read` `roles.create` `roles.update`.
  *     responses:
  *       200:
  *         description: Список прав по группам
@@ -48,7 +48,7 @@ const router = express.Router();
  *       403:
  *         description: Недостаточно прав
  */
-router.get('/permissions', authMiddleware, checkPermission('roles.read'), listPermissions);
+router.get('/permissions', authMiddleware, checkPermission(['roles.read', 'roles.create', 'roles.update'], 'any'), listPermissions);
 
 /**
  * @swagger

@@ -40,7 +40,7 @@ router.get('/assistants', authMiddleware, checkPermission(['course_agents.read',
  *   get:
  *     tags: [Course / Agents]
  *     summary: Доступные агенты текущего пользователя
- *     description: Возвращает агентов из активной группы пользователя. Не требует прав администратора.
+ *     description: Возвращает агентов из активной группы пользователя.
  *     responses:
  *       200:
  *         description: Список доступных агентов (пустой массив, если нет группы или группа неактивна)
@@ -59,7 +59,7 @@ router.get('/accessible', authMiddleware, accessibleAgents);
  *   get:
  *     tags: [Course / Agents]
  *     summary: Список всех агентов
- *     description: Требует право `agents.read`.
+ *     description: Требует право `course_agents.read`.
  *     responses:
  *       200:
  *         description: Список агентов
@@ -80,7 +80,7 @@ router.get('/', authMiddleware, checkPermission('course_agents.read'), listAgent
  *   post:
  *     tags: [Course / Agents]
  *     summary: Создать агента
- *     description: Требует право `agents.create`.
+ *     description: Требует право `course_agents.create`.
  *     requestBody:
  *       required: true
  *       content:
@@ -124,7 +124,7 @@ router.post('/', authMiddleware, checkPermission('course_agents.create'), valida
  *   get:
  *     tags: [Course / Agents]
  *     summary: Получить агента по ID
- *     description: Требует право `agents.read`.
+ *     description: Требует право `course_agents.read`.
  *     parameters:
  *       - in: path
  *         name: id
@@ -149,7 +149,7 @@ router.get('/:id', authMiddleware, checkPermission('course_agents.read'), valida
  *   put:
  *     tags: [Course / Agents]
  *     summary: Обновить агента
- *     description: Требует право `agents.update`.
+ *     description: Требует право `course_agents.update`.
  *     parameters:
  *       - in: path
  *         name: id
@@ -199,7 +199,7 @@ router.put('/:id', authMiddleware, checkPermission('course_agents.update'), vali
  *   delete:
  *     tags: [Course / Agents]
  *     summary: Удалить агента
- *     description: Требует право `agents.delete`.
+ *     description: Требует право `course_agents.delete`.
  *     parameters:
  *       - in: path
  *         name: id

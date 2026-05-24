@@ -26,6 +26,12 @@ export async function createMessage(req, res) {
         await User.findByIdAndUpdate(req.user.id, { openAiThreadId: threadId });
     }
 
+    const previousMessages = await CourseMessage.find({ user: req.user.id, agent: agentId })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean();
+    previousMessages.reverse();
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -56,12 +62,17 @@ export async function createMessage(req, res) {
             ? `[Контекст о пользователе: ${userContextParts.join(', ')}]\n\n${messageText}`
             : messageText;
 
-        const responseText = await sendMessageAssistantStream({
+        const { text: responseText, threadId: usedThreadId } = await sendMessageAssistantStream({
             threadId,
             assistantId: agent.openAiAssistantId,
             message: messageWithContext,
+            previousMessages,
             onDelta: (chunk) => sendEvent('delta', { text: chunk })
         });
+
+        if (usedThreadId !== threadId) {
+            await User.findByIdAndUpdate(req.user.id, { openAiThreadId: usedThreadId });
+        }
 
         const agentMessage = await CourseMessage.create({
             messageText: responseText,

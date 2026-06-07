@@ -20,8 +20,6 @@ const ModuleSchema = new mongoose.Schema({
         trim: true
     },
     items: [ModuleItemSchema]
-}, {
-    _id: true
 });
 
 const StudyProgramSchema = new mongoose.Schema({
@@ -32,6 +30,11 @@ const StudyProgramSchema = new mongoose.Schema({
         trim: true
     },
     modules: [ModuleSchema],
+    sequential: {
+        type: Boolean,
+        default: true,
+        required: true
+    },
     active: {
         type: Boolean,
         required: true,

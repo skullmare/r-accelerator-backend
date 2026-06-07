@@ -1,5 +1,29 @@
 import mongoose from 'mongoose';
 
+const ModuleItemSchema = new mongoose.Schema({
+    type: {
+        type: String,
+        enum: ['lesson', 'agent'],
+        required: true
+    },
+    item: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true,
+        refPath: 'type'
+    }
+});
+
+const ModuleSchema = new mongoose.Schema({
+    name: {
+        type: String,
+        required: true,
+        trim: true
+    },
+    items: [ModuleItemSchema]
+}, {
+    _id: true
+});
+
 const StudyProgramSchema = new mongoose.Schema({
     name: {
         type: String,
@@ -7,11 +31,7 @@ const StudyProgramSchema = new mongoose.Schema({
         unique: true,
         trim: true
     },
-    modules: [{}],
-    agents: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'StudyAgent'
-    }],
+    modules: [ModuleSchema],
     active: {
         type: Boolean,
         required: true,

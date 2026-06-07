@@ -18,10 +18,10 @@ const router = express.Router();
  *   get:
  *     tags: [Roles]
  *     summary: Список всех возможных прав
- *     description: Возвращает все доступные права, сгруппированные по категориям. Требует одно из прав `roles.read` `roles.create` `roles.update`.
+ *     description: Возвращает все доступные права, спрограммированные по категориям. Требует одно из прав `roles.read` `roles.create` `roles.update`.
  *     responses:
  *       200:
- *         description: Список прав по группам
+ *         description: Список прав по программам
  *         content:
  *           application/json:
  *             schema:
@@ -29,7 +29,7 @@ const router = express.Router();
  *               items:
  *                 type: object
  *                 properties:
- *                   group:
+ *                   program:
  *                     type: string
  *                     example: Роли
  *                   actions:
@@ -92,7 +92,7 @@ router.get('/', authMiddleware, checkPermission('roles.read'), listRoles);
  *                 type: array
  *                 items:
  *                   type: string
- *                 example: ["agents.read", "course_groups.read"]
+ *                 example: ["agents.read", "study_programs.read"]
  *     responses:
  *       201:
  *         description: Роль создана

@@ -2,7 +2,7 @@ import z from 'zod';
 
 const objectId = z.string().regex(/^[0-9a-f]{24}$/, 'Некорректный ID');
 
-const createGroupSchema = z.object({
+const createProgramSchema = z.object({
     body: z.object({
         name: z.string().min(1).max(100),
         agents: z.array(objectId).optional().default([]),
@@ -10,7 +10,7 @@ const createGroupSchema = z.object({
     })
 });
 
-const updateGroupSchema = z.object({
+const updateProgramSchema = z.object({
     params: z.object({ id: objectId }),
     body: z.object({
         name: z.string().min(1).max(100).optional(),
@@ -20,14 +20,14 @@ const updateGroupSchema = z.object({
     })
 });
 
-const groupIdSchema = z.object({
+const programIdSchema = z.object({
     params: z.object({ id: objectId })
 });
 
-const addToGroupSchema = z.object({
+const addToProgramSchema = z.object({
     body: z.object({
         qrCode: z.string().min(1)
     })
 });
 
-export default { createGroupSchema, updateGroupSchema, groupIdSchema, addToGroupSchema };
+export default { createProgramSchema, updateProgramSchema, programIdSchema, addToProgramSchema };

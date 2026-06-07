@@ -13,23 +13,6 @@ const PERMISSIONS_CONFIG = {
             }
         }
     },
-    COURSE_AGENTS: {
-        label: "Агенты",
-        actions: {
-            READ: {
-                key: 'course_agents.read', label: 'Просмотр списка агентов'
-            },
-            CREATE: {
-                key: 'course_agents.create', label: 'Создание агента'
-            },
-            UPDATE: {
-                key: 'course_agents.update', label: 'Редактирование агента'
-            },
-            DELETE: {
-                key: 'course_agents.delete', label: 'Удаление агента'
-            }
-        }
-    },
     ROLES: {
         label: "Роли",
         actions: {
@@ -47,31 +30,48 @@ const PERMISSIONS_CONFIG = {
             }
         }
     },
-    COURSE_GROUPS: {
-        label: "Группы курсов",
+    SYUDY_PROGRAMS: {
+        label: "Программы обучения",
         actions: {
             READ: {
-                key: 'course_groups.read', label: 'Просмотр списка групп курсов'
+                key: 'study_programs.read', label: 'Просмотр списка программ обучения'
             },
             CREATE: {
-                key: 'course_groups.create', label: 'Создание группы курсов'
+                key: 'study_programs.create', label: 'Создание программы обучения'
             },
             UPDATE: {
-                key: 'course_groups.update', label: 'Редактирование группы курсов'
+                key: 'study_programs.update', label: 'Редактирование программы обучения'
             },
             DELETE: {
-                key: 'course_groups.delete', label: 'Удаление группы курсов'
+                key: 'study_programs.delete', label: 'Удаление программы обучения'
+            }
+        }
+    },
+    SYUDY_AGENTS: {
+        label: "Обучающие агенты",
+        actions: {
+            READ: {
+                key: 'study_agents.read', label: 'Просмотр списка обучающих агентов'
+            },
+            CREATE: {
+                key: 'study_agents.create', label: 'Создание обучающего агента'
+            },
+            UPDATE: {
+                key: 'study_agents.update', label: 'Редактирование обучающего агента'
+            },
+            DELETE: {
+                key: 'study_agents.delete', label: 'Удаление обучающего агента'
             }
         }
     }
 }
 
 const ALL_PERMISSIONS = Object.values(PERMISSIONS_CONFIG)
-    .flatMap(group => Object.values(group.actions).map(action => action.key));
+    .flatMap(program => Object.values(program.actions).map(action => action.key));
 
 const getPermissionsForUI = () => {
     return Object.keys(PERMISSIONS_CONFIG).map(key => ({
-        group: PERMISSIONS_CONFIG[key].label,
+        program: PERMISSIONS_CONFIG[key].label,
         actions: Object.values(PERMISSIONS_CONFIG[key].actions)
     }));
 };

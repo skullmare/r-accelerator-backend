@@ -198,10 +198,10 @@ router.put('/:id/role', authMiddleware, checkPermission('users_role.update'), va
  *                 type: string
  *               city:
  *                 type: string
- *               courseGroup:
+ *               studyProgram:
  *                 type: string
  *                 nullable: true
- *                 description: ID группы. Передайте null, чтобы убрать группу у пользователя
+ *                 description: ID программы. Передайте null, чтобы убрать программу у пользователя
  *     responses:
  *       200:
  *         description: Пользователь обновлён

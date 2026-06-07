@@ -1,7 +1,7 @@
 import User from '../../../models/user.model.js';
-import CourseAgent from '../../../models/course/agent.model.js';
-import CourseGroup from '../../../models/course/group.model.js';
-import CourseMessage from '../../../models/course/message.model.js';
+import StudyAgent from '../../../models/study/agent.model.js';
+import StudyProgram from '../../../models/study/program.model.js';
+import StudyMessage from '../../../models/study/message.model.js';
 import { createThreadAssistant } from '../../../services/openai/create-thread-assistant.js';
 import { sendMessageAssistantStream } from '../../../services/openai/send-message-assistant-stream.js';
 
@@ -9,15 +9,15 @@ export async function createMessage(req, res) {
     const { agentId, messageText } = req.validatedData.body;
 
     const user = await User.findById(req.user.id);
-    if (!user.courseGroup) return res.error({}, 403, 'Вы не состоите ни в одной группе');
+    if (!user.studyProgram) return res.error({}, 403, 'Вы не состоите ни в одной программе');
 
-    const group = await CourseGroup.findById(user.courseGroup);
-    if (!group?.active) return res.error({}, 403, 'Ваша группа неактивна');
+    const program = await StudyProgram.findById(user.studyProgram);
+    if (!program?.active) return res.error({}, 403, 'Ваша программа неактивна');
 
-    const hasAccess = group.agents.some(a => a.toString() === agentId);
+    const hasAccess = program.agents.some(a => a.toString() === agentId);
     if (!hasAccess) return res.error({}, 403, 'Нет доступа к этому агенту');
 
-    const agent = await CourseAgent.findById(agentId);
+    const agent = await StudyAgent.findById(agentId);
     if (!agent) return res.error({}, 404, 'Агент не найден');
 
     let threadId = user.openAiThreadId;
@@ -37,7 +37,7 @@ export async function createMessage(req, res) {
     };
 
     try {
-        const userMessage = await CourseMessage.create({
+        const userMessage = await StudyMessage.create({
             messageText,
             user: req.user.id,
             agent: agentId,
@@ -61,7 +61,7 @@ export async function createMessage(req, res) {
             assistantId: agent.openAiAssistantId,
             message: messageWithContext,
             getMessages: async () => {
-                const messages = await CourseMessage.find({
+                const messages = await StudyMessage.find({
                     user: req.user.id,
                     _id: { $ne: userMessage._id }
                 }).sort({ createdAt: -1 }).limit(32).lean();
@@ -80,7 +80,7 @@ export async function createMessage(req, res) {
             await User.findByIdAndUpdate(req.user.id, { openAiThreadId: usedThreadId });
         }
 
-        const agentMessage = await CourseMessage.create({
+        const agentMessage = await StudyMessage.create({
             messageText: responseText,
             user: req.user.id,
             agent: agentId,

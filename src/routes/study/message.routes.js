@@ -1,17 +1,17 @@
 import express from 'express';
 import authMiddleware from '../../middlewares/auth.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
-import messageSchemas from '../../schemas/course/message.schema.js';
-import { createMessage } from '../../controllers/course/message/create-message.controller.js';
-import { listMessages } from '../../controllers/course/message/list-messages.controller.js';
+import messageSchemas from '../../schemas/study/message.schema.js';
+import { createMessage } from '../../controllers/study/message/create-message.controller.js';
+import { listMessages } from '../../controllers/study/message/list-messages.controller.js';
 
 const router = express.Router();
 
 /**
  * @swagger
- * /course/messages:
+ * /study/messages:
  *   get:
- *     tags: [Course / Messages]
+ *     tags: [Study / Messages]
  *     summary: История сообщений с агентом (с пагинацией)
  *     description: |
  *       Возвращает сообщения текущего пользователя с указанным агентом, отсортированные по возрастанию даты.
@@ -50,7 +50,7 @@ const router = express.Router();
  *                 messages:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/CourseMessage'
+ *                     $ref: '#/components/schemas/StudyMessage'
  *                 pagination:
  *                   $ref: '#/components/schemas/Pagination'
  *       400:
@@ -76,14 +76,14 @@ router.get('/', authMiddleware, validate(messageSchemas.listMessagesSchema), lis
 
 /**
  * @swagger
- * /course/messages:
+ * /study/messages:
  *   post:
- *     tags: [Course / Messages]
+ *     tags: [Study / Messages]
  *     summary: Отправить сообщение агенту (SSE-стриминг)
  *     description: |
  *       Отправляет сообщение агенту через OpenAI Assistants API и стримит ответ по протоколу Server-Sent Events.
  *       При первом обращении создаётся OpenAI thread для пользователя.
- *       Пользователь должен состоять в активной группе, в которую входит выбранный агент.
+ *       Пользователь должен состоять в активной программе, в которую входит выбранный агент.
  *
  *       **Формат событий SSE:**
  *       - `message_created` — сохранённое сообщение пользователя: `{ userMessage }`
@@ -123,7 +123,7 @@ router.get('/', authMiddleware, validate(messageSchemas.listMessagesSchema), lis
  *             schema:
  *               $ref: '#/components/schemas/Error'
  *       403:
- *         description: Нет доступа к агенту или группа неактивна
+ *         description: Нет доступа к агенту или программа неактивна
  *         content:
  *           application/json:
  *             schema:

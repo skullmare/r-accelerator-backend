@@ -10,9 +10,9 @@ import authRouter from './routes/auth.routes.js';
 import profileRouter from './routes/profile.routes.js';
 import userRouter from './routes/user.routes.js';
 import roleRouter from './routes/role.routes.js';
-import courseAgentRouter from './routes/course/agent.routes.js';
-import courseGroupRouter from './routes/course/group.routes.js';
-import courseMessageRouter from './routes/course/message.routes.js';
+import studyAgentRouter from './routes/study/agent.routes.js';
+import studyProgramRouter from './routes/study/program.routes.js';
+import studyMessageRouter from './routes/study/message.routes.js';
 import fileRouter from './routes/file.routes.js';
 
 const app = express();
@@ -43,9 +43,9 @@ app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/profile', profileRouter);
 app.use('/api/v1/users', userRouter);
 app.use('/api/v1/roles', roleRouter);
-app.use('/api/v1/course/agents', courseAgentRouter);
-app.use('/api/v1/course/groups', courseGroupRouter);
-app.use('/api/v1/course/messages', courseMessageRouter);
+app.use('/api/v1/study/agents', studyAgentRouter);
+app.use('/api/v1/study/programs', studyProgramRouter);
+app.use('/api/v1/study/messages', studyMessageRouter);
 app.use('/api/v1/file', fileRouter);
 
 app.use((req, res) => {

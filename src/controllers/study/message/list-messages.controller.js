@@ -1,4 +1,4 @@
-import CourseMessage from '../../../models/course/message.model.js';
+import StudyMessage from '../../../models/study/message.model.js';
 
 export async function listMessages(req, res) {
     try {
@@ -8,11 +8,11 @@ export async function listMessages(req, res) {
         const filter = { user: req.user.id, agent: agentId };
 
         const [messages, total] = await Promise.all([
-            CourseMessage.find(filter)
+            StudyMessage.find(filter)
                 .sort({ createdAt: 1 })
                 .skip(skip)
                 .limit(limit),
-            CourseMessage.countDocuments(filter)
+            StudyMessage.countDocuments(filter)
         ]);
 
         const totalPages = Math.ceil(total / limit);

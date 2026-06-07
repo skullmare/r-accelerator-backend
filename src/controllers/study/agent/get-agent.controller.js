@@ -1,9 +1,9 @@
-import CourseAgent from '../../../models/course/agent.model.js';
+import StudyAgent from '../../../models/study/agent.model.js';
 
 export async function getAgent(req, res) {
     try {
         const { id } = req.validatedData.params;
-        const agent = await CourseAgent.findById(id);
+        const agent = await StudyAgent.findById(id);
         if (!agent) return res.error({}, 404, 'Агент не найден');
         return res.success(agent, 'Агент получен', 200);
     } catch (error) {

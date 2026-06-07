@@ -29,9 +29,9 @@ const UserSchema = new mongoose.Schema({
     city: {
         type: String
     },
-    courseGroup: {
+    studyProgram: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'CourseGroup'
+        ref: 'StudyProgram'
     },
     openAiThreadId: {
         type: String

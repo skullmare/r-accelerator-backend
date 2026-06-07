@@ -22,8 +22,8 @@
  *           type: string
  *         role:
  *           $ref: '#/components/schemas/Role'
- *         courseGroup:
- *           $ref: '#/components/schemas/CourseGroup'
+ *         studyProgram:
+ *           $ref: '#/components/schemas/StudyProgram'
  *         lastLogin:
  *           type: string
  *           format: date-time
@@ -43,7 +43,7 @@
  *             type: string
  *         isSystem:
  *           type: boolean
- *     CourseAgent:
+ *     StudyAgent:
  *       type: object
  *       properties:
  *         _id:
@@ -65,7 +65,7 @@
  *           type: array
  *           items:
  *             type: string
- *     CourseGroup:
+ *     StudyProgram:
  *       type: object
  *       properties:
  *         _id:
@@ -75,12 +75,12 @@
  *         agents:
  *           type: array
  *           items:
- *             $ref: '#/components/schemas/CourseAgent'
+ *             $ref: '#/components/schemas/StudyAgent'
  *         active:
  *           type: boolean
  *         qrCode:
  *           type: string
- *     CourseMessage:
+ *     StudyMessage:
  *       type: object
  *       properties:
  *         _id:

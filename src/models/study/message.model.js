@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const CourseMessageSchema = new mongoose.Schema({
+const StudyMessageSchema = new mongoose.Schema({
     messageText: {
         type: String,
         required: true
@@ -12,7 +12,7 @@ const CourseMessageSchema = new mongoose.Schema({
     },
     agent: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'CourseAgent',
+        ref: 'StudyAgent',
         required: true
     },
     author: {
@@ -24,7 +24,7 @@ const CourseMessageSchema = new mongoose.Schema({
     timestamps: true
 });
 
-CourseMessageSchema.index({ user: 1, agent: 1, createdAt: -1 });
+StudyMessageSchema.index({ user: 1, agent: 1, createdAt: -1 });
 
-const CourseMessage = mongoose.model('CourseMessage', CourseMessageSchema);
-export default CourseMessage;
+const StudyMessage = mongoose.model('StudyMessage', StudyMessageSchema);
+export default StudyMessage;

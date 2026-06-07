@@ -13,7 +13,7 @@ export async function listUsers(req, res) {
         const [users, total] = await Promise.all([
             User.find(filter)
                 .populate('role', 'name')
-                .populate('courseGroup', 'name')
+                .populate('studyProgram', 'name')
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit),

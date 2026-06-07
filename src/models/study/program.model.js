@@ -1,15 +1,16 @@
 import mongoose from 'mongoose';
 
-const CourseGroupSchema = new mongoose.Schema({
+const StudyProgramSchema = new mongoose.Schema({
     name: {
         type: String,
         required: true,
         unique: true,
         trim: true
     },
+    modules: [{}],
     agents: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'CourseAgent'
+        ref: 'StudyAgent'
     }],
     active: {
         type: Boolean,
@@ -25,5 +26,5 @@ const CourseGroupSchema = new mongoose.Schema({
     timestamps: true
 });
 
-const CourseGroup = mongoose.model('CourseGroup', CourseGroupSchema);
-export default CourseGroup;
+const StudyProgram = mongoose.model('StudyProgram', StudyProgramSchema);
+export default StudyProgram;

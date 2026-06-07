@@ -22,7 +22,7 @@ const updateUserSchema = z.object({
         profession: z.string().min(1).max(200).optional(),
         fieldOfActivity: z.string().min(1).max(200).optional(),
         city: z.string().min(1).max(100).optional(),
-        courseGroup: objectId.nullable().optional()
+        studyProgram: objectId.nullable().optional()
     })
 });
 

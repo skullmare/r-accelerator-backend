@@ -2,24 +2,24 @@ import express from 'express';
 import authMiddleware from '../../middlewares/auth.middleware.js';
 import { checkPermission } from '../../middlewares/permission.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
-import agentSchemas from '../../schemas/course/agent.schema.js';
-import { createAgent } from '../../controllers/course/agent/create-agent.controller.js';
-import { getAgent } from '../../controllers/course/agent/get-agent.controller.js';
-import { listAgents } from '../../controllers/course/agent/list-agents.controller.js';
-import { updateAgent } from '../../controllers/course/agent/update-agent.controller.js';
-import { deleteAgent } from '../../controllers/course/agent/delete-agent.controller.js';
-import { listOpenAiAssistants } from '../../controllers/course/agent/list-assistants.controller.js';
-import { accessibleAgents } from '../../controllers/course/agent/accessible-agents.controller.js';
+import agentSchemas from '../../schemas/study/agent.schema.js';
+import { createAgent } from '../../controllers/study/agent/create-agent.controller.js';
+import { getAgent } from '../../controllers/study/agent/get-agent.controller.js';
+import { listAgents } from '../../controllers/study/agent/list-agents.controller.js';
+import { updateAgent } from '../../controllers/study/agent/update-agent.controller.js';
+import { deleteAgent } from '../../controllers/study/agent/delete-agent.controller.js';
+import { listOpenAiAssistants } from '../../controllers/study/agent/list-assistants.controller.js';
+import { accessibleAgents } from '../../controllers/study/agent/accessible-agents.controller.js';
 
 const router = express.Router();
 
 /**
  * @swagger
- * /course/agents/assistants:
+ * /study/agents/assistants:
  *   get:
- *     tags: [Course / Agents]
+ *     tags: [Study / Agents]
  *     summary: Список ассистентов OpenAI
- *     description: Возвращает id и имя каждого ассистента из OpenAI для привязки к агенту. Требует одно из прав `course_agents.read`, `course_agents.create`, `course_agents.update`.
+ *     description: Возвращает id и имя каждого ассистента из OpenAI для привязки к агенту. Требует одно из прав `study_agents.read`, `study_agents.create`, `study_agents.update`.
  *     responses:
  *       200:
  *         description: Список ассистентов
@@ -32,34 +32,34 @@ const router = express.Router();
  *       403:
  *         description: Недостаточно прав
  */
-router.get('/assistants', authMiddleware, checkPermission(['course_agents.read', 'course_agents.create', 'course_agents.update'], 'any'), listOpenAiAssistants);
+router.get('/assistants', authMiddleware, checkPermission(['study_agents.read', 'study_agents.create', 'study_agents.update'], 'any'), listOpenAiAssistants);
 
 /**
  * @swagger
- * /course/agents/accessible:
+ * /study/agents/accessible:
  *   get:
- *     tags: [Course / Agents]
+ *     tags: [Study / Agents]
  *     summary: Доступные агенты текущего пользователя
- *     description: Возвращает агентов из активной группы пользователя.
+ *     description: Возвращает агентов из активной программы пользователя.
  *     responses:
  *       200:
- *         description: Список доступных агентов (пустой массив, если нет группы или группа неактивна)
+ *         description: Список доступных агентов (пустой массив, если нет программы или программа неактивна)
  *         content:
  *           application/json:
  *             schema:
  *               type: array
  *               items:
- *                 $ref: '#/components/schemas/CourseAgent'
+ *                 $ref: '#/components/schemas/StudyAgent'
  */
 router.get('/accessible', authMiddleware, accessibleAgents);
 
 /**
  * @swagger
- * /course/agents:
+ * /study/agents:
  *   get:
- *     tags: [Course / Agents]
+ *     tags: [Study / Agents]
  *     summary: Список всех агентов
- *     description: Требует право `course_agents.read`.
+ *     description: Требует право `study_agents.read`.
  *     responses:
  *       200:
  *         description: Список агентов
@@ -68,19 +68,19 @@ router.get('/accessible', authMiddleware, accessibleAgents);
  *             schema:
  *               type: array
  *               items:
- *                 $ref: '#/components/schemas/CourseAgent'
+ *                 $ref: '#/components/schemas/StudyAgent'
  *       403:
  *         description: Недостаточно прав
  */
-router.get('/', authMiddleware, checkPermission('course_agents.read'), listAgents);
+router.get('/', authMiddleware, checkPermission('study_agents.read'), listAgents);
 
 /**
  * @swagger
- * /course/agents:
+ * /study/agents:
  *   post:
- *     tags: [Course / Agents]
+ *     tags: [Study / Agents]
  *     summary: Создать агента
- *     description: Требует право `course_agents.create`.
+ *     description: Требует право `study_agents.create`.
  *     requestBody:
  *       required: true
  *       content:
@@ -112,19 +112,19 @@ router.get('/', authMiddleware, checkPermission('course_agents.read'), listAgent
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/CourseAgent'
+ *               $ref: '#/components/schemas/StudyAgent'
  *       400:
  *         description: Ошибка валидации
  */
-router.post('/', authMiddleware, checkPermission('course_agents.create'), validate(agentSchemas.createAgentSchema), createAgent);
+router.post('/', authMiddleware, checkPermission('study_agents.create'), validate(agentSchemas.createAgentSchema), createAgent);
 
 /**
  * @swagger
- * /course/agents/{id}:
+ * /study/agents/{id}:
  *   get:
- *     tags: [Course / Agents]
+ *     tags: [Study / Agents]
  *     summary: Получить агента по ID
- *     description: Требует право `course_agents.read`.
+ *     description: Требует право `study_agents.read`.
  *     parameters:
  *       - in: path
  *         name: id
@@ -137,19 +137,19 @@ router.post('/', authMiddleware, checkPermission('course_agents.create'), valida
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/CourseAgent'
+ *               $ref: '#/components/schemas/StudyAgent'
  *       404:
  *         description: Агент не найден
  */
-router.get('/:id', authMiddleware, checkPermission('course_agents.read'), validate(agentSchemas.agentIdSchema), getAgent);
+router.get('/:id', authMiddleware, checkPermission('study_agents.read'), validate(agentSchemas.agentIdSchema), getAgent);
 
 /**
  * @swagger
- * /course/agents/{id}:
+ * /study/agents/{id}:
  *   put:
- *     tags: [Course / Agents]
+ *     tags: [Study / Agents]
  *     summary: Обновить агента
- *     description: Требует право `course_agents.update`.
+ *     description: Требует право `study_agents.update`.
  *     parameters:
  *       - in: path
  *         name: id
@@ -187,19 +187,19 @@ router.get('/:id', authMiddleware, checkPermission('course_agents.read'), valida
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/CourseAgent'
+ *               $ref: '#/components/schemas/StudyAgent'
  *       404:
  *         description: Агент не найден
  */
-router.put('/:id', authMiddleware, checkPermission('course_agents.update'), validate(agentSchemas.updateAgentSchema), updateAgent);
+router.put('/:id', authMiddleware, checkPermission('study_agents.update'), validate(agentSchemas.updateAgentSchema), updateAgent);
 
 /**
  * @swagger
- * /course/agents/{id}:
+ * /study/agents/{id}:
  *   delete:
- *     tags: [Course / Agents]
+ *     tags: [Study / Agents]
  *     summary: Удалить агента
- *     description: Требует право `course_agents.delete`.
+ *     description: Требует право `study_agents.delete`.
  *     parameters:
  *       - in: path
  *         name: id
@@ -212,6 +212,6 @@ router.put('/:id', authMiddleware, checkPermission('course_agents.update'), vali
  *       404:
  *         description: Агент не найден
  */
-router.delete('/:id', authMiddleware, checkPermission('course_agents.delete'), validate(agentSchemas.agentIdSchema), deleteAgent);
+router.delete('/:id', authMiddleware, checkPermission('study_agents.delete'), validate(agentSchemas.agentIdSchema), deleteAgent);
 
 export default router;

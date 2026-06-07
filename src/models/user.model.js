@@ -29,10 +29,10 @@ const UserSchema = new mongoose.Schema({
     city: {
         type: String
     },
-    studyProgram: {
+    studyPrograms: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'StudyProgram'
-    },
+    }],
     openAiThreadId: {
         type: String
     },

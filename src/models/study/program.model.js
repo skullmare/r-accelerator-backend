@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 const ModuleItemSchema = new mongoose.Schema({
     type: {
         type: String,
-        enum: ['lesson', 'agent'],
+        enum: ['StudyLesson', 'StudyAgent'],
         required: true
     },
     item: {

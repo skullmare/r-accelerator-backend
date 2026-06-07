@@ -20,22 +20,10 @@ const StudyAgentSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    baseMessages: [{
-        // пока что не используем
-        type: String
-    }],
     openAiAssistantId: {
         type: String,
         required: true
-    },
-    prompt: {
-        // пока что не используем
-        type: String
-    },
-    docs: [{
-        // пока что не используем
-        type: String
-    }]
+    }
 }, {
     timestamps: true
 });

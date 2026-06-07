@@ -1,6 +1,4 @@
 import mongoose from "mongoose";
-import { type } from "os";
-
 const UserSchema = new mongoose.Schema({
     email: {
         type: String,

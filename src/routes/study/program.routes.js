@@ -201,6 +201,49 @@ router.post('/:programId/modules', authMiddleware, checkPermission('study_progra
 
 /**
  * @swagger
+ * /study/programs/{programId}/modules/reorder:
+ *   patch:
+ *     tags: [Study / Programs]
+ *     summary: Изменить порядок модулей в программе
+ *     description: Требует право 'study_programs.update'. Передаётся полный список moduleId в нужном порядке. Все ID должны принадлежать данной программе.
+ *     parameters:
+ *       - in: path
+ *         name: programId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [moduleIds]
+ *             properties:
+ *               moduleIds:
+ *                 type: array
+ *                 minItems: 1
+ *                 items:
+ *                   type: string
+ *                 description: Массив ID модулей в новом порядке
+ *     responses:
+ *       200:
+ *         description: Порядок модулей обновлён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/StudyModule'
+ *       400:
+ *         description: Один или несколько moduleId не принадлежат программе
+ *       404:
+ *         description: Программа не найдена
+ */
+router.patch('/:programId/modules/reorder', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.reorderModulesSchema), reorderModules);
+
+/**
+ * @swagger
  * /study/programs/{programId}/modules/{moduleId}:
  *   patch:
  *     tags: [Study / Programs]
@@ -386,48 +429,5 @@ router.delete('/:programId/modules/:moduleId/items/:itemId', authMiddleware, che
  *         description: Программа или модуль не найдены
  */
 router.patch('/:programId/modules/:moduleId/items/reorder', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.reorderModuleItemsSchema), reorderModuleItems);
-
-/**
- * @swagger
- * /study/programs/{programId}/modules/reorder:
- *   patch:
- *     tags: [Study / Programs]
- *     summary: Изменить порядок модулей в программе
- *     description: Требует право 'study_programs.update'. Передаётся полный список moduleId в нужном порядке. Все ID должны принадлежать данной программе.
- *     parameters:
- *       - in: path
- *         name: programId
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [moduleIds]
- *             properties:
- *               moduleIds:
- *                 type: array
- *                 minItems: 1
- *                 items:
- *                   type: string
- *                 description: Массив ID модулей в новом порядке
- *     responses:
- *       200:
- *         description: Порядок модулей обновлён
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/StudyModule'
- *       400:
- *         description: Один или несколько moduleId не принадлежат программе
- *       404:
- *         description: Программа не найдена
- */
-router.patch('/:programId/modules/reorder', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.reorderModulesSchema), reorderModules);
 
 export default router;

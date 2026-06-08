@@ -1,17 +1,17 @@
+import { MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 
-// используем реальное подключение из env или тестовую строку
-const MONGODB_URI = process.env.MONGODB_TEST_URI || process.env.MONGODB_URI;
+let mongod;
 
 export async function connect() {
-    if (mongoose.connection.readyState === 0) {
-        await mongoose.connect(MONGODB_URI);
-    }
+    mongod = await MongoMemoryServer.create();
+    await mongoose.connect(mongod.getUri());
 }
 
 export async function closeDatabase() {
     await mongoose.connection.dropDatabase();
     await mongoose.connection.close();
+    await mongod.stop();
 }
 
 export async function clearDatabase() {

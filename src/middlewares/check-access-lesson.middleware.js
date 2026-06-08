@@ -2,7 +2,7 @@ import User from '../models/user.model.js';
 import StudyProgram from '../models/study/program.model.js';
 
 async function checkAccessLesson(req, res, next) {
-    const { lessonId, programId } = req.query;
+    const { lessonId, programId } = req.params;
     const user = await User.findById(req.user.id, 'studyPrograms');
 
     const program = await StudyProgram.findOne({

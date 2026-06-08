@@ -1,7 +1,7 @@
 import StudyProgram from '../models/study/program.model.js';
 
 async function checkStatusProgram(req, res, next) {
-    const { programId } = req.query;
+    const { programId } = req.params;
 
     const program = await StudyProgram.findById(programId, 'active');
 

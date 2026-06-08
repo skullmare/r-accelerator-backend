@@ -6,7 +6,7 @@ export async function completeLesson(req, res) {
         const { programId, lessonId } = req.validatedData.params;
         const { quizAnswers } = req.validatedData.body;
 
-        // уpsert документ прогресса и добавляем lessonId в completedItems
+        // upsert документ прогресса и добавляем lessonId в completedItems
         await StudyProgress.findOneAndUpdate(
             { user: req.user.id, program: programId },
             { $addToSet: { completedItems: lessonId } },

@@ -12,6 +12,30 @@ export async function createLesson(overrides = {}) {
     });
 }
 
+export async function createLessonWithQuestions(overrides = {}) {
+    return StudyLesson.create({
+        name: 'Test Lesson With Questions',
+        content: { type: 'doc', content: [] },
+        questions: [
+            {
+                questionText: 'Question 1',
+                answerOptions: [
+                    { text: 'Wrong answer', isCorrect: false },
+                    { text: 'Correct answer', isCorrect: true }
+                ]
+            },
+            {
+                questionText: 'Question 2',
+                answerOptions: [
+                    { text: 'Correct answer', isCorrect: true },
+                    { text: 'Wrong answer', isCorrect: false }
+                ]
+            }
+        ],
+        ...overrides
+    });
+}
+
 export async function createAgent(overrides = {}) {
     return StudyAgent.create({
         name: 'Test Agent',

@@ -85,7 +85,7 @@ router.get('/:id', authMiddleware, checkPermission('users.read'), validate(userS
  *   put:
  *     tags: [Users]
  *     summary: Назначить роль пользователю
- *     description: Требует право 'users_role.update'. Передайте 'role: null'чтобы убрать роль.
+ *     description: "Требует право users_role.update. Передайте role=null чтобы убрать роль."
  *     parameters:
  *       - in: path
  *         name: id

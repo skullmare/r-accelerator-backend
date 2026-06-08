@@ -5,25 +5,26 @@ export async function completeLesson(req, res) {
         const { programId, lessonId } = req.validatedData.params;
         const { quizAnswers } = req.validatedData.body;
 
-        // добавляем lessonId в completedItems (если ещё нет) и сохраняем ответы на тест
-        // используем upsert чтобы создать прогресс если его ещё нет
+        // уpsert документ прогресса и добавляем lessonId в completedItems
         await StudyProgress.findOneAndUpdate(
             { user: req.user.id, program: programId },
-            {
-                $addToSet: { completedItems: lessonId },
-                $set: { 'lessonDetails.$[detail].quizAnswers': quizAnswers }
-            },
-            {
-                arrayFilters: [{ 'detail.item': lessonId }],
-                upsert: true
-            }
+            { $addToSet: { completedItems: lessonId } },
+            { upsert: true }
+        );
+
+        // обновляем существующий lessonDetail если есть
+        const updateResult = await StudyProgress.updateOne(
+            { user: req.user.id, program: programId, 'lessonDetails.item': lessonId },
+            { $set: { 'lessonDetails.$.quizAnswers': quizAnswers } }
         );
 
         // если lessonDetail для этого урока ещё не существует — создаём его
-        await StudyProgress.findOneAndUpdate(
-            { user: req.user.id, program: programId, 'lessonDetails.item': { $ne: lessonId } },
-            { $push: { lessonDetails: { item: lessonId, quizAnswers } } }
-        );
+        if (updateResult.matchedCount === 0) {
+            await StudyProgress.updateOne(
+                { user: req.user.id, program: programId },
+                { $push: { lessonDetails: { item: lessonId, quizAnswers } } }
+            );
+        }
 
         return res.success({}, 'Урок отмечен как пройденный', 200);
     } catch (error) {

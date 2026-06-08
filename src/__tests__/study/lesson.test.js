@@ -1,5 +1,4 @@
-import request from 'supertest';
-import app from '../../app.js';
+import api from '../helpers/api.js';
 import { connect, closeDatabase, clearDatabase } from '../setup.js';
 import { createUser } from '../../__fixtures__/user.fixture.js';
 import { createLesson } from '../../__fixtures__/program.fixture.js';
@@ -27,13 +26,10 @@ describe('POST /study/lessons', () => {
     it('создаёт урок', async () => {
         const admin = await createAdminUser();
 
-        const res = await request(app)
+        const res = await api
             .post('/api/v1/study/lessons')
             .set('Cookie', authCookie(admin._id, admin.email))
-            .send({
-                name: 'New Lesson',
-                content: { type: 'doc', content: [] }
-            });
+            .send({ name: 'New Lesson', content: { type: 'doc', content: [] } });
 
         expect(res.status).toBe(201);
         expect(res.body.data.name).toBe('New Lesson');
@@ -42,7 +38,7 @@ describe('POST /study/lessons', () => {
     it('возвращает 403 без права', async () => {
         const user = await createUser();
 
-        const res = await request(app)
+        const res = await api
             .post('/api/v1/study/lessons')
             .set('Cookie', authCookie(user._id, user.email))
             .send({ name: 'Lesson', content: {} });
@@ -65,7 +61,7 @@ describe('GET /study/lessons/:lessonId', () => {
             }]
         });
 
-        const res = await request(app)
+        const res = await api
             .get(`/api/v1/study/lessons/${lesson._id}`)
             .set('Cookie', authCookie(admin._id, admin.email));
 
@@ -79,7 +75,7 @@ describe('PATCH /study/lessons/:lessonId', () => {
         const admin = await createAdminUser();
         const lesson = await createLesson({ name: 'Old Name' });
 
-        const res = await request(app)
+        const res = await api
             .patch(`/api/v1/study/lessons/${lesson._id}`)
             .set('Cookie', authCookie(admin._id, admin.email))
             .send({ name: 'New Name' });
@@ -94,7 +90,7 @@ describe('DELETE /study/lessons/:lessonId', () => {
         const admin = await createAdminUser();
         const lesson = await createLesson();
 
-        const res = await request(app)
+        const res = await api
             .delete(`/api/v1/study/lessons/${lesson._id}`)
             .set('Cookie', authCookie(admin._id, admin.email));
 

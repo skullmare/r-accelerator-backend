@@ -1,5 +1,4 @@
-import request from 'supertest';
-import app from '../../app.js';
+import api from '../helpers/api.js';
 import { connect, closeDatabase, clearDatabase } from '../setup.js';
 import { createUser } from '../../__fixtures__/user.fixture.js';
 import { createProgram } from '../../__fixtures__/program.fixture.js';
@@ -29,7 +28,7 @@ describe('POST /study/programs', () => {
     it('создаёт программу и генерирует qrCode', async () => {
         const admin = await createAdminUser();
 
-        const res = await request(app)
+        const res = await api
             .post('/api/v1/study/programs')
             .set('Cookie', authCookie(admin._id, admin.email))
             .send({ name: 'New Program', sequential: true });
@@ -42,7 +41,7 @@ describe('POST /study/programs', () => {
     it('возвращает 403 без нужного права', async () => {
         const user = await createUser();
 
-        const res = await request(app)
+        const res = await api
             .post('/api/v1/study/programs')
             .set('Cookie', authCookie(user._id, user.email))
             .send({ name: 'New Program' });
@@ -53,7 +52,7 @@ describe('POST /study/programs', () => {
     it('возвращает 400 при пустом name', async () => {
         const admin = await createAdminUser();
 
-        const res = await request(app)
+        const res = await api
             .post('/api/v1/study/programs')
             .set('Cookie', authCookie(admin._id, admin.email))
             .send({ name: '' });
@@ -67,7 +66,7 @@ describe('POST /study/programs/join', () => {
         const program = await createProgram({ active: true });
         const user = await createUser();
 
-        const res = await request(app)
+        const res = await api
             .post('/api/v1/study/programs/join')
             .set('Cookie', authCookie(user._id, user.email))
             .send({ qrCode: program.qrCode });
@@ -83,7 +82,7 @@ describe('POST /study/programs/join', () => {
         const program = await createProgram({ active: true });
         const user = await createUser({ studyPrograms: [program._id] });
 
-        await request(app)
+        await api
             .post('/api/v1/study/programs/join')
             .set('Cookie', authCookie(user._id, user.email))
             .send({ qrCode: program.qrCode });
@@ -96,7 +95,7 @@ describe('POST /study/programs/join', () => {
     it('возвращает 404 при неверном qrCode', async () => {
         const user = await createUser();
 
-        const res = await request(app)
+        const res = await api
             .post('/api/v1/study/programs/join')
             .set('Cookie', authCookie(user._id, user.email))
             .send({ qrCode: 'nonexistent-qr-code' });
@@ -110,7 +109,7 @@ describe('POST /study/programs/:programId/modules', () => {
         const admin = await createAdminUser();
         const program = await createProgram();
 
-        const res = await request(app)
+        const res = await api
             .post(`/api/v1/study/programs/${program._id}/modules`)
             .set('Cookie', authCookie(admin._id, admin.email))
             .send({ name: 'Module 1' });

@@ -1,5 +1,4 @@
-import request from 'supertest';
-import app from '../../app.js';
+import api from '../helpers/api.js';
 import { connect, closeDatabase, clearDatabase } from '../setup.js';
 import { createUserInProgram } from '../../__fixtures__/user.fixture.js';
 import { createProgramWithItems } from '../../__fixtures__/program.fixture.js';
@@ -16,7 +15,7 @@ describe('checkItemUnlocked middleware', () => {
             const { program, lesson2 } = await createProgramWithItems({ sequential: false });
             const user = await createUserInProgram(program._id);
 
-            const res = await request(app)
+            const res = await api
                 .get(`/api/v1/study/programs/${program._id}/lessons/${lesson2._id}`)
                 .set('Cookie', authCookie(user._id, user.email));
 
@@ -27,7 +26,7 @@ describe('checkItemUnlocked middleware', () => {
             const { program, agent } = await createProgramWithItems({ sequential: false });
             const user = await createUserInProgram(program._id);
 
-            const res = await request(app)
+            const res = await api
                 .get(`/api/v1/study/programs/${program._id}/agents/${agent._id}`)
                 .set('Cookie', authCookie(user._id, user.email));
 
@@ -40,7 +39,7 @@ describe('checkItemUnlocked middleware', () => {
             const { program, lesson1 } = await createProgramWithItems({ sequential: true });
             const user = await createUserInProgram(program._id);
 
-            const res = await request(app)
+            const res = await api
                 .get(`/api/v1/study/programs/${program._id}/lessons/${lesson1._id}`)
                 .set('Cookie', authCookie(user._id, user.email));
 
@@ -51,7 +50,7 @@ describe('checkItemUnlocked middleware', () => {
             const { program, lesson2 } = await createProgramWithItems({ sequential: true });
             const user = await createUserInProgram(program._id);
 
-            const res = await request(app)
+            const res = await api
                 .get(`/api/v1/study/programs/${program._id}/lessons/${lesson2._id}`)
                 .set('Cookie', authCookie(user._id, user.email));
 
@@ -62,7 +61,7 @@ describe('checkItemUnlocked middleware', () => {
             const { program, agent } = await createProgramWithItems({ sequential: true });
             const user = await createUserInProgram(program._id);
 
-            const res = await request(app)
+            const res = await api
                 .get(`/api/v1/study/programs/${program._id}/agents/${agent._id}`)
                 .set('Cookie', authCookie(user._id, user.email));
 
@@ -79,7 +78,7 @@ describe('checkItemUnlocked middleware', () => {
                 completedItems: [lesson1._id]
             });
 
-            const res = await request(app)
+            const res = await api
                 .get(`/api/v1/study/programs/${program._id}/agents/${agent._id}`)
                 .set('Cookie', authCookie(user._id, user.email));
 
@@ -96,7 +95,7 @@ describe('checkItemUnlocked middleware', () => {
                 completedItems: [lesson1._id]
             });
 
-            const res = await request(app)
+            const res = await api
                 .get(`/api/v1/study/programs/${program._id}/lessons/${lesson2._id}`)
                 .set('Cookie', authCookie(user._id, user.email));
 

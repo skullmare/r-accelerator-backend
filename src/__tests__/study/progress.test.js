@@ -127,3 +127,111 @@ describe('POST /study/programs/:programId/lessons/:lessonId/complete', () => {
         expect(count).toBe(1);
     });
 });
+
+describe('GET /study/programs/:programId/lessons/:lessonId', () => {
+    it('возвращает урок без isCorrect у вариантов ответа', async () => {
+        const { program, lesson1 } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}/lessons/${lesson1._id}`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(200);
+        expect(res.body.data._id.toString()).toBe(lesson1._id.toString());
+    });
+
+    it('подмешивает userAnswer из прогресса', async () => {
+        const { program, lesson1 } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        const StudyLesson = (await import('../../models/study/lesson.model.js')).default;
+        const fullLesson = await StudyLesson.findById(lesson1._id);
+        const questionId = fullLesson.questions[0]?._id;
+        if (!questionId) return;
+        const answerId = fullLesson.questions[0].answerOptions[0]._id;
+
+        await StudyProgress.create({
+            user: user._id,
+            program: program._id,
+            completedItems: [lesson1._id],
+            lessonDetails: [{ item: lesson1._id, quizAnswers: [{ questionId, answerId }] }]
+        });
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}/lessons/${lesson1._id}`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(200);
+        const q = res.body.data.questions[0];
+        expect(q.userAnswer).toBeDefined();
+        expect(q.userAnswer).not.toBeNull();
+    });
+
+    it('возвращает userAnswer=null если ответа нет', async () => {
+        const { program, lesson1 } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}/lessons/${lesson1._id}`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(200);
+        res.body.data.questions.forEach(q => expect(q.userAnswer).toBeNull());
+    });
+
+    it('возвращает 403 если предыдущий урок не пройден', async () => {
+        const { program, lesson2 } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}/lessons/${lesson2._id}`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(403);
+    });
+});
+
+describe('GET /study/programs/:programId/agents/:agentId', () => {
+    it('возвращает агента если предыдущий урок пройден', async () => {
+        const { program, lesson1, agent } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        await StudyProgress.create({
+            user: user._id,
+            program: program._id,
+            completedItems: [lesson1._id]
+        });
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}/agents/${agent._id}`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(200);
+        expect(res.body.data._id.toString()).toBe(agent._id.toString());
+        expect(res.body.data.name).toBeDefined();
+    });
+
+    it('возвращает 403 если предыдущий урок не пройден', async () => {
+        const { program, agent } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}/agents/${agent._id}`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(403);
+    });
+
+    it('возвращает агента при sequential=false без прогресса', async () => {
+        const { program, agent } = await createProgramWithItems({ sequential: false });
+        const user = await createUserInProgram(program._id);
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}/agents/${agent._id}`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(200);
+        expect(res.body.data._id.toString()).toBe(agent._id.toString());
+    });
+});

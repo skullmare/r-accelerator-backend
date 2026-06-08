@@ -12,22 +12,181 @@ import { listOpenAiAssistants } from '../../controllers/study/agent/list-assista
 
 const router = express.Router();
 
-// список ассистентов OpenAI для привязки к агенту при создании/редактировании
+/**
+ * @swagger
+ * /study/agents/assistants:
+ *   get:
+ *     tags: [Study / Agents]
+ *     summary: Список ассистентов OpenAI
+ *     description: Возвращает id и имя каждого ассистента из OpenAI для привязки к агенту. Требует одно из прав `study_agents.read`, `study_agents.create`, `study_agents.update`.
+ *     responses:
+ *       200:
+ *         description: Список ассистентов
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/OpenAiAssistant'
+ *       403:
+ *         description: Недостаточно прав
+ */
 router.get('/assistants', authMiddleware, checkPermission(['study_agents.read', 'study_agents.create', 'study_agents.update'], 'any'), listOpenAiAssistants);
 
-// список всех агентов — для выбора при составлении программы
+/**
+ * @swagger
+ * /study/agents:
+ *   get:
+ *     tags: [Study / Agents]
+ *     summary: Список всех агентов
+ *     description: Требует право `study_agents.read`. Используется для выбора агента при составлении программы.
+ *     responses:
+ *       200:
+ *         description: Список агентов
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/StudyAgent'
+ *       403:
+ *         description: Недостаточно прав
+ */
 router.get('/', authMiddleware, checkPermission('study_agents.read'), listAgents);
 
-// создать агента и привязать к OpenAI-ассистенту
+/**
+ * @swagger
+ * /study/agents:
+ *   post:
+ *     tags: [Study / Agents]
+ *     summary: Создать агента
+ *     description: Требует право `study_agents.create`.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, description, avatar, openAiAssistantId]
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 maxLength: 100
+ *               description:
+ *                 type: string
+ *                 maxLength: 500
+ *               role:
+ *                 type: string
+ *                 maxLength: 100
+ *                 nullable: true
+ *               avatar:
+ *                 type: string
+ *                 format: uri
+ *               openAiAssistantId:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Агент создан
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/StudyAgent'
+ *       400:
+ *         description: Ошибка валидации
+ */
 router.post('/', authMiddleware, checkPermission('study_agents.create'), validate(agentSchemas.createAgentSchema), createAgent);
 
-// получить агента по ID
+/**
+ * @swagger
+ * /study/agents/{id}:
+ *   get:
+ *     tags: [Study / Agents]
+ *     summary: Получить агента по ID
+ *     description: Требует право `study_agents.read`.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Агент получен
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/StudyAgent'
+ *       404:
+ *         description: Агент не найден
+ */
 router.get('/:id', authMiddleware, checkPermission('study_agents.read'), validate(agentSchemas.agentIdSchema), getAgent);
 
-// обновить данные агента
+/**
+ * @swagger
+ * /study/agents/{id}:
+ *   patch:
+ *     tags: [Study / Agents]
+ *     summary: Обновить агента
+ *     description: Требует право `study_agents.update`. Все поля опциональны.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 maxLength: 100
+ *               description:
+ *                 type: string
+ *                 maxLength: 500
+ *               role:
+ *                 type: string
+ *                 maxLength: 100
+ *                 nullable: true
+ *               avatar:
+ *                 type: string
+ *                 format: uri
+ *               openAiAssistantId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Агент обновлён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/StudyAgent'
+ *       404:
+ *         description: Агент не найден
+ */
 router.patch('/:id', authMiddleware, checkPermission('study_agents.update'), validate(agentSchemas.updateAgentSchema), updateAgent);
 
-// удалить агента
+/**
+ * @swagger
+ * /study/agents/{id}:
+ *   delete:
+ *     tags: [Study / Agents]
+ *     summary: Удалить агента
+ *     description: Требует право `study_agents.delete`.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Агент удалён
+ *       404:
+ *         description: Агент не найден
+ */
 router.delete('/:id', authMiddleware, checkPermission('study_agents.delete'), validate(agentSchemas.agentIdSchema), deleteAgent);
 
 export default router;

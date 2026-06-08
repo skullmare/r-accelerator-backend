@@ -22,8 +22,10 @@
  *           type: string
  *         role:
  *           $ref: '#/components/schemas/Role'
- *         studyProgram:
- *           $ref: '#/components/schemas/StudyProgram'
+ *         studyPrograms:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/StudyProgram'
  *         lastLogin:
  *           type: string
  *           format: date-time
@@ -61,10 +63,32 @@
  *           format: uri
  *         openAiAssistantId:
  *           type: string
- *         baseMessages:
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *     ModuleItem:
+ *       type: object
+ *       properties:
+ *         _id:
+ *           type: string
+ *         type:
+ *           type: string
+ *           enum: [StudyLesson, StudyAgent]
+ *         item:
+ *           oneOf:
+ *             - $ref: '#/components/schemas/StudyLesson'
+ *             - $ref: '#/components/schemas/StudyAgent'
+ *     StudyModule:
+ *       type: object
+ *       properties:
+ *         _id:
+ *           type: string
+ *         name:
+ *           type: string
+ *         items:
  *           type: array
  *           items:
- *             type: string
+ *             $ref: '#/components/schemas/ModuleItem'
  *     StudyProgram:
  *       type: object
  *       properties:
@@ -72,14 +96,115 @@
  *           type: string
  *         name:
  *           type: string
- *         agents:
- *           type: array
- *           items:
- *             $ref: '#/components/schemas/StudyAgent'
+ *         sequential:
+ *           type: boolean
+ *           description: Если true — уроки открываются последовательно
  *         active:
  *           type: boolean
  *         qrCode:
  *           type: string
+ *         modules:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/StudyModule'
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *     AnswerOption:
+ *       type: object
+ *       properties:
+ *         _id:
+ *           type: string
+ *         text:
+ *           type: string
+ *     Question:
+ *       type: object
+ *       properties:
+ *         _id:
+ *           type: string
+ *         questionText:
+ *           type: string
+ *         answerOptions:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/AnswerOption'
+ *         userAnswer:
+ *           type: string
+ *           nullable: true
+ *           description: ID выбранного ответа пользователя (только в пользовательском API)
+ *     StudyLesson:
+ *       type: object
+ *       properties:
+ *         _id:
+ *           type: string
+ *         name:
+ *           type: string
+ *         video:
+ *           type: object
+ *           nullable: true
+ *           properties:
+ *             url:
+ *               type: string
+ *               format: uri
+ *         presentation:
+ *           type: object
+ *           nullable: true
+ *           properties:
+ *             url:
+ *               type: string
+ *               format: uri
+ *         content:
+ *           type: object
+ *           description: Контент урока в формате TipTap/ProseMirror JSON
+ *         questions:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/Question'
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *     ProgressItem:
+ *       type: object
+ *       properties:
+ *         _id:
+ *           type: string
+ *         type:
+ *           type: string
+ *           enum: [StudyLesson, StudyAgent]
+ *         item:
+ *           oneOf:
+ *             - $ref: '#/components/schemas/StudyLesson'
+ *             - $ref: '#/components/schemas/StudyAgent'
+ *         completed:
+ *           type: boolean
+ *           description: Пройден ли элемент пользователем
+ *         accessible:
+ *           type: boolean
+ *           description: Доступен ли элемент (зависит от sequential и прогресса)
+ *     ProgressModule:
+ *       type: object
+ *       properties:
+ *         _id:
+ *           type: string
+ *         name:
+ *           type: string
+ *         items:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/ProgressItem'
+ *     StudyProgress:
+ *       type: object
+ *       properties:
+ *         _id:
+ *           type: string
+ *         name:
+ *           type: string
+ *         sequential:
+ *           type: boolean
+ *         modules:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/ProgressModule'
  *     StudyMessage:
  *       type: object
  *       properties:
@@ -109,23 +234,18 @@
  *       properties:
  *         page:
  *           type: integer
- *           description: Текущая страница
  *           example: 1
  *         limit:
  *           type: integer
- *           description: Количество элементов на странице
  *           example: 10
  *         total:
  *           type: integer
- *           description: Общее количество элементов
  *           example: 42
  *         totalPages:
  *           type: integer
- *           description: Общее количество страниц
  *           example: 5
  *         hasMore:
  *           type: boolean
- *           description: Есть ли ещё страницы
  *           example: true
  *     Error:
  *       type: object

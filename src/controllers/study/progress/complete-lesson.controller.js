@@ -36,11 +36,14 @@ export async function completeLesson(req, res) {
             }
         }
 
-        const questions = (quizAnswers ?? []).map(({ questionId, answerId }) => ({
-            questionId,
-            answerId,
-            isCorrect: correctMap.get(questionId.toString()) === answerId.toString()
-        }));
+        const answerMap = new Map((quizAnswers ?? []).map(({ questionId, answerId }) => [questionId.toString(), answerId.toString()]));
+
+        const questions = (lesson?.questions ?? []).map(q => {
+            const qId = q._id.toString();
+            const answerId = answerMap.get(qId) ?? null;
+            const isCorrect = answerId !== null && correctMap.get(qId) === answerId;
+            return { questionId: qId, answerId, isCorrect };
+        });
 
         const score = questions.filter(q => q.isCorrect).length;
 

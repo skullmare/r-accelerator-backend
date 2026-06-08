@@ -1,4 +1,5 @@
-import api from '../helpers/api.js';
+import request from 'supertest';
+import app from '../../app.js';
 import { connect, closeDatabase, clearDatabase } from '../setup.js';
 import { createUserInProgram } from '../../__fixtures__/user.fixture.js';
 import { createProgramWithItems } from '../../__fixtures__/program.fixture.js';
@@ -20,7 +21,7 @@ describe('GET /study/programs/:programId/progress', () => {
             completedItems: [lesson1._id]
         });
 
-        const res = await api
+        const res = await request(app)
             .get(`/api/v1/study/programs/${program._id}/progress`)
             .set('Cookie', authCookie(user._id, user.email));
 
@@ -42,7 +43,7 @@ describe('GET /study/programs/:programId/progress', () => {
         const { program, lesson1, lesson2 } = await createProgramWithItems({ sequential: true });
         const user = await createUserInProgram(program._id);
 
-        const res = await api
+        const res = await request(app)
             .get(`/api/v1/study/programs/${program._id}/progress`)
             .set('Cookie', authCookie(user._id, user.email));
 
@@ -59,7 +60,7 @@ describe('GET /study/programs/:programId/progress', () => {
         const { program } = await createProgramWithItems({ sequential: false });
         const user = await createUserInProgram(program._id);
 
-        const res = await api
+        const res = await request(app)
             .get(`/api/v1/study/programs/${program._id}/progress`)
             .set('Cookie', authCookie(user._id, user.email));
 
@@ -74,7 +75,7 @@ describe('POST /study/programs/:programId/lessons/:lessonId/complete', () => {
         const { program, lesson1 } = await createProgramWithItems({ sequential: true });
         const user = await createUserInProgram(program._id);
 
-        const res = await api
+        const res = await request(app)
             .post(`/api/v1/study/programs/${program._id}/lessons/${lesson1._id}/complete`)
             .set('Cookie', authCookie(user._id, user.email))
             .send({ quizAnswers: [] });
@@ -96,7 +97,7 @@ describe('POST /study/programs/:programId/lessons/:lessonId/complete', () => {
 
         const answerId = fullLesson.questions[0].answerOptions[0]._id;
 
-        await api
+        await request(app)
             .post(`/api/v1/study/programs/${program._id}/lessons/${lesson1._id}/complete`)
             .set('Cookie', authCookie(user._id, user.email))
             .send({ quizAnswers: [{ questionId, answerId }] });
@@ -111,12 +112,12 @@ describe('POST /study/programs/:programId/lessons/:lessonId/complete', () => {
         const { program, lesson1 } = await createProgramWithItems({ sequential: true });
         const user = await createUserInProgram(program._id);
 
-        await api
+        await request(app)
             .post(`/api/v1/study/programs/${program._id}/lessons/${lesson1._id}/complete`)
             .set('Cookie', authCookie(user._id, user.email))
             .send({ quizAnswers: [] });
 
-        await api
+        await request(app)
             .post(`/api/v1/study/programs/${program._id}/lessons/${lesson1._id}/complete`)
             .set('Cookie', authCookie(user._id, user.email))
             .send({ quizAnswers: [] });

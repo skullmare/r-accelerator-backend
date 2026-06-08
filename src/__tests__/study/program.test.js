@@ -2,28 +2,27 @@ import request from 'supertest';
 import app from '../../app.js';
 import { connect, closeDatabase, clearDatabase } from '../setup.js';
 import { createUser } from '../../__fixtures__/user.fixture.js';
-import { createProgram } from '../../__fixtures__/program.fixture.js';
+import { createProgram, createLesson, createAgent } from '../../__fixtures__/program.fixture.js';
 import { authCookie } from '../../__fixtures__/auth.fixture.js';
 import Role from '../../models/role.model.js';
 import User from '../../models/user.model.js';
+import StudyProgram from '../../models/study/program.model.js';
 
 beforeAll(() => connect());
 afterAll(() => closeDatabase());
 afterEach(() => clearDatabase());
 
-async function createAdminUser() {
-    const role = await Role.create({
-        name: 'admin',
-        permissions: [
-            'study_programs.read',
-            'study_programs.create',
-            'study_programs.update',
-            'study_programs.delete'
-        ]
-    });
-    const user = await createUser({ role: role._id });
-    return user;
+async function createAdminUser(permissions = [
+    'study_programs.read',
+    'study_programs.create',
+    'study_programs.update',
+    'study_programs.delete'
+]) {
+    const role = await Role.create({ name: 'admin', permissions });
+    return createUser({ role: role._id });
 }
+
+// ─── Create ───────────────────────────────────────────────────────────────────
 
 describe('POST /study/programs', () => {
     it('создаёт программу и генерирует qrCode', async () => {
@@ -61,6 +60,118 @@ describe('POST /study/programs', () => {
         expect(res.status).toBe(400);
     });
 });
+
+// ─── List ─────────────────────────────────────────────────────────────────────
+
+describe('GET /study/programs', () => {
+    it('возвращает список программ', async () => {
+        const admin = await createAdminUser();
+        await createProgram({ name: 'Program A' });
+        await createProgram({ name: 'Program B' });
+
+        const res = await request(app)
+            .get('/api/v1/study/programs')
+            .set('Cookie', authCookie(admin._id, admin.email));
+
+        expect(res.status).toBe(200);
+        expect(res.body.data).toHaveLength(2);
+    });
+
+    it('возвращает 403 без права', async () => {
+        const user = await createUser();
+
+        const res = await request(app)
+            .get('/api/v1/study/programs')
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(403);
+    });
+});
+
+// ─── Get ──────────────────────────────────────────────────────────────────────
+
+describe('GET /study/programs/:programId', () => {
+    it('возвращает программу по ID', async () => {
+        const admin = await createAdminUser();
+        const program = await createProgram({ name: 'Detailed Program' });
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}`)
+            .set('Cookie', authCookie(admin._id, admin.email));
+
+        expect(res.status).toBe(200);
+        expect(res.body.data.name).toBe('Detailed Program');
+    });
+
+    it('возвращает 404 для несуществующей программы', async () => {
+        const admin = await createAdminUser();
+
+        const res = await request(app)
+            .get('/api/v1/study/programs/000000000000000000000001')
+            .set('Cookie', authCookie(admin._id, admin.email));
+
+        expect(res.status).toBe(404);
+    });
+});
+
+// ─── Update ───────────────────────────────────────────────────────────────────
+
+describe('PATCH /study/programs/:programId', () => {
+    it('обновляет название программы', async () => {
+        const admin = await createAdminUser();
+        const program = await createProgram({ name: 'Old Name' });
+
+        const res = await request(app)
+            .patch(`/api/v1/study/programs/${program._id}`)
+            .set('Cookie', authCookie(admin._id, admin.email))
+            .send({ name: 'New Name' });
+
+        expect(res.status).toBe(200);
+        expect(res.body.data.name).toBe('New Name');
+    });
+
+    it('обновляет qrCode при updateQRCode=true', async () => {
+        const admin = await createAdminUser();
+        const program = await createProgram();
+        const oldQr = program.qrCode;
+
+        const res = await request(app)
+            .patch(`/api/v1/study/programs/${program._id}`)
+            .set('Cookie', authCookie(admin._id, admin.email))
+            .send({ updateQRCode: true });
+
+        expect(res.status).toBe(200);
+        expect(res.body.data.qrCode).not.toBe(oldQr);
+    });
+});
+
+// ─── Delete ───────────────────────────────────────────────────────────────────
+
+describe('DELETE /study/programs/:programId', () => {
+    it('удаляет программу', async () => {
+        const admin = await createAdminUser();
+        const program = await createProgram();
+
+        const res = await request(app)
+            .delete(`/api/v1/study/programs/${program._id}`)
+            .set('Cookie', authCookie(admin._id, admin.email));
+
+        expect(res.status).toBe(200);
+        expect(await StudyProgram.findById(program._id)).toBeNull();
+    });
+
+    it('возвращает 404 для несуществующей программы', async () => {
+        const admin = await createAdminUser();
+
+        const res = await request(app)
+            .delete('/api/v1/study/programs/000000000000000000000001')
+            .set('Cookie', authCookie(admin._id, admin.email));
+
+        expect(res.status).toBe(404);
+    });
+});
+
+// ─── Join ─────────────────────────────────────────────────────────────────────
 
 describe('POST /study/programs/join', () => {
     it('добавляет программу пользователю по qrCode', async () => {
@@ -105,6 +216,8 @@ describe('POST /study/programs/join', () => {
     });
 });
 
+// ─── Modules ──────────────────────────────────────────────────────────────────
+
 describe('POST /study/programs/:programId/modules', () => {
     it('добавляет модуль в программу', async () => {
         const admin = await createAdminUser();
@@ -117,5 +230,109 @@ describe('POST /study/programs/:programId/modules', () => {
 
         expect(res.status).toBe(201);
         expect(res.body.data.name).toBe('Module 1');
+    });
+});
+
+describe('PATCH /study/programs/:programId/modules/:moduleId', () => {
+    it('переименовывает модуль', async () => {
+        const admin = await createAdminUser();
+        const program = await createProgram({ modules: [{ name: 'Old Module' }] });
+        const moduleId = program.modules[0]._id;
+
+        const res = await request(app)
+            .patch(`/api/v1/study/programs/${program._id}/modules/${moduleId}`)
+            .set('Cookie', authCookie(admin._id, admin.email))
+            .send({ name: 'New Module' });
+
+        expect(res.status).toBe(200);
+        expect(res.body.data.name).toBe('New Module');
+    });
+});
+
+describe('DELETE /study/programs/:programId/modules/:moduleId', () => {
+    it('удаляет модуль из программы', async () => {
+        const admin = await createAdminUser();
+        const program = await createProgram({ modules: [{ name: 'To Delete' }] });
+        const moduleId = program.modules[0]._id;
+
+        const res = await request(app)
+            .delete(`/api/v1/study/programs/${program._id}/modules/${moduleId}`)
+            .set('Cookie', authCookie(admin._id, admin.email));
+
+        expect(res.status).toBe(200);
+        const updated = await StudyProgram.findById(program._id);
+        expect(updated.modules).toHaveLength(0);
+    });
+});
+
+// ─── Module Items ─────────────────────────────────────────────────────────────
+
+describe('POST /study/programs/:programId/modules/:moduleId/items', () => {
+    it('добавляет урок в модуль', async () => {
+        const admin = await createAdminUser();
+        const program = await createProgram({ modules: [{ name: 'Module' }] });
+        const moduleId = program.modules[0]._id;
+        const lesson = await createLesson();
+
+        const res = await request(app)
+            .post(`/api/v1/study/programs/${program._id}/modules/${moduleId}/items`)
+            .set('Cookie', authCookie(admin._id, admin.email))
+            .send({ type: 'StudyLesson', item: lesson._id.toString() });
+
+        expect(res.status).toBe(201);
+        expect(res.body.data.type).toBe('StudyLesson');
+        expect(res.body.data.item.toString()).toBe(lesson._id.toString());
+    });
+});
+
+describe('DELETE /study/programs/:programId/modules/:moduleId/items/:itemId', () => {
+    it('удаляет элемент из модуля', async () => {
+        const admin = await createAdminUser();
+        const lesson = await createLesson();
+        const program = await createProgram({
+            modules: [{ name: 'Module', items: [{ type: 'StudyLesson', item: lesson._id }] }]
+        });
+        const moduleId = program.modules[0]._id;
+        const itemId = program.modules[0].items[0]._id;
+
+        const res = await request(app)
+            .delete(`/api/v1/study/programs/${program._id}/modules/${moduleId}/items/${itemId}`)
+            .set('Cookie', authCookie(admin._id, admin.email));
+
+        expect(res.status).toBe(200);
+        const updated = await StudyProgram.findById(program._id);
+        expect(updated.modules[0].items).toHaveLength(0);
+    });
+});
+
+describe('PATCH /study/programs/:programId/modules/:moduleId/items/reorder', () => {
+    it('меняет порядок элементов в модуле', async () => {
+        const admin = await createAdminUser();
+        const lesson1 = await createLesson({ name: 'L1' });
+        const lesson2 = await createLesson({ name: 'L2' });
+        const program = await createProgram({
+            modules: [{
+                name: 'Module',
+                items: [
+                    { type: 'StudyLesson', item: lesson1._id },
+                    { type: 'StudyLesson', item: lesson2._id }
+                ]
+            }]
+        });
+        const moduleId = program.modules[0]._id;
+
+        const reversed = [
+            { type: 'StudyLesson', item: lesson2._id.toString() },
+            { type: 'StudyLesson', item: lesson1._id.toString() }
+        ];
+
+        const res = await request(app)
+            .patch(`/api/v1/study/programs/${program._id}/modules/${moduleId}/items/reorder`)
+            .set('Cookie', authCookie(admin._id, admin.email))
+            .send({ items: reversed });
+
+        expect(res.status).toBe(200);
+        expect(res.body.data[0].item.toString()).toBe(lesson2._id.toString());
+        expect(res.body.data[1].item.toString()).toBe(lesson1._id.toString());
     });
 });

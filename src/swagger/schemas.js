@@ -172,9 +172,13 @@
  *           type: string
  *           enum: [StudyLesson, StudyAgent]
  *         item:
- *           oneOf:
- *             - $ref: '#/components/schemas/StudyLesson'
- *             - $ref: '#/components/schemas/StudyAgent'
+ *           type: object
+ *           description: Краткие данные урока или агента (только _id и name)
+ *           properties:
+ *             _id:
+ *               type: string
+ *             name:
+ *               type: string
  *         completed:
  *           type: boolean
  *           description: Пройден ли элемент пользователем

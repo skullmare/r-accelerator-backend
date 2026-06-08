@@ -26,7 +26,7 @@ const router = express.Router();
  *             schema:
  *               type: array
  *               items:
- *                 $ref: '#/components/schemas/StudyLesson'
+ *                 $ref: '#/components/schemas/StudyLessonMeta'
  *       403:
  *         description: Недостаточно прав
  */

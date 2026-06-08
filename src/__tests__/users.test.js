@@ -38,7 +38,7 @@ describe('GET /users', () => {
         await createUser({ email: 'other@test.com' });
 
         const res = await request(app)
-            .get('/api/v1/users?email=findme')
+            .get('/api/v1/users?email=findme@test.com')
             .set('Cookie', authCookie(admin._id, admin.email));
 
         expect(res.status).toBe(200);

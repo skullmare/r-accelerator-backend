@@ -30,7 +30,7 @@ const PERMISSIONS_CONFIG = {
             }
         }
     },
-    SYUDY_PROGRAMS: {
+    STUDY_PROGRAMS: {
         label: "Программы обучения",
         actions: {
             READ: {
@@ -47,7 +47,24 @@ const PERMISSIONS_CONFIG = {
             }
         }
     },
-    SYUDY_AGENTS: {
+    STUDY_LESSONS: {
+        label: "Уроки",
+        actions: {
+            READ: {
+                key: 'study_lessons.read', label: 'Просмотр списка уроков'
+            },
+            CREATE: {
+                key: 'study_lessons.create', label: 'Создание урока'
+            },
+            UPDATE: {
+                key: 'study_lessons.update', label: 'Редактирование урока'
+            },
+            DELETE: {
+                key: 'study_lessons.delete', label: 'Удаление урока'
+            }
+        }
+    },
+    STUDY_AGENTS: {
         label: "Обучающие агенты",
         actions: {
             READ: {

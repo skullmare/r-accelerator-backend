@@ -12,7 +12,8 @@ import userRouter from './routes/user.routes.js';
 import roleRouter from './routes/role.routes.js';
 import studyAgentRouter from './routes/study/agent.routes.js';
 import studyProgramRouter from './routes/study/program.routes.js';
-import studyMessageRouter from './routes/study/message.routes.js';
+import studyLessonRouter from './routes/study/lesson.routes.js';
+import studyProgressRouter from './routes/study/progress.routes.js';
 import fileRouter from './routes/file.routes.js';
 
 const app = express();
@@ -45,7 +46,8 @@ app.use('/api/v1/users', userRouter);
 app.use('/api/v1/roles', roleRouter);
 app.use('/api/v1/study/agents', studyAgentRouter);
 app.use('/api/v1/study/programs', studyProgramRouter);
-app.use('/api/v1/study/messages', studyMessageRouter);
+app.use('/api/v1/study/lessons', studyLessonRouter);
+app.use('/api/v1/study/programs', studyProgressRouter);
 app.use('/api/v1/file', fileRouter);
 
 app.use((req, res) => {

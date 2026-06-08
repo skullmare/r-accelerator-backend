@@ -8,180 +8,46 @@ import { getProgram } from '../../controllers/study/program/get-program.controll
 import { listPrograms } from '../../controllers/study/program/list-programs.controller.js';
 import { updateProgram } from '../../controllers/study/program/update-program.controller.js';
 import { deleteProgram } from '../../controllers/study/program/delete-program.controller.js';
-import { addToProgram } from '../../controllers/study/program/add-to-program.controller.js';
+import { addModule } from '../../controllers/study/program/add-module.controller.js';
+import { updateModule } from '../../controllers/study/program/update-module.controller.js';
+import { deleteModule } from '../../controllers/study/program/delete-module.controller.js';
+import { addModuleItem } from '../../controllers/study/program/add-module-item.controller.js';
+import { deleteModuleItem } from '../../controllers/study/program/delete-module-item.controller.js';
+import { reorderModuleItems } from '../../controllers/study/program/reorder-module-items.controller.js';
 
 const router = express.Router();
 
-/**
- * @swagger
- * /study/programs/join:
- *   post:
- *     tags: [Study / Programs]
- *     summary: Вступить в программу по QR-коду
- *     description: Привязывает текущего пользователя к программе по её секретному QR-коду.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [qrCode]
- *             properties:
- *               qrCode:
- *                 type: string
- *     responses:
- *       200:
- *         description: Вы добавлены в программу
- *       404:
- *         description: Программа не найдена
- */
-router.post('/join', authMiddleware, validate(programSchemas.addToProgramSchema), addToProgram);
-
-/**
- * @swagger
- * /study/programs:
- *   get:
- *     tags: [Study / Programs]
- *     summary: Список всех программ
- *     description: Требует право `study_programs.read`.
- *     responses:
- *       200:
- *         description: Список программ с популяцией агентов
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/StudyProgram'
- *       403:
- *         description: Недостаточно прав
- */
+// список всех программ (без популяции items) — для admin-панели
 router.get('/', authMiddleware, checkPermission('study_programs.read'), listPrograms);
 
-/**
- * @swagger
- * /study/programs:
- *   post:
- *     tags: [Study / Programs]
- *     summary: Создать программу
- *     description: Требует право `study_programs.create`. QR-код генерируется автоматически.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [name]
- *             properties:
- *               name:
- *                 type: string
- *               agents:
- *                 type: array
- *                 items:
- *                   type: string
- *                 description: Массив ID агентов
- *               active:
- *                 type: boolean
- *                 default: true
- *     responses:
- *       201:
- *         description: Программа создана
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/StudyProgram'
- *       400:
- *         description: Ошибка валидации
- */
+// создать программу (name, sequential, active) — QR-код генерируется автоматически
 router.post('/', authMiddleware, checkPermission('study_programs.create'), validate(programSchemas.createProgramSchema), createProgram);
 
-/**
- * @swagger
- * /study/programs/{id}:
- *   get:
- *     tags: [Study / Programs]
- *     summary: Получить программу по ID
- *     description: Требует право `study_programs.read`.
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Программа получена
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/StudyProgram'
- *       404:
- *         description: Программа не найдена
- */
-router.get('/:id', authMiddleware, checkPermission('study_programs.read'), validate(programSchemas.programIdSchema), getProgram);
+// получить программу с полной популяцией modules.items (уроки и агенты)
+router.get('/:programId', authMiddleware, checkPermission('study_programs.read'), validate(programSchemas.programIdSchema), getProgram);
 
-/**
- * @swagger
- * /study/programs/{id}:
- *   put:
- *     tags: [Study / Programs]
- *     summary: Обновить программу
- *     description: Требует право `study_programs.update`. Передайте updateQRCode=true для генерации нового QR-кода.
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               name:
- *                 type: string
- *               agents:
- *                 type: array
- *                 items:
- *                   type: string
- *               active:
- *                 type: boolean
- *               updateQRCode:
- *                 type: boolean
- *                 description: Пересоздать QR-код
- *     responses:
- *       200:
- *         description: Программа обновлена
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/StudyProgram'
- *       404:
- *         description: Программа не найдена
- */
-router.put('/:id', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.updateProgramSchema), updateProgram);
+// обновить мета-данные программы (name, sequential, active, updateQRCode)
+router.patch('/:programId', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.updateProgramSchema), updateProgram);
 
-/**
- * @swagger
- * /study/programs/{id}:
- *   delete:
- *     tags: [Study / Programs]
- *     summary: Удалить программу
- *     description: Требует право `study_programs.delete`.
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Программа удалена
- *       404:
- *         description: Программа не найдена
- */
-router.delete('/:id', authMiddleware, checkPermission('study_programs.delete'), validate(programSchemas.programIdSchema), deleteProgram);
+// удалить программу
+router.delete('/:programId', authMiddleware, checkPermission('study_programs.delete'), validate(programSchemas.programIdSchema), deleteProgram);
+
+// добавить модуль в программу
+router.post('/:programId/modules', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.addModuleSchema), addModule);
+
+// переименовать модуль
+router.patch('/:programId/modules/:moduleId', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.updateModuleSchema), updateModule);
+
+// удалить модуль из программы
+router.delete('/:programId/modules/:moduleId', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.deleteModuleSchema), deleteModule);
+
+// добавить урок или агента в модуль
+router.post('/:programId/modules/:moduleId/items', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.addModuleItemSchema), addModuleItem);
+
+// удалить элемент из модуля
+router.delete('/:programId/modules/:moduleId/items/:itemId', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.deleteModuleItemSchema), deleteModuleItem);
+
+// изменить порядок элементов в модуле (передаём новый массив items целиком)
+router.patch('/:programId/modules/:moduleId/items/reorder', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.reorderModuleItemsSchema), reorderModuleItems);
 
 export default router;

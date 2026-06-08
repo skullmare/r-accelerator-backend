@@ -1,23 +1,19 @@
 import User from '../../../models/user.model.js';
 import StudyAgent from '../../../models/study/agent.model.js';
-import StudyProgram from '../../../models/study/program.model.js';
 import StudyMessage from '../../../models/study/message.model.js';
 import { createThreadAssistant } from '../../../services/openai/create-thread-assistant.js';
 import { sendMessageAssistantStream } from '../../../services/openai/send-message-assistant-stream.js';
 
 export async function createMessage(req, res) {
-    const { agentId, messageText } = req.validatedData.body;
+    const { agentId } = req.params;
+    const { messageText } = req.validatedData.body;
 
-    const user = await User.findById(req.user.id);
-    if (!user.studyProgram) return res.error({}, 403, 'Вы не состоите ни в одной программе');
+    // доступ к агенту уже проверен middleware check-access-agent и check-item-unlocked
+    const [user, agent] = await Promise.all([
+        User.findById(req.user.id),
+        StudyAgent.findById(agentId)
+    ]);
 
-    const program = await StudyProgram.findById(user.studyProgram);
-    if (!program?.active) return res.error({}, 403, 'Ваша программа неактивна');
-
-    const hasAccess = program.agents.some(a => a.toString() === agentId);
-    if (!hasAccess) return res.error({}, 403, 'Нет доступа к этому агенту');
-
-    const agent = await StudyAgent.findById(agentId);
     if (!agent) return res.error({}, 404, 'Агент не найден');
 
     let threadId = user.openAiThreadId;
@@ -46,6 +42,7 @@ export async function createMessage(req, res) {
 
         sendEvent('message_created', { userMessage });
 
+        // собираем контекст пользователя для передачи агенту
         const userContextParts = [];
         if (user.firstName || user.lastName) userContextParts.push(`Имя пользователя: ${[user.firstName, user.lastName].filter(Boolean).join(' ')}`);
         if (user.profession) userContextParts.push(`Профессия: ${user.profession}`);
@@ -63,12 +60,11 @@ export async function createMessage(req, res) {
             getMessages: async () => {
                 const messages = await StudyMessage.find({
                     user: req.user.id,
+                    agent: agentId,
                     _id: { $ne: userMessage._id }
                 }).sort({ createdAt: -1 }).limit(32).lean();
 
-                messages.reverse();
-
-                return messages.map(m => ({
+                return messages.reverse().map(m => ({
                     role: m.author === 'user' ? 'user' : 'assistant',
                     content: m.messageText
                 }));

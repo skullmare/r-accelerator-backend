@@ -84,6 +84,14 @@ const programProgressSchema = z.object({
     params: z.object({ programId: objectId })
 });
 
+// PATCH /study/programs/:programId/modules/reorder — изменение порядка модулей в программе (admin)
+const reorderModulesSchema = z.object({
+    params: z.object({ programId: objectId }),
+    body: z.object({
+        moduleIds: z.array(objectId).min(1)
+    })
+});
+
 export default {
     createProgramSchema,
     updateProgramSchema,
@@ -94,6 +102,7 @@ export default {
     addModuleItemSchema,
     deleteModuleItemSchema,
     reorderModuleItemsSchema,
+    reorderModulesSchema,
     joinProgramSchema,
     programProgressSchema
 };

@@ -305,6 +305,66 @@ describe('DELETE /study/programs/:programId/modules/:moduleId/items/:itemId', ()
     });
 });
 
+describe('PATCH /study/programs/:programId/modules/reorder', () => {
+    it('меняет порядок модулей', async () => {
+        const admin = await createAdminUser();
+        const program = await createProgram({
+            modules: [{ name: 'Module A' }, { name: 'Module B' }, { name: 'Module C' }]
+        });
+        const [idA, idB, idC] = program.modules.map(m => m._id.toString());
+
+        const res = await request(app)
+            .patch(`/api/v1/study/programs/${program._id}/modules/reorder`)
+            .set('Cookie', authCookie(admin._id, admin.email))
+            .send({ moduleIds: [idC, idA, idB] });
+
+        expect(res.status).toBe(200);
+        expect(res.body.data[0]._id).toBe(idC);
+        expect(res.body.data[1]._id).toBe(idA);
+        expect(res.body.data[2]._id).toBe(idB);
+    });
+
+    it('сохраняет новый порядок в БД', async () => {
+        const admin = await createAdminUser();
+        const program = await createProgram({
+            modules: [{ name: 'First' }, { name: 'Second' }]
+        });
+        const [id1, id2] = program.modules.map(m => m._id.toString());
+
+        await request(app)
+            .patch(`/api/v1/study/programs/${program._id}/modules/reorder`)
+            .set('Cookie', authCookie(admin._id, admin.email))
+            .send({ moduleIds: [id2, id1] });
+
+        const updated = await StudyProgram.findById(program._id);
+        expect(updated.modules[0]._id.toString()).toBe(id2);
+        expect(updated.modules[1]._id.toString()).toBe(id1);
+    });
+
+    it('возвращает 400 если moduleId не принадлежит программе', async () => {
+        const admin = await createAdminUser();
+        const program = await createProgram({ modules: [{ name: 'Module A' }] });
+
+        const res = await request(app)
+            .patch(`/api/v1/study/programs/${program._id}/modules/reorder`)
+            .set('Cookie', authCookie(admin._id, admin.email))
+            .send({ moduleIds: ['000000000000000000000001'] });
+
+        expect(res.status).toBe(400);
+    });
+
+    it('возвращает 404 для несуществующей программы', async () => {
+        const admin = await createAdminUser();
+
+        const res = await request(app)
+            .patch('/api/v1/study/programs/000000000000000000000001/modules/reorder')
+            .set('Cookie', authCookie(admin._id, admin.email))
+            .send({ moduleIds: ['000000000000000000000002'] });
+
+        expect(res.status).toBe(404);
+    });
+});
+
 describe('PATCH /study/programs/:programId/modules/:moduleId/items/reorder', () => {
     it('меняет порядок элементов в модуле', async () => {
         const admin = await createAdminUser();

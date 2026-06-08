@@ -51,7 +51,7 @@ export async function getProgress(req, res) {
                     _id: el._id,
                     type: el.type,
                     item: populated ?? null,
-                    completed: completedIds.has(itemId),
+                    completed: el.type === 'StudyAgent' ? true : completedIds.has(itemId),
                     accessible: accessMap.get(el._id.toString())
                 };
             })

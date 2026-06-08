@@ -165,7 +165,29 @@ router.get('/:programId/lessons/:lessonId',
  *                       type: string
  *     responses:
  *       200:
- *         description: Урок отмечен как пройденный
+ *         description: Урок отмечен как пройденный, возвращается результат теста
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 score:
+ *                   type: integer
+ *                   description: Количество правильных ответов
+ *                 total:
+ *                   type: integer
+ *                   description: Всего вопросов
+ *                 questions:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       questionId:
+ *                         type: string
+ *                       answerId:
+ *                         type: string
+ *                       isCorrect:
+ *                         type: boolean
  *       403:
  *         description: Нет доступа к уроку или предыдущий урок не пройден
  */

@@ -2,11 +2,11 @@ import User from '../models/user.model.js';
 import StudyProgram from '../models/study/program.model.js';
 
 async function checkAccessAgent(req, res, next) {
-    const { agentId } = req.params;
+    const { agentId, programId } = req.query;
     const user = await User.findById(req.user.id, 'studyPrograms');
 
     const program = await StudyProgram.findOne({
-        _id: { $in: user?.studyPrograms ?? [] },
+        _id: { $eq: programId, $in: user?.studyPrograms ?? [] },
         'modules.items': { $elemMatch: { item: agentId, type: 'StudyAgent' } }
     }, '_id');
 

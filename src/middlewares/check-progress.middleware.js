@@ -2,7 +2,7 @@ import StudyProgram from '../models/study/program.model.js';
 import StudyProgress from '../models/study/progress.model.js';
 
 async function checkProgress(req, res, next) {
-    const { lessonId } = req.params;
+    const { lessonId } = req.query;
     const programId = req.program?._id;
 
     const program = await StudyProgram.findById(programId, 'sequential modules.items');

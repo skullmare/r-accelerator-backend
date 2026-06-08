@@ -1,7 +1,7 @@
 import User from '../models/user.model.js';
 
 async function checkAccessProgram(req, res, next) {
-    const { programId } = req.params;
+    const { programId } = req.query;
     const user = await User.findById(req.user.id, 'studyPrograms');
 
     const hasAccess = user?.studyPrograms?.some(id => id.equals(programId));

@@ -1,1 +1,16 @@
-// middleware для проверки доступа пользователя к программе обучения по полю studyPrograms из модели User
+import User from '../models/user.model.js';
+
+async function checkAccessProgram(req, res, next) {
+    const { programId } = req.params;
+    const user = await User.findById(req.user.id, 'studyPrograms');
+
+    const hasAccess = user?.studyPrograms?.some(id => id.equals(programId));
+
+    if (!hasAccess) {
+        return res.error({}, 403, 'Нет доступа к программе обучения');
+    }
+
+    next();
+}
+
+export default checkAccessProgram;

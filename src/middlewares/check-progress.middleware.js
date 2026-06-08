@@ -1,3 +1,41 @@
-// тут должен быть middleware проверяющий есть ли у пользователя доступ к уроку или нет, в рамках программы обучения доступ к 
-// уроку может быть открыт если у программы обучения стоит sequential = false или если предыдущий урок либо отсутствует либо уже пройден, это можно
-// проверить через progress.model.js поле completedItems
+import StudyProgram from '../models/study/program.model.js';
+import StudyProgress from '../models/study/progress.model.js';
+
+async function checkProgress(req, res, next) {
+    const { lessonId } = req.params;
+    const programId = req.program?._id;
+
+    const program = await StudyProgram.findById(programId, 'sequential modules.items');
+
+    if (!program) {
+        return res.error({}, 404, 'Программа обучения не найдена');
+    }
+
+    if (!program.sequential) {
+        return next();
+    }
+
+    const allItems = program.modules.flatMap(m => m.items);
+    const lessonIndex = allItems.findIndex(i => i.item.equals(lessonId));
+
+    if (lessonIndex <= 0) {
+        return next();
+    }
+
+    const prevItem = allItems[lessonIndex - 1];
+
+    const progress = await StudyProgress.findOne(
+        { user: req.user.id, program: programId },
+        'completedItems'
+    );
+
+    const isPrevCompleted = progress?.completedItems?.some(id => id.equals(prevItem.item));
+
+    if (!isPrevCompleted) {
+        return res.error({}, 403, 'Предыдущий элемент программы не пройден');
+    }
+
+    next();
+}
+
+export default checkProgress;

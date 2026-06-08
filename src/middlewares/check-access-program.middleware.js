@@ -1,4 +1,5 @@
 import User from '../models/user.model.js';
+import StudyProgram from '../models/study/program.model.js';
 
 async function checkAccessProgram(req, res, next) {
     const { programId } = req.params;
@@ -8,6 +9,12 @@ async function checkAccessProgram(req, res, next) {
 
     if (!hasAccess) {
         return res.error({}, 403, 'Нет доступа к программе обучения');
+    }
+
+    const program = await StudyProgram.findById(programId, 'active');
+
+    if (!program.active) {
+        return res.error({}, 403, 'Программа обучения неактивна');
     }
 
     next();

@@ -3,6 +3,7 @@ import authMiddleware from '../../middlewares/auth.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import programSchemas from '../../schemas/study/program.schema.js';
 import lessonSchemas from '../../schemas/study/lesson.schema.js';
+import agentSchemas from '../../schemas/study/agent.schema.js';
 import messageSchemas from '../../schemas/study/message.schema.js';
 import checkAccessProgram from '../../middlewares/check-access-program.middleware.js';
 import checkAccessLesson from '../../middlewares/check-access-lesson.middleware.js';
@@ -212,6 +213,7 @@ router.get('/:programId/agents/:agentId',
     checkAccessProgram,
     checkAccessAgent,
     checkItemUnlocked,
+    validate(agentSchemas.getProgressAgentSchema),
     getProgressAgent
 );
 

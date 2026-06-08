@@ -27,4 +27,9 @@ const agentIdSchema = z.object({
     params: z.object({ id: objectId })
 });
 
-export default { createAgentSchema, updateAgentSchema, agentIdSchema };
+// GET /study/programs/:programId/agents/:agentId — получение агента с проверкой доступа (user)
+const getProgressAgentSchema = z.object({
+    params: z.object({ programId: objectId, agentId: objectId })
+});
+
+export default { createAgentSchema, updateAgentSchema, agentIdSchema, getProgressAgentSchema };

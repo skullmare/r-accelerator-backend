@@ -23,6 +23,12 @@ const FileSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true
+    },
+    source: {
+        type: String,
+        enum: ['user', 'system'],
+        required: true,
+        default: 'system'
     }
 }, {
     timestamps: true

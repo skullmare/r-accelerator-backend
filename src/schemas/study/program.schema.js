@@ -2,32 +2,98 @@ import z from 'zod';
 
 const objectId = z.string().regex(/^[0-9a-f]{24}$/, 'Некорректный ID');
 
+const moduleItemSchema = z.object({
+    type: z.enum(['StudyLesson', 'StudyAgent']),
+    item: objectId
+});
+
+// POST /study/programs — создание программы обучения (admin)
 const createProgramSchema = z.object({
     body: z.object({
         name: z.string().min(1).max(100),
-        agents: z.array(objectId).optional().default([]),
+        sequential: z.boolean().optional().default(true),
         active: z.boolean().optional().default(true)
     })
 });
 
+// PATCH /study/programs/:programId — обновление полей программы обучения (admin)
 const updateProgramSchema = z.object({
-    params: z.object({ id: objectId }),
+    params: z.object({ programId: objectId }),
     body: z.object({
         name: z.string().min(1).max(100).optional(),
-        agents: z.array(objectId).optional(),
+        sequential: z.boolean().optional(),
         active: z.boolean().optional(),
         updateQRCode: z.boolean().optional()
     })
 });
 
+// GET /study/programs/:programId, DELETE /study/programs/:programId — получение и удаление программы (admin)
 const programIdSchema = z.object({
-    params: z.object({ id: objectId })
+    params: z.object({ programId: objectId })
 });
 
-const addToProgramSchema = z.object({
+// POST /study/programs/:programId/modules — добавление модуля в программу (admin)
+const addModuleSchema = z.object({
+    params: z.object({ programId: objectId }),
+    body: z.object({
+        name: z.string().min(1).max(100)
+    })
+});
+
+// PATCH /study/programs/:programId/modules/:moduleId — переименование модуля (admin)
+const updateModuleSchema = z.object({
+    params: z.object({ programId: objectId, moduleId: objectId }),
+    body: z.object({
+        name: z.string().min(1).max(100)
+    })
+});
+
+// DELETE /study/programs/:programId/modules/:moduleId — удаление модуля из программы (admin)
+const deleteModuleSchema = z.object({
+    params: z.object({ programId: objectId, moduleId: objectId })
+});
+
+// POST /study/programs/:programId/modules/:moduleId/items — добавление урока или агента в модуль (admin)
+const addModuleItemSchema = z.object({
+    params: z.object({ programId: objectId, moduleId: objectId }),
+    body: moduleItemSchema
+});
+
+// DELETE /study/programs/:programId/modules/:moduleId/items/:itemId — удаление элемента из модуля (admin)
+const deleteModuleItemSchema = z.object({
+    params: z.object({ programId: objectId, moduleId: objectId, itemId: objectId })
+});
+
+// PATCH /study/programs/:programId/modules/:moduleId/items/reorder — изменение порядка элементов в модуле (admin)
+const reorderModuleItemsSchema = z.object({
+    params: z.object({ programId: objectId, moduleId: objectId }),
+    body: z.object({
+        items: z.array(moduleItemSchema).min(1)
+    })
+});
+
+// POST /study/programs/join — вступление пользователя в программу по QR-коду (user)
+const joinProgramSchema = z.object({
     body: z.object({
         qrCode: z.string().min(1)
     })
 });
 
-export default { createProgramSchema, updateProgramSchema, programIdSchema, addToProgramSchema };
+// GET /study/programs/:programId/progress — получение программы со смёрженным прогрессом (user)
+const programProgressSchema = z.object({
+    params: z.object({ programId: objectId })
+});
+
+export default {
+    createProgramSchema,
+    updateProgramSchema,
+    programIdSchema,
+    addModuleSchema,
+    updateModuleSchema,
+    deleteModuleSchema,
+    addModuleItemSchema,
+    deleteModuleItemSchema,
+    reorderModuleItemsSchema,
+    joinProgramSchema,
+    programProgressSchema
+};

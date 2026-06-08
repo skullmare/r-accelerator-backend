@@ -18,7 +18,7 @@ const router = express.Router();
  *   get:
  *     tags: [Study / Agents]
  *     summary: Список ассистентов OpenAI
- *     description: Возвращает id и имя каждого ассистента из OpenAI для привязки к агенту. Требует одно из прав `study_agents.read`, `study_agents.create`, `study_agents.update`.
+ *     description: Возвращает id и имя каждого ассистента из OpenAI для привязки к агенту. Требует одно из прав 'study_agents.read', 'study_agents.create', 'study_agents.update'.
  *     responses:
  *       200:
  *         description: Список ассистентов
@@ -39,7 +39,7 @@ router.get('/assistants', authMiddleware, checkPermission(['study_agents.read', 
  *   get:
  *     tags: [Study / Agents]
  *     summary: Список всех агентов
- *     description: Требует право `study_agents.read`. Используется для выбора агента при составлении программы.
+ *     description: Требует право 'study_agents.read'. Используется для выбора агента при составлении программы.
  *     responses:
  *       200:
  *         description: Список агентов
@@ -60,7 +60,7 @@ router.get('/', authMiddleware, checkPermission('study_agents.read'), listAgents
  *   post:
  *     tags: [Study / Agents]
  *     summary: Создать агента
- *     description: Требует право `study_agents.create`.
+ *     description: Требует право 'study_agents.create'.
  *     requestBody:
  *       required: true
  *       content:
@@ -102,7 +102,7 @@ router.post('/', authMiddleware, checkPermission('study_agents.create'), validat
  *   get:
  *     tags: [Study / Agents]
  *     summary: Получить агента по ID
- *     description: Требует право `study_agents.read`.
+ *     description: Требует право 'study_agents.read'.
  *     parameters:
  *       - in: path
  *         name: id
@@ -127,7 +127,7 @@ router.get('/:id', authMiddleware, checkPermission('study_agents.read'), validat
  *   patch:
  *     tags: [Study / Agents]
  *     summary: Обновить агента
- *     description: Требует право `study_agents.update`. Все поля опциональны.
+ *     description: Требует право 'study_agents.update'. Все поля опциональны.
  *     parameters:
  *       - in: path
  *         name: id
@@ -174,7 +174,7 @@ router.patch('/:id', authMiddleware, checkPermission('study_agents.update'), val
  *   delete:
  *     tags: [Study / Agents]
  *     summary: Удалить агента
- *     description: Требует право `study_agents.delete`.
+ *     description: Требует право 'study_agents.delete'.
  *     parameters:
  *       - in: path
  *         name: id

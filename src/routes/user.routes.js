@@ -16,7 +16,7 @@ const router = express.Router();
  *   get:
  *     tags: [Users]
  *     summary: Список пользователей
- *     description: Требует право `users.read`. Поддерживает пагинацию и поиск по email.
+ *     description: Требует право 'users.read'. Поддерживает пагинацию и поиск по email.
  *     parameters:
  *       - in: query
  *         name: page
@@ -60,7 +60,7 @@ router.get('/', authMiddleware, checkPermission('users.read'), validate(userSche
  *   get:
  *     tags: [Users]
  *     summary: Получить пользователя по ID
- *     description: Требует право `users.read`. Возвращает пользователя с популяцией role и studyPrograms.
+ *     description: Требует право 'users.read'. Возвращает пользователя с популяцией role и studyPrograms.
  *     parameters:
  *       - in: path
  *         name: id
@@ -85,7 +85,7 @@ router.get('/:id', authMiddleware, checkPermission('users.read'), validate(userS
  *   put:
  *     tags: [Users]
  *     summary: Назначить роль пользователю
- *     description: Требует право `users_role.update`. Передайте `role: null` чтобы убрать роль.
+ *     description: Требует право 'users_role.update'. Передайте 'role: null'чтобы убрать роль.
  *     parameters:
  *       - in: path
  *         name: id
@@ -124,7 +124,7 @@ router.put('/:id/role', authMiddleware, checkPermission('users_role.update'), va
  *   patch:
  *     tags: [Users]
  *     summary: Обновить данные пользователя
- *     description: Требует право `users.update`. Поле `studyPrograms` принимает полный новый массив ID программ.
+ *     description: Требует право 'users.update'. Поле 'studyPrograms'принимает полный новый массив ID программ.
  *     parameters:
  *       - in: path
  *         name: id

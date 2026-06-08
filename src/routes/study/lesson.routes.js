@@ -17,7 +17,7 @@ const router = express.Router();
  *   get:
  *     tags: [Study / Lessons]
  *     summary: Список всех уроков
- *     description: Требует право `study_lessons.read`. Возвращает мета-данные без content и questions — для выбора при составлении программы.
+ *     description: Требует право 'study_lessons.read'. Возвращает мета-данные без content и questions — для выбора при составлении программы.
  *     responses:
  *       200:
  *         description: Список уроков
@@ -38,7 +38,7 @@ router.get('/', authMiddleware, checkPermission('study_lessons.read'), listLesso
  *   post:
  *     tags: [Study / Lessons]
  *     summary: Создать урок
- *     description: Требует право `study_lessons.create`.
+ *     description: Требует право 'study_lessons.create'.
  *     requestBody:
  *       required: true
  *       content:
@@ -104,7 +104,7 @@ router.post('/', authMiddleware, checkPermission('study_lessons.create'), valida
  *   get:
  *     tags: [Study / Lessons]
  *     summary: Получить урок по ID
- *     description: Требует право `study_lessons.read`. Возвращает полный урок включая вопросы с правильными ответами.
+ *     description: Требует право 'study_lessons.read'. Возвращает полный урок включая вопросы с правильными ответами.
  *     parameters:
  *       - in: path
  *         name: lessonId
@@ -129,7 +129,7 @@ router.get('/:lessonId', authMiddleware, checkPermission('study_lessons.read'), 
  *   patch:
  *     tags: [Study / Lessons]
  *     summary: Обновить урок
- *     description: Требует право `study_lessons.update`. Все поля опциональны.
+ *     description: Требует право 'study_lessons.update'. Все поля опциональны.
  *     parameters:
  *       - in: path
  *         name: lessonId
@@ -184,7 +184,7 @@ router.patch('/:lessonId', authMiddleware, checkPermission('study_lessons.update
  *   delete:
  *     tags: [Study / Lessons]
  *     summary: Удалить урок
- *     description: Требует право `study_lessons.delete`.
+ *     description: Требует право 'study_lessons.delete'.
  *     parameters:
  *       - in: path
  *         name: lessonId

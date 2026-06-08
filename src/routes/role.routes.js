@@ -18,7 +18,7 @@ const router = express.Router();
  *   get:
  *     tags: [Roles]
  *     summary: Список всех возможных прав
- *     description: Возвращает все доступные права, спрограммированные по категориям. Требует одно из прав `roles.read` `roles.create` `roles.update`.
+ *     description: Возвращает все доступные права, спрограммированные по категориям. Требует одно из прав 'roles.read''roles.create''roles.update'.
  *     responses:
  *       200:
  *         description: Список прав по программам
@@ -56,7 +56,7 @@ router.get('/permissions', authMiddleware, checkPermission(['roles.read', 'roles
  *   get:
  *     tags: [Roles]
  *     summary: Список всех ролей
- *     description: Требует право `roles.read`.
+ *     description: Требует право 'roles.read'.
  *     responses:
  *       200:
  *         description: Список ролей
@@ -77,7 +77,7 @@ router.get('/', authMiddleware, checkPermission('roles.read'), listRoles);
  *   post:
  *     tags: [Roles]
  *     summary: Создать роль
- *     description: Требует право `roles.create`.
+ *     description: Требует право 'roles.create'.
  *     requestBody:
  *       required: true
  *       content:
@@ -111,7 +111,7 @@ router.post('/', authMiddleware, checkPermission('roles.create'), validate(roleS
  *   get:
  *     tags: [Roles]
  *     summary: Получить роль по ID
- *     description: Требует право `roles.read`.
+ *     description: Требует право 'roles.read'.
  *     parameters:
  *       - in: path
  *         name: id
@@ -136,7 +136,7 @@ router.get('/:id', authMiddleware, checkPermission('roles.read'), validate(roleS
  *   put:
  *     tags: [Roles]
  *     summary: Обновить роль
- *     description: Требует право `roles.update`. Системные роли (isSystem=true) нельзя изменить.
+ *     description: Требует право 'roles.update'. Системные роли (isSystem=true) нельзя изменить.
  *     parameters:
  *       - in: path
  *         name: id
@@ -176,7 +176,7 @@ router.put('/:id', authMiddleware, checkPermission('roles.update'), validate(rol
  *   delete:
  *     tags: [Roles]
  *     summary: Удалить роль
- *     description: Требует право `roles.delete`. Системные роли (isSystem=true) нельзя удалить.
+ *     description: Требует право 'roles.delete'. Системные роли (isSystem=true) нельзя удалить.
  *     parameters:
  *       - in: path
  *         name: id

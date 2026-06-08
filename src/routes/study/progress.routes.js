@@ -24,7 +24,7 @@ const router = express.Router();
  *   post:
  *     tags: [Study / Progress]
  *     summary: Вступить в программу по QR-коду
- *     description: Добавляет программу в массив `studyPrograms` текущего пользователя. Если пользователь уже в программе — дубликат не создаётся.
+ *     description: Добавляет программу в массив 'studyPrograms'текущего пользователя. Если пользователь уже в программе — дубликат не создаётся.
  *     requestBody:
  *       required: true
  *       content:
@@ -57,9 +57,9 @@ router.post('/join', authMiddleware, validate(programSchemas.joinProgramSchema),
  *     tags: [Study / Progress]
  *     summary: Получить программу со смёрженным прогрессом
  *     description: |
- *       Возвращает структуру программы с флагами `completed` и `accessible` на каждом элементе.
- *       - `completed` — элемент пройден пользователем
- *       - `accessible` — элемент доступен (при `sequential=true` зависит от прохождения предыдущего урока)
+ *       Возвращает структуру программы с флагами 'completed'и 'accessible'на каждом элементе.
+ *       - 'completed'— элемент пройден пользователем
+ *       - 'accessible'— элемент доступен (при 'sequential=true'зависит от прохождения предыдущего урока)
  *     parameters:
  *       - in: path
  *         name: programId
@@ -92,8 +92,8 @@ router.get('/:programId/progress',
  *     tags: [Study / Progress]
  *     summary: Получить урок с ответами пользователя
  *     description: |
- *       Возвращает полный урок. К каждому вопросу подмешивается `userAnswer` — ID ответа, который пользователь выбрал ранее (или `null`).
- *       `isCorrect` у вариантов ответа не возвращается.
+ *       Возвращает полный урок. К каждому вопросу подмешивается 'userAnswer'— ID ответа, который пользователь выбрал ранее (или 'null).
+ *       'isCorrect'у вариантов ответа не возвращается.
  *     parameters:
  *       - in: path
  *         name: programId
@@ -132,7 +132,7 @@ router.get('/:programId/lessons/:lessonId',
  *   post:
  *     tags: [Study / Progress]
  *     summary: Отметить урок пройденным
- *     description: Добавляет урок в `completedItems` и сохраняет ответы на тест в `lessonDetails`. При повторном вызове обновляет ответы.
+ *     description: Добавляет урок в 'completedItems'и сохраняет ответы на тест в 'lessonDetails'. При повторном вызове обновляет ответы.
  *     parameters:
  *       - in: path
  *         name: programId
@@ -183,7 +183,7 @@ router.post('/:programId/lessons/:lessonId/complete',
  *   get:
  *     tags: [Study / Progress]
  *     summary: Получить агента
- *     description: Возвращает данные агента. Доступен только если предыдущий урок в программе пройден (или `sequential=false`).
+ *     description: Возвращает данные агента. Доступен только если предыдущий урок в программе пройден (или 'sequential=false).
  *     parameters:
  *       - in: path
  *         name: programId
@@ -281,10 +281,10 @@ router.get('/:programId/agents/:agentId/messages',
  *       При первом обращении создаётся OpenAI thread для пользователя.
  *
  *       **Формат событий SSE:**
- *       - `message_created` — сохранённое сообщение пользователя: `{ userMessage }`
- *       - `delta` — фрагмент ответа агента: `{ text: "..." }`
- *       - `done` — финальное сохранённое сообщение агента: `{ agentMessage }`
- *       - `error` — ошибка в процессе стриминга: `{ message, code }`
+ *       - 'message_created'— сохранённое сообщение пользователя: '{ userMessage }
+ *       - 'delta'— фрагмент ответа агента: '{ text: "..." }
+ *       - 'done'— финальное сохранённое сообщение агента: '{ agentMessage }
+ *       - 'error'— ошибка в процессе стриминга: '{ message, code }
  *     parameters:
  *       - in: path
  *         name: programId

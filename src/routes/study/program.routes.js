@@ -23,7 +23,7 @@ const router = express.Router();
  *   get:
  *     tags: [Study / Programs]
  *     summary: Список всех программ обучения
- *     description: Требует право `study_programs.read`. Возвращает мета-данные без популяции items.
+ *     description: Требует право 'study_programs.read'. Возвращает мета-данные без популяции items.
  *     responses:
  *       200:
  *         description: Список программ
@@ -44,7 +44,7 @@ router.get('/', authMiddleware, checkPermission('study_programs.read'), listProg
  *   post:
  *     tags: [Study / Programs]
  *     summary: Создать программу обучения
- *     description: Требует право `study_programs.create`. QR-код генерируется автоматически.
+ *     description: Требует право 'study_programs.create'. QR-код генерируется автоматически.
  *     requestBody:
  *       required: true
  *       content:
@@ -81,7 +81,7 @@ router.post('/', authMiddleware, checkPermission('study_programs.create'), valid
  *   get:
  *     tags: [Study / Programs]
  *     summary: Получить программу по ID
- *     description: Требует право `study_programs.read`. Возвращает программу с полной популяцией modules.items (уроки и агенты).
+ *     description: Требует право 'study_programs.read'. Возвращает программу с полной популяцией modules.items (уроки и агенты).
  *     parameters:
  *       - in: path
  *         name: programId
@@ -106,7 +106,7 @@ router.get('/:programId', authMiddleware, checkPermission('study_programs.read')
  *   patch:
  *     tags: [Study / Programs]
  *     summary: Обновить мета-данные программы
- *     description: Требует право `study_programs.update`. Передайте `updateQRCode=true` для перегенерации QR-кода.
+ *     description: Требует право 'study_programs.update'. Передайте 'updateQRCode=true'для перегенерации QR-кода.
  *     parameters:
  *       - in: path
  *         name: programId
@@ -147,7 +147,7 @@ router.patch('/:programId', authMiddleware, checkPermission('study_programs.upda
  *   delete:
  *     tags: [Study / Programs]
  *     summary: Удалить программу
- *     description: Требует право `study_programs.delete`.
+ *     description: Требует право 'study_programs.delete'.
  *     parameters:
  *       - in: path
  *         name: programId
@@ -168,7 +168,7 @@ router.delete('/:programId', authMiddleware, checkPermission('study_programs.del
  *   post:
  *     tags: [Study / Programs]
  *     summary: Добавить модуль в программу
- *     description: Требует право `study_programs.update`. Модуль добавляется в конец списка.
+ *     description: Требует право 'study_programs.update'. Модуль добавляется в конец списка.
  *     parameters:
  *       - in: path
  *         name: programId
@@ -204,7 +204,7 @@ router.post('/:programId/modules', authMiddleware, checkPermission('study_progra
  *   patch:
  *     tags: [Study / Programs]
  *     summary: Переименовать модуль
- *     description: Требует право `study_programs.update`.
+ *     description: Требует право 'study_programs.update'.
  *     parameters:
  *       - in: path
  *         name: programId
@@ -245,7 +245,7 @@ router.patch('/:programId/modules/:moduleId', authMiddleware, checkPermission('s
  *   delete:
  *     tags: [Study / Programs]
  *     summary: Удалить модуль из программы
- *     description: Требует право `study_programs.update`. Удаляет модуль вместе со всеми его items.
+ *     description: Требует право 'study_programs.update'. Удаляет модуль вместе со всеми его items.
  *     parameters:
  *       - in: path
  *         name: programId
@@ -271,7 +271,7 @@ router.delete('/:programId/modules/:moduleId', authMiddleware, checkPermission('
  *   post:
  *     tags: [Study / Programs]
  *     summary: Добавить элемент в модуль
- *     description: Требует право `study_programs.update`. Элемент добавляется в конец списка items модуля.
+ *     description: Требует право 'study_programs.update'. Элемент добавляется в конец списка items модуля.
  *     parameters:
  *       - in: path
  *         name: programId
@@ -315,7 +315,7 @@ router.post('/:programId/modules/:moduleId/items', authMiddleware, checkPermissi
  *   delete:
  *     tags: [Study / Programs]
  *     summary: Удалить элемент из модуля
- *     description: Требует право `study_programs.update`.
+ *     description: Требует право 'study_programs.update'.
  *     parameters:
  *       - in: path
  *         name: programId
@@ -346,7 +346,7 @@ router.delete('/:programId/modules/:moduleId/items/:itemId', authMiddleware, che
  *   patch:
  *     tags: [Study / Programs]
  *     summary: Изменить порядок элементов в модуле
- *     description: Требует право `study_programs.update`. Передаётся полный новый массив items в нужном порядке.
+ *     description: Требует право 'study_programs.update'. Передаётся полный новый массив items в нужном порядке.
  *     parameters:
  *       - in: path
  *         name: programId

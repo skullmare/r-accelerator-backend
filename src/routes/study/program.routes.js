@@ -84,7 +84,28 @@ router.get('/', authMiddleware, checkPermission('study_programs.read'), listProg
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/StudyProgram'
+ *               type: object
+ *               properties:
+ *                 _id:
+ *                   type: string
+ *                 name:
+ *                   type: string
+ *                 sequential:
+ *                   type: boolean
+ *                 active:
+ *                   type: boolean
+ *                 qrCode:
+ *                   type: string
+ *                 modules:
+ *                   type: array
+ *                   items: {}
+ *                   example: []
+ *                 createdAt:
+ *                   type: string
+ *                   format: date-time
+ *                 updatedAt:
+ *                   type: string
+ *                   format: date-time
  *       400:
  *         description: Ошибка валидации
  */

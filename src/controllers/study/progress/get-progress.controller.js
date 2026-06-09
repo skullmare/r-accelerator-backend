@@ -58,7 +58,7 @@ export async function getProgress(req, res) {
         }));
 
         return res.success(
-            { _id: program._id, name: program.name, sequential: program.sequential, modules },
+            { _id: program._id, name: program.name, cover: program.cover, sequential: program.sequential, modules },
             'Прогресс получен',
             200
         );

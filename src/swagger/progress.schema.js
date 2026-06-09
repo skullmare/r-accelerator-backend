@@ -42,6 +42,10 @@
  *           type: string
  *         name:
  *           type: string
+ *         cover:
+ *           type: string
+ *           nullable: true
+ *           description: URL обложки программы
  *         sequential:
  *           type: boolean
  *         modules:

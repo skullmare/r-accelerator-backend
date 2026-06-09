@@ -11,6 +11,7 @@ const moduleItemSchema = z.object({
 const createProgramSchema = z.object({
     body: z.object({
         name: z.string().min(1).max(100),
+        cover: z.string().url().nullable().optional().default(null),
         sequential: z.boolean().optional().default(true),
         active: z.boolean().optional().default(true)
     })
@@ -21,6 +22,7 @@ const updateProgramSchema = z.object({
     params: z.object({ programId: objectId }),
     body: z.object({
         name: z.string().min(1).max(100).optional(),
+        cover: z.string().url().nullable().optional(),
         sequential: z.boolean().optional(),
         active: z.boolean().optional(),
         updateQRCode: z.boolean().optional()

@@ -40,6 +40,10 @@ const StudyProgramSchema = new mongoose.Schema({
         required: true,
         default: true
     },
+    cover: {
+        type: String,
+        default: null
+    },
     qrCode: {
         type: String,
         required: true,

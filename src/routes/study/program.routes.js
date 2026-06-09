@@ -39,6 +39,9 @@ const router = express.Router();
  *                     type: string
  *                   name:
  *                     type: string
+ *                   cover:
+ *                     type: string
+ *                     nullable: true
  *                   sequential:
  *                     type: boolean
  *                   active:
@@ -71,6 +74,10 @@ router.get('/', authMiddleware, checkPermission('study_programs.read'), listProg
  *               name:
  *                 type: string
  *                 maxLength: 100
+ *               cover:
+ *                 type: string
+ *                 nullable: true
+ *                 description: URL обложки программы
  *               sequential:
  *                 type: boolean
  *                 default: true
@@ -90,6 +97,9 @@ router.get('/', authMiddleware, checkPermission('study_programs.read'), listProg
  *                   type: string
  *                 name:
  *                   type: string
+ *                 cover:
+ *                   type: string
+ *                   nullable: true
  *                 sequential:
  *                   type: boolean
  *                 active:
@@ -136,6 +146,9 @@ router.post('/', authMiddleware, checkPermission('study_programs.create'), valid
  *                   type: string
  *                 name:
  *                   type: string
+ *                 cover:
+ *                   type: string
+ *                   nullable: true
  *                 sequential:
  *                   type: boolean
  *                 active:
@@ -197,6 +210,10 @@ router.get('/:programId', authMiddleware, checkPermission('study_programs.read')
  *             properties:
  *               name:
  *                 type: string
+ *               cover:
+ *                 type: string
+ *                 nullable: true
+ *                 description: URL обложки программы
  *               sequential:
  *                 type: boolean
  *               active:
@@ -216,6 +233,9 @@ router.get('/:programId', authMiddleware, checkPermission('study_programs.read')
  *                   type: string
  *                 name:
  *                   type: string
+ *                 cover:
+ *                   type: string
+ *                   nullable: true
  *                 sequential:
  *                   type: boolean
  *                 active:

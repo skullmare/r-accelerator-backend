@@ -42,6 +42,7 @@ const router = express.Router();
  *                   cover:
  *                     type: string
  *                     nullable: true
+ *                     description: URL обложки программы
  *                   sequential:
  *                     type: boolean
  *                   active:

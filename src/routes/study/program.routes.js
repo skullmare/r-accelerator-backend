@@ -117,7 +117,7 @@ router.post('/', authMiddleware, checkPermission('study_programs.create'), valid
  *   get:
  *     tags: [Study / Programs]
  *     summary: Получить программу по ID
- *     description: Требует право 'study_programs.read'. Возвращает программу с полной популяцией modules.items (уроки и агенты).
+ *     description: Требует право 'study_programs.read'. Возвращает программу с модулями. items внутри модулей содержат item как ID строку (не популяция).
  *     parameters:
  *       - in: path
  *         name: programId
@@ -130,7 +130,46 @@ router.post('/', authMiddleware, checkPermission('study_programs.create'), valid
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/StudyProgram'
+ *               type: object
+ *               properties:
+ *                 _id:
+ *                   type: string
+ *                 name:
+ *                   type: string
+ *                 sequential:
+ *                   type: boolean
+ *                 active:
+ *                   type: boolean
+ *                 qrCode:
+ *                   type: string
+ *                 modules:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       items:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             _id:
+ *                               type: string
+ *                             type:
+ *                               type: string
+ *                               enum: [StudyLesson, StudyAgent]
+ *                             item:
+ *                               type: string
+ *                               description: ID урока или агента
+ *                 createdAt:
+ *                   type: string
+ *                   format: date-time
+ *                 updatedAt:
+ *                   type: string
+ *                   format: date-time
  *       404:
  *         description: Программа не найдена
  */
@@ -171,7 +210,46 @@ router.get('/:programId', authMiddleware, checkPermission('study_programs.read')
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/StudyProgram'
+ *               type: object
+ *               properties:
+ *                 _id:
+ *                   type: string
+ *                 name:
+ *                   type: string
+ *                 sequential:
+ *                   type: boolean
+ *                 active:
+ *                   type: boolean
+ *                 qrCode:
+ *                   type: string
+ *                 modules:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       items:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             _id:
+ *                               type: string
+ *                             type:
+ *                               type: string
+ *                               enum: [StudyLesson, StudyAgent]
+ *                             item:
+ *                               type: string
+ *                               description: ID урока или агента
+ *                 createdAt:
+ *                   type: string
+ *                   format: date-time
+ *                 updatedAt:
+ *                   type: string
+ *                   format: date-time
  *       404:
  *         description: Программа не найдена
  */

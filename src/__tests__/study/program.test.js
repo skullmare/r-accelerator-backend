@@ -277,11 +277,11 @@ describe('POST /study/programs/:programId/modules/:moduleId/items', () => {
         const res = await request(app)
             .post(`/api/v1/study/programs/${program._id}/modules/${moduleId}/items`)
             .set('Cookie', authCookie(admin._id, admin.email))
-            .send({ type: 'StudyLesson', itemId: lesson._id.toString() });
+            .send({ type: 'StudyLesson', item: lesson._id.toString() });
 
         expect(res.status).toBe(201);
         expect(res.body.data.type).toBe('StudyLesson');
-        expect(res.body.data.itemId.toString()).toBe(lesson._id.toString());
+        expect(res.body.data.item.toString()).toBe(lesson._id.toString());
     });
 });
 
@@ -382,8 +382,8 @@ describe('PATCH /study/programs/:programId/modules/:moduleId/items/reorder', () 
         const moduleId = program.modules[0]._id;
 
         const reversed = [
-            { type: 'StudyLesson', itemId: lesson2._id.toString() },
-            { type: 'StudyLesson', itemId: lesson1._id.toString() }
+            { type: 'StudyLesson', item: lesson2._id.toString() },
+            { type: 'StudyLesson', item: lesson1._id.toString() }
         ];
 
         const res = await request(app)
@@ -392,7 +392,7 @@ describe('PATCH /study/programs/:programId/modules/:moduleId/items/reorder', () 
             .send({ items: reversed });
 
         expect(res.status).toBe(200);
-        expect(res.body.data[0].itemId.toString()).toBe(lesson2._id.toString());
-        expect(res.body.data[1].itemId.toString()).toBe(lesson1._id.toString());
+        expect(res.body.data[0].item.toString()).toBe(lesson2._id.toString());
+        expect(res.body.data[1].item.toString()).toBe(lesson1._id.toString());
     });
 });

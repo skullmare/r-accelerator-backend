@@ -4,7 +4,7 @@ const objectId = z.string().regex(/^[0-9a-f]{24}$/, 'Некорректный ID
 
 const moduleItemSchema = z.object({
     type: z.enum(['StudyLesson', 'StudyAgent']),
-    itemId: objectId
+    item: objectId
 });
 
 // POST /study/programs — создание программы обучения (admin)

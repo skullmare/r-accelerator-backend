@@ -210,7 +210,46 @@ router.get('/:programId', authMiddleware, checkPermission('study_programs.read')
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/StudyProgram'
+ *               type: object
+ *               properties:
+ *                 _id:
+ *                   type: string
+ *                 name:
+ *                   type: string
+ *                 sequential:
+ *                   type: boolean
+ *                 active:
+ *                   type: boolean
+ *                 qrCode:
+ *                   type: string
+ *                 modules:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       items:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             _id:
+ *                               type: string
+ *                             type:
+ *                               type: string
+ *                               enum: [StudyLesson, StudyAgent]
+ *                             item:
+ *                               type: string
+ *                               description: ID урока или агента
+ *                 createdAt:
+ *                   type: string
+ *                   format: date-time
+ *                 updatedAt:
+ *                   type: string
+ *                   format: date-time
  *       404:
  *         description: Программа не найдена
  */

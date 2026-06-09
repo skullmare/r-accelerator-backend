@@ -10,10 +10,9 @@
  *         type:
  *           type: string
  *           enum: [StudyLesson, StudyAgent]
- *         item:
- *           oneOf:
- *             - $ref: '#/components/schemas/StudyLesson'
- *             - $ref: '#/components/schemas/StudyAgent'
+ *         itemId:
+ *           type: string
+ *           description: ID урока или агента
  *     StudyModule:
  *       type: object
  *       properties:

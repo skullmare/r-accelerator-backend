@@ -343,11 +343,21 @@ router.delete('/:programId/modules/:moduleId', authMiddleware, checkPermission('
  *                 description: ID урока или агента
  *     responses:
  *       201:
- *         description: Элемент добавлен
+ *         description: Элемент добавлен. item возвращается как ID (не популяция)
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ModuleItem'
+ *               type: object
+ *               properties:
+ *                 _id:
+ *                   type: string
+ *                 type:
+ *                   type: string
+ *                   enum: [StudyLesson, StudyAgent]
+ *                   description: StudyLesson — урок, StudyAgent — агент
+ *                 item:
+ *                   type: string
+ *                   description: ID урока или агента
  *       404:
  *         description: Программа или модуль не найдены
  */

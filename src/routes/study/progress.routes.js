@@ -112,7 +112,7 @@ router.get('/:programId/progress',
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/StudyLesson'
+ *               $ref: '#/components/schemas/StudyLessonWithProgress'
  *       403:
  *         description: Нет доступа к уроку или предыдущий урок не пройден
  *       404:

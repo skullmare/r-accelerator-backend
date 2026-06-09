@@ -157,6 +157,27 @@
  *         createdAt:
  *           type: string
  *           format: date-time
+ *     StudyLessonWithProgress:
+ *       type: object
+ *       description: Урок для пользователя — без isCorrect, с userAnswer на каждом вопросе
+ *       properties:
+ *         _id:
+ *           type: string
+ *         name:
+ *           type: string
+ *         content:
+ *           type: object
+ *           description: Контент урока в формате TipTap/ProseMirror JSON
+ *         questions:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/Question'
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *         updatedAt:
+ *           type: string
+ *           format: date-time
  *     AnswerOption:
  *       type: object
  *       properties:

@@ -27,13 +27,27 @@ const router = express.Router();
  *     description: Требует право 'study_programs.read'. Возвращает мета-данные без популяции items.
  *     responses:
  *       200:
- *         description: Список программ
+ *         description: Список программ без модулей
  *         content:
  *           application/json:
  *             schema:
  *               type: array
  *               items:
- *                 $ref: '#/components/schemas/StudyProgram'
+ *                 type: object
+ *                 properties:
+ *                   _id:
+ *                     type: string
+ *                   name:
+ *                     type: string
+ *                   sequential:
+ *                     type: boolean
+ *                   active:
+ *                     type: boolean
+ *                   qrCode:
+ *                     type: string
+ *                   createdAt:
+ *                     type: string
+ *                     format: date-time
  *       403:
  *         description: Недостаточно прав
  */

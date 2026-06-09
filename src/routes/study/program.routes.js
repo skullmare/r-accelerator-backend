@@ -161,7 +161,7 @@ router.post('/', authMiddleware, checkPermission('study_programs.create'), valid
  *                             type:
  *                               type: string
  *                               enum: [StudyLesson, StudyAgent]
- *                             item:
+ *                             itemId:
  *                               type: string
  *                               description: ID урока или агента
  *                 createdAt:
@@ -241,7 +241,7 @@ router.get('/:programId', authMiddleware, checkPermission('study_programs.read')
  *                             type:
  *                               type: string
  *                               enum: [StudyLesson, StudyAgent]
- *                             item:
+ *                             itemId:
  *                               type: string
  *                               description: ID урока или агента
  *                 createdAt:
@@ -446,17 +446,17 @@ router.delete('/:programId/modules/:moduleId', authMiddleware, checkPermission('
  *         application/json:
  *           schema:
  *             type: object
- *             required: [type, item]
+ *             required: [type, itemId]
  *             properties:
  *               type:
  *                 type: string
  *                 enum: [StudyLesson, StudyAgent]
- *               item:
+ *               itemId:
  *                 type: string
  *                 description: ID урока или агента
  *     responses:
  *       201:
- *         description: Элемент добавлен. item возвращается как ID (не популяция)
+ *         description: Элемент добавлен
  *         content:
  *           application/json:
  *             schema:
@@ -467,8 +467,7 @@ router.delete('/:programId/modules/:moduleId', authMiddleware, checkPermission('
  *                 type:
  *                   type: string
  *                   enum: [StudyLesson, StudyAgent]
- *                   description: StudyLesson — урок, StudyAgent — агент
- *                 item:
+ *                 itemId:
  *                   type: string
  *                   description: ID урока или агента
  *       404:
@@ -538,16 +537,31 @@ router.delete('/:programId/modules/:moduleId/items/:itemId', authMiddleware, che
  *                 minItems: 1
  *                 items:
  *                   type: object
- *                   required: [type, item]
+ *                   required: [type, itemId]
  *                   properties:
  *                     type:
  *                       type: string
  *                       enum: [StudyLesson, StudyAgent]
- *                     item:
+ *                     itemId:
  *                       type: string
+ *                       description: ID урока или агента
  *     responses:
  *       200:
  *         description: Порядок элементов обновлён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   _id:
+ *                     type: string
+ *                   type:
+ *                     type: string
+ *                     enum: [StudyLesson, StudyAgent]
+ *                   itemId:
+ *                     type: string
  *       404:
  *         description: Программа или модуль не найдены
  */

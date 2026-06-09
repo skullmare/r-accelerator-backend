@@ -8,4 +8,41 @@ const listFilesSchema = z.object({
     })
 });
 
-export default { listFilesSchema };
+const initiateUploadSchema = z.object({
+    body: z.object({
+        filename: z.string().min(1),
+        mimetype: z.string().min(1),
+        size: z.number().int().positive(),
+    })
+});
+
+const presignUploadSchema = z.object({
+    body: z.object({
+        uploadId: z.string().min(1),
+        key: z.string().min(1),
+        partNumbers: z.array(z.number().int().min(1).max(10000)).min(1).max(10000),
+    })
+});
+
+const completeUploadSchema = z.object({
+    body: z.object({
+        uploadId: z.string().min(1),
+        key: z.string().min(1),
+        parts: z.array(z.object({
+            PartNumber: z.number().int().min(1),
+            ETag: z.string().min(1),
+        })).min(1),
+        originalname: z.string().min(1),
+        mimetype: z.string().min(1),
+        size: z.number().int().positive(),
+    })
+});
+
+const abortUploadSchema = z.object({
+    body: z.object({
+        uploadId: z.string().min(1),
+        key: z.string().min(1),
+    })
+});
+
+export default { listFilesSchema, initiateUploadSchema, presignUploadSchema, completeUploadSchema, abortUploadSchema };

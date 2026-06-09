@@ -22,7 +22,7 @@ const isDev = process.env.NODE_ENV === 'development';
 const allowedOrigins = isDev ? [/^http:\/\/localhost:\d+$/] : ['https://agents.rocketmind.ru', 'https://admin.rocketmind.ru'];
 
 app.use(cors({ origin: allowedOrigins, credentials: true }));
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 

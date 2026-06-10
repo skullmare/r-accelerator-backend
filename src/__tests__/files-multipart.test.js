@@ -21,6 +21,9 @@ async function initiateUpload(user) {
         .post('/api/v1/file/multipart/initiate')
         .set('Cookie', authCookie(user._id, user.email))
         .send({ filename: 'test.mp4', mimetype: 'video/mp4', size: 1024 * 1024 * 10 });
+    if (res.status !== 200) {
+        throw new Error(`initiateUpload failed (${res.status}): ${JSON.stringify(res.body)}`);
+    }
     return res.body.data; // { uploadId, key }
 }
 

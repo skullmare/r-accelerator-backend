@@ -30,6 +30,15 @@ const StudyLessonSchema = new mongoose.Schema({
         unique: true,
         trim: true
     },
+    cover: {
+        type: String,
+        default: null
+    },
+    group: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'LessonGroup',
+        default: null
+    },
     video: {
         url: String
     },

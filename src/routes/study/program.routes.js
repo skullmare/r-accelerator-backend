@@ -39,6 +39,19 @@ const router = express.Router();
  *                     type: string
  *                   name:
  *                     type: string
+ *                   title:
+ *                     type: string
+ *                     nullable: true
+ *                   subtitle:
+ *                     type: string
+ *                     nullable: true
+ *                   description:
+ *                     type: string
+ *                     nullable: true
+ *                   tags:
+ *                     type: array
+ *                     items:
+ *                       type: string
  *                   cover:
  *                     type: string
  *                     nullable: true
@@ -75,6 +88,26 @@ router.get('/', authMiddleware, checkPermission('study_programs.read'), listProg
  *               name:
  *                 type: string
  *                 maxLength: 100
+ *               title:
+ *                 type: string
+ *                 nullable: true
+ *                 maxLength: 200
+ *                 description: Заголовок для UI
+ *               subtitle:
+ *                 type: string
+ *                 nullable: true
+ *                 maxLength: 300
+ *                 description: Подзаголовок для UI
+ *               description:
+ *                 type: string
+ *                 nullable: true
+ *                 maxLength: 2000
+ *                 description: Небольшой текст для UI
+ *               tags:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Массив тегов для UI
  *               cover:
  *                 type: string
  *                 nullable: true
@@ -211,6 +244,22 @@ router.get('/:programId', authMiddleware, checkPermission('study_programs.read')
  *             properties:
  *               name:
  *                 type: string
+ *               title:
+ *                 type: string
+ *                 nullable: true
+ *                 maxLength: 200
+ *               subtitle:
+ *                 type: string
+ *                 nullable: true
+ *                 maxLength: 300
+ *               description:
+ *                 type: string
+ *                 nullable: true
+ *                 maxLength: 2000
+ *               tags:
+ *                 type: array
+ *                 items:
+ *                   type: string
  *               cover:
  *                 type: string
  *                 nullable: true

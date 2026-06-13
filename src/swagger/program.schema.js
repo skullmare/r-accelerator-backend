@@ -32,6 +32,23 @@
  *           type: string
  *         name:
  *           type: string
+ *         title:
+ *           type: string
+ *           nullable: true
+ *           description: Заголовок для UI
+ *         subtitle:
+ *           type: string
+ *           nullable: true
+ *           description: Подзаголовок для UI
+ *         description:
+ *           type: string
+ *           nullable: true
+ *           description: Небольшой текст описания для UI
+ *         tags:
+ *           type: array
+ *           items:
+ *             type: string
+ *           description: Массив тегов для UI
  *         cover:
  *           type: string
  *           nullable: true

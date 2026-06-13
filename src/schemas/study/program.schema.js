@@ -11,6 +11,10 @@ const moduleItemSchema = z.object({
 const createProgramSchema = z.object({
     body: z.object({
         name: z.string().min(1).max(100),
+        title: z.string().min(1).max(200).nullable().optional().default(null),
+        subtitle: z.string().min(1).max(300).nullable().optional().default(null),
+        description: z.string().min(1).max(2000).nullable().optional().default(null),
+        tags: z.array(z.string().min(1).max(50)).optional().default([]),
         cover: z.string().url().nullable().optional().default(null),
         sequential: z.boolean().optional().default(true),
         active: z.boolean().optional().default(true)
@@ -22,6 +26,10 @@ const updateProgramSchema = z.object({
     params: z.object({ programId: objectId }),
     body: z.object({
         name: z.string().min(1).max(100).optional(),
+        title: z.string().min(1).max(200).nullable().optional(),
+        subtitle: z.string().min(1).max(300).nullable().optional(),
+        description: z.string().min(1).max(2000).nullable().optional(),
+        tags: z.array(z.string().min(1).max(50)).optional(),
         cover: z.string().url().nullable().optional(),
         sequential: z.boolean().optional(),
         active: z.boolean().optional(),

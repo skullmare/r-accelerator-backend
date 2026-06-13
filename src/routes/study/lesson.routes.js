@@ -16,17 +16,24 @@ const router = express.Router();
  * /study/lessons:
  *   get:
  *     tags: [Study / Lessons]
- *     summary: Список всех уроков
- *     description: Требует право 'study_lessons.read'. Возвращает мета-данные без content и questions — для выбора при составлении программы.
+ *     summary: Список всех уроков и групп
+ *     description: Требует право 'study_lessons.read'. Возвращает мета-данные уроков (без content и questions) вместе со всеми группами уроков.
  *     responses:
  *       200:
- *         description: Список уроков
+ *         description: Список уроков и групп
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/StudyLessonMeta'
+ *               type: object
+ *               properties:
+ *                 lessons:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/StudyLessonMeta'
+ *                 groups:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/LessonGroup'
  *       403:
  *         description: Недостаточно прав
  */
@@ -50,6 +57,15 @@ router.get('/', authMiddleware, checkPermission('study_lessons.read'), listLesso
  *               name:
  *                 type: string
  *                 maxLength: 200
+ *               cover:
+ *                 type: string
+ *                 nullable: true
+ *                 format: uri
+ *                 description: URL фото-обложки урока
+ *               group:
+ *                 type: string
+ *                 nullable: true
+ *                 description: ID группы уроков
  *               content:
  *                 type: object
  *                 description: Контент в формате TipTap/ProseMirror JSON
@@ -146,6 +162,15 @@ router.get('/:lessonId', authMiddleware, checkPermission('study_lessons.read'), 
  *               name:
  *                 type: string
  *                 maxLength: 200
+ *               cover:
+ *                 type: string
+ *                 nullable: true
+ *                 format: uri
+ *                 description: URL фото-обложки урока
+ *               group:
+ *                 type: string
+ *                 nullable: true
+ *                 description: ID группы уроков
  *               content:
  *                 type: object
  *               video:

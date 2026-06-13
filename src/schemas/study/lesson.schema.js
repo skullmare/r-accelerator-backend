@@ -21,6 +21,8 @@ const quizAnswerSchema = z.object({
 const createLessonSchema = z.object({
     body: z.object({
         name: z.string().min(1).max(200),
+        cover: z.string().url().nullable().optional().default(null),
+        group: objectId.nullable().optional().default(null),
         content: z.any(),
         video: z.object({ url: z.string().url() }).optional(),
         presentation: z.object({ url: z.string().url() }).optional(),
@@ -33,6 +35,8 @@ const updateLessonSchema = z.object({
     params: z.object({ lessonId: objectId }),
     body: z.object({
         name: z.string().min(1).max(200).optional(),
+        cover: z.string().url().nullable().optional(),
+        group: objectId.nullable().optional(),
         content: z.any().optional(),
         video: z.object({ url: z.string().url() }).nullable().optional(),
         presentation: z.object({ url: z.string().url() }).nullable().optional(),

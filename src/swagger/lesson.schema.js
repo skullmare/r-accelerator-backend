@@ -54,6 +54,15 @@
  *           type: string
  *         name:
  *           type: string
+ *         cover:
+ *           type: string
+ *           nullable: true
+ *           description: URL фото-обложки урока
+ *         group:
+ *           nullable: true
+ *           description: Группа урока (populated)
+ *           oneOf:
+ *             - $ref: '#/components/schemas/LessonGroup'
  *         video:
  *           type: object
  *           nullable: true
@@ -78,6 +87,14 @@
  *         _id:
  *           type: string
  *         name:
+ *           type: string
+ *         cover:
+ *           type: string
+ *           nullable: true
+ *           description: URL фото-обложки урока
+ *         group:
+ *           nullable: true
+ *           description: ID группы урока
  *           type: string
  *         video:
  *           type: object

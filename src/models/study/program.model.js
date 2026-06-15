@@ -44,7 +44,7 @@ const StudyProgramSchema = new mongoose.Schema({
         trim: true,
         default: null
     },
-    tags: {
+    tag: {
         type: String,
         trim: true,
         default: null

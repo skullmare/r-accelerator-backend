@@ -44,10 +44,10 @@
  *           type: string
  *           nullable: true
  *           description: Небольшой текст описания для UI
- *         tags:
+ *         tag:
  *           type: string
  *           nullable: true
- *           description: Теги для UI (строка)
+ *           description: Тег для UI (строка)
  *         coverMeta:
  *           type: object
  *           nullable: true

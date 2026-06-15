@@ -48,7 +48,7 @@ const router = express.Router();
  *                   description:
  *                     type: string
  *                     nullable: true
- *                   tags:
+ *                   tag:
  *                     type: string
  *                     nullable: true
  *                   coverMeta:
@@ -106,10 +106,10 @@ router.get('/', authMiddleware, checkPermission('study_programs.read'), listProg
  *                 nullable: true
  *                 maxLength: 2000
  *                 description: Небольшой текст для UI
- *               tags:
+ *               tag:
  *                 type: string
  *                 nullable: true
- *                 description: Теги для UI (строка)
+ *                 description: Тег для UI (строка)
  *               coverMeta:
  *                 type: object
  *                 nullable: true
@@ -263,7 +263,7 @@ router.get('/:programId', authMiddleware, checkPermission('study_programs.read')
  *                 type: string
  *                 nullable: true
  *                 maxLength: 2000
- *               tags:
+ *               tag:
  *                 type: string
  *                 nullable: true
  *               coverMeta:

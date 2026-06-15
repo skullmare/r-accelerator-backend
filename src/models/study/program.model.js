@@ -45,8 +45,13 @@ const StudyProgramSchema = new mongoose.Schema({
         default: null
     },
     tags: {
-        type: [String],
-        default: []
+        type: String,
+        trim: true,
+        default: null
+    },
+    coverMeta: {
+        type: mongoose.Schema.Types.Mixed,
+        default: null
     },
     modules: [ModuleSchema],
     sequential: {

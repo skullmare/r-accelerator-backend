@@ -45,10 +45,14 @@
  *           nullable: true
  *           description: Небольшой текст описания для UI
  *         tags:
- *           type: array
- *           items:
- *             type: string
- *           description: Массив тегов для UI
+ *           type: string
+ *           nullable: true
+ *           description: Теги для UI (строка)
+ *         coverMeta:
+ *           type: object
+ *           nullable: true
+ *           description: Произвольный JSON-объект с мета-данными обложки для UI
+ *           additionalProperties: true
  *         cover:
  *           type: string
  *           nullable: true

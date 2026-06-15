@@ -49,9 +49,12 @@ const router = express.Router();
  *                     type: string
  *                     nullable: true
  *                   tags:
- *                     type: array
- *                     items:
- *                       type: string
+ *                     type: string
+ *                     nullable: true
+ *                   coverMeta:
+ *                     type: object
+ *                     nullable: true
+ *                     additionalProperties: true
  *                   cover:
  *                     type: string
  *                     nullable: true
@@ -104,10 +107,14 @@ router.get('/', authMiddleware, checkPermission('study_programs.read'), listProg
  *                 maxLength: 2000
  *                 description: Небольшой текст для UI
  *               tags:
- *                 type: array
- *                 items:
- *                   type: string
- *                 description: Массив тегов для UI
+ *                 type: string
+ *                 nullable: true
+ *                 description: Теги для UI (строка)
+ *               coverMeta:
+ *                 type: object
+ *                 nullable: true
+ *                 additionalProperties: true
+ *                 description: Произвольный JSON-объект с мета-данными обложки для UI
  *               cover:
  *                 type: string
  *                 nullable: true
@@ -257,9 +264,13 @@ router.get('/:programId', authMiddleware, checkPermission('study_programs.read')
  *                 nullable: true
  *                 maxLength: 2000
  *               tags:
- *                 type: array
- *                 items:
- *                   type: string
+ *                 type: string
+ *                 nullable: true
+ *               coverMeta:
+ *                 type: object
+ *                 nullable: true
+ *                 additionalProperties: true
+ *                 description: Произвольный JSON-объект с мета-данными обложки
  *               cover:
  *                 type: string
  *                 nullable: true

@@ -29,22 +29,7 @@ const StudyProgramSchema = new mongoose.Schema({
         unique: true,
         trim: true
     },
-    title: {
-        type: String,
-        trim: true,
-        default: null
-    },
-    subtitle: {
-        type: String,
-        trim: true,
-        default: null
-    },
     description: {
-        type: String,
-        trim: true,
-        default: null
-    },
-    tag: {
         type: String,
         trim: true,
         default: null

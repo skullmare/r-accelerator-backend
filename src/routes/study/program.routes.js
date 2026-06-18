@@ -39,16 +39,7 @@ const router = express.Router();
  *                     type: string
  *                   name:
  *                     type: string
- *                   title:
- *                     type: string
- *                     nullable: true
- *                   subtitle:
- *                     type: string
- *                     nullable: true
  *                   description:
- *                     type: string
- *                     nullable: true
- *                   tag:
  *                     type: string
  *                     nullable: true
  *                   coverMeta:
@@ -91,25 +82,11 @@ router.get('/', authMiddleware, checkPermission('study_programs.read'), listProg
  *               name:
  *                 type: string
  *                 maxLength: 100
- *               title:
- *                 type: string
- *                 nullable: true
- *                 maxLength: 200
- *                 description: Заголовок для UI
- *               subtitle:
- *                 type: string
- *                 nullable: true
- *                 maxLength: 300
- *                 description: Подзаголовок для UI
  *               description:
  *                 type: string
  *                 nullable: true
  *                 maxLength: 2000
  *                 description: Небольшой текст для UI
- *               tag:
- *                 type: string
- *                 nullable: true
- *                 description: Тег для UI (строка)
  *               coverMeta:
  *                 type: object
  *                 nullable: true
@@ -251,21 +228,10 @@ router.get('/:programId', authMiddleware, checkPermission('study_programs.read')
  *             properties:
  *               name:
  *                 type: string
- *               title:
- *                 type: string
- *                 nullable: true
- *                 maxLength: 200
- *               subtitle:
- *                 type: string
- *                 nullable: true
- *                 maxLength: 300
  *               description:
  *                 type: string
  *                 nullable: true
  *                 maxLength: 2000
- *               tag:
- *                 type: string
- *                 nullable: true
  *               coverMeta:
  *                 type: object
  *                 nullable: true

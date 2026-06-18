@@ -32,22 +32,10 @@
  *           type: string
  *         name:
  *           type: string
- *         title:
- *           type: string
- *           nullable: true
- *           description: Заголовок для UI
- *         subtitle:
- *           type: string
- *           nullable: true
- *           description: Подзаголовок для UI
  *         description:
  *           type: string
  *           nullable: true
  *           description: Небольшой текст описания для UI
- *         tag:
- *           type: string
- *           nullable: true
- *           description: Тег для UI (строка)
  *         coverMeta:
  *           type: object
  *           nullable: true

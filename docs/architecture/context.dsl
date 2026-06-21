@@ -6,9 +6,6 @@ workspace "RocketMind" "Архитектура платформы обучени
 
         rocketmind = softwareSystem "RocketMind" "Платформа онлайн-обучения с AI-агентами"
 
-        bitrix = softwareSystem "Bitrix" "CRM и бизнес-процессы компании" {
-            tags "External"
-        }
         openai = softwareSystem "OpenAI" "AI-агенты для обучения (Assistants API)" {
             tags "External"
         }
@@ -21,12 +18,10 @@ workspace "RocketMind" "Архитектура платформы обучени
 
         student -> rocketmind "Проходит уроки, общается с AI-агентами"
         admin -> rocketmind "Создаёт контент, управляет пользователями"
-        admin -> bitrix "Работает с CRM"
-
         rocketmind -> openai "Отправляет сообщения, получает ответы (SSE)"
         rocketmind -> google "Отправляет коды авторизации на email"
         rocketmind -> s3 "Загружает и раздаёт файлы"
-        rocketmind -> bitrix "Синхронизирует данные пользователей"
+
     }
 
     views {

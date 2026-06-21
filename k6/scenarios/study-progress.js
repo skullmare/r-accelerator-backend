@@ -78,9 +78,12 @@ export default function (data) {
     });
     if (!ok) joinErrors.add(1);
 
-    // Получаем programId из ответа если не передан
+    // Ответ: { success, data: { programId } }
     if (!programId) {
-      try { programId = JSON.parse(res.body).program?._id || JSON.parse(res.body)._id; } catch {}
+      try {
+        const b = JSON.parse(res.body);
+        programId = b.data?.programId || b.programId;
+      } catch {}
     }
   });
 
@@ -105,37 +108,21 @@ export default function (data) {
       },
     });
 
-    // Пытаемся найти первый доступный урок
-    if (!lessonId) {
-      try {
-        const prog = JSON.parse(res.body);
-        for (const mod of prog.modules || []) {
-          for (const item of mod.items || []) {
-            if (item.accessible && item.type === 'StudyLesson') {
-              lessonId = item.item._id || item.item;
-              break;
-            }
+    // Ответ: { data: { modules: [...] } }
+    try {
+      const b = JSON.parse(res.body);
+      const modules = b.data?.modules || b.modules || [];
+      for (const mod of modules) {
+        for (const item of mod.items || []) {
+          if (item.accessible && item.type === 'StudyLesson' && !lessonId) {
+            lessonId = item.item?._id || item.item;
           }
-          if (lessonId) break;
-        }
-      } catch {}
-    }
-
-    // Ищем агента
-    if (!agentId) {
-      try {
-        const prog = JSON.parse(res.body);
-        for (const mod of prog.modules || []) {
-          for (const item of mod.items || []) {
-            if (item.accessible && item.type === 'StudyAgent') {
-              agentId = item.item._id || item.item;
-              break;
-            }
+          if (item.accessible && item.type === 'StudyAgent' && !agentId) {
+            agentId = item.item?._id || item.item;
           }
-          if (agentId) break;
         }
-      } catch {}
-    }
+      }
+    } catch {}
   });
 
   sleep(0.5);

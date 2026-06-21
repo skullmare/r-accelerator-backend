@@ -14,10 +14,6 @@ workspace "RocketMind" "Архитектура платформы обучени
         s3 = softwareSystem "Yandex Cloud S3" "Хранение файлов: видео, презентации, обложки" {
             tags "External"
         }
-        bitrix = softwareSystem "Bitrix" "CRM и бизнес-процессы компании" {
-            tags "External"
-        }
-
         rocketmind = softwareSystem "RocketMind" "Платформа онлайн-обучения с AI-агентами" {
 
             saasAdmin = container "saas-admin" "Административный интерфейс платформы" "Next.js" {
@@ -56,7 +52,7 @@ workspace "RocketMind" "Архитектура платформы обучени
         accelBack -> openai "Assistants API / HTTPS"
         accelBack -> s3 "AWS SDK / HTTPS"
         accelBack -> google "SMTP / Nodemailer"
-        accelBack -> bitrix "REST API"
+
     }
 
     views {

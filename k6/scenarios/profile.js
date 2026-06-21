@@ -47,8 +47,10 @@ export default function ({ cookies }) {
     check(res, {
       'profile GET: статус 200': (r) => r.status === 200,
       'profile GET: есть поле email': (r) => {
-        try { return !!JSON.parse(r.body).email; }
-        catch { return false; }
+        try {
+          const b = JSON.parse(r.body);
+          return !!(b.email || b.data?.email);
+        } catch { return false; }
       },
     });
   });

@@ -103,8 +103,10 @@ export default function (data) {
     check(res, {
       'progress: статус 200': (r) => r.status === 200,
       'progress: есть modules': (r) => {
-        try { return Array.isArray(JSON.parse(r.body).modules); }
-        catch { return false; }
+        try {
+          const b = JSON.parse(r.body);
+          return Array.isArray(b.data?.modules || b.modules);
+        } catch { return false; }
       },
     });
 
@@ -138,15 +140,18 @@ export default function (data) {
       check(openRes, {
         'lesson open: статус 200': (r) => r.status === 200,
         'lesson open: есть content': (r) => {
-          try { return !!JSON.parse(r.body).content; }
-          catch { return false; }
+          try {
+            const b = JSON.parse(r.body);
+            return !!(b.data?.content || b.content);
+          } catch { return false; }
         },
       });
 
       // Собираем вопросы для ответов
       let quizAnswers = [];
       try {
-        const lesson = JSON.parse(openRes.body);
+        const b = JSON.parse(openRes.body);
+        const lesson = b.data || b;
         quizAnswers = (lesson.questions || []).map((q) => ({
           questionId: q._id,
           answerId: q.answerOptions?.[0]?._id, // Выбираем первый вариант

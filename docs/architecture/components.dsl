@@ -29,22 +29,80 @@ workspace "RocketMind — Компоненты r-accel-back" {
 
             accelBack = container "r-accel-back" "API сервер" "Node.js / Express.js" {
 
-                authModule = component "Auth Module" "Аутентификация по email-коду, выдача JWT-токенов" "Express Router"
-                profileModule = component "Profile Module" "Просмотр и редактирование профиля текущего пользователя" "Express Router"
-                usersModule = component "Users Module" "Управление пользователями, назначение ролей" "Express Router"
-                rolesModule = component "Roles Module" "CRUD ролей и прав доступа" "Express Router"
-                programsModule = component "Study Programs Module" "Управление учебными программами и модулями" "Express Router"
-                lessonsModule = component "Study Lessons Module" "Управление уроками и группами уроков" "Express Router"
-                agentsModule = component "Study Agents Module" "Управление AI-агентами" "Express Router"
-                progressModule = component "Study Progress Module" "Прогресс студента, завершение уроков, чат с агентом" "Express Router"
-                filesModule = component "Files Module" "Загрузка файлов: single upload и multipart" "Express Router"
+                # Роуты
+                authRoutes = component "Auth Routes" "POST /auth/login, /verify, /refresh, /logout" "Express Router" {
+                    tags "Route"
+                }
+                profileRoutes = component "Profile Routes" "GET /profile, PUT /profile" "Express Router" {
+                    tags "Route"
+                }
+                usersRoutes = component "Users Routes" "GET /users, GET /users/:id, PATCH /users/:id, PUT /users/:id/role" "Express Router" {
+                    tags "Route"
+                }
+                rolesRoutes = component "Roles Routes" "GET /roles, POST /roles, PUT /roles/:id, DELETE /roles/:id" "Express Router" {
+                    tags "Route"
+                }
+                programsRoutes = component "Programs Routes" "CRUD /study/programs + модули и элементы" "Express Router" {
+                    tags "Route"
+                }
+                lessonsRoutes = component "Lessons Routes" "CRUD /study/lessons, /study/lesson-groups" "Express Router" {
+                    tags "Route"
+                }
+                agentsRoutes = component "Agents Routes" "CRUD /study/agents" "Express Router" {
+                    tags "Route"
+                }
+                progressRoutes = component "Progress Routes" "JOIN, прогресс, уроки, агенты, сообщения" "Express Router" {
+                    tags "Route"
+                }
+                filesRoutes = component "Files Routes" "GET /file, POST /file/upload, /multipart/*" "Express Router" {
+                    tags "Route"
+                }
 
-                emailService = component "Email Service" "Отправка кодов авторизации на email" "Nodemailer"
-                openaiService = component "OpenAI Service" "Стриминг ответов AI-агента (SSE)" "OpenAI SDK"
-                s3Service = component "S3 Service" "Загрузка файлов в объектное хранилище" "AWS SDK"
+                # Middleware
+                authMiddleware = component "Auth Middleware" "Валидация JWT из cookie, извлечение пользователя" "Middleware" {
+                    tags "Middleware"
+                }
+                permissionMiddleware = component "Permission Middleware" "Проверка прав доступа по роли пользователя" "Middleware" {
+                    tags "Middleware"
+                }
+                validateMiddleware = component "Validate Middleware" "Валидация тела запроса через Zod-схемы" "Middleware" {
+                    tags "Middleware"
+                }
+                checkAccessMiddleware = component "Check Access Middleware" "Проверка доступа к программе, уроку, агенту и разблокировки элемента" "Middleware" {
+                    tags "Middleware"
+                }
 
-                authMiddleware = component "Auth Middleware" "Валидация JWT из cookie, извлечение пользователя" "Middleware"
-                permissionMiddleware = component "Permission Middleware" "Проверка прав доступа по роли" "Middleware"
+                # Контроллеры
+                authController = component "Auth Controller" "Логика логина, верификации кода, рефреша и логаута" "Controller" {
+                    tags "Controller"
+                }
+                profileController = component "Profile Controller" "Получение и обновление профиля" "Controller" {
+                    tags "Controller"
+                }
+                usersController = component "Users Controller" "Список, получение, обновление пользователей и ролей" "Controller" {
+                    tags "Controller"
+                }
+                rolesController = component "Roles Controller" "CRUD ролей и список прав" "Controller" {
+                    tags "Controller"
+                }
+                programsController = component "Programs Controller" "CRUD программ, модулей и элементов, QR-код, join" "Controller" {
+                    tags "Controller"
+                }
+                lessonsController = component "Lessons Controller" "CRUD уроков и групп уроков" "Controller" {
+                    tags "Controller"
+                }
+                agentsController = component "Agents Controller" "CRUD агентов, список OpenAI ассистентов" "Controller" {
+                    tags "Controller"
+                }
+                progressController = component "Progress Controller" "Прогресс, открытие урока, завершение, просмотр агента" "Controller" {
+                    tags "Controller"
+                }
+                messagesController = component "Messages Controller" "История сообщений и отправка сообщения агенту (SSE)" "Controller" {
+                    tags "Controller"
+                }
+                filesController = component "Files Controller" "Список файлов, single upload, multipart upload" "Controller" {
+                    tags "Controller"
+                }
             }
         }
 
@@ -52,60 +110,105 @@ workspace "RocketMind — Компоненты r-accel-back" {
         admin -> saasAdmin "Использует"
         teacher -> saasTeacher "Использует"
 
-        # Фронтенды → Бэкенд
-        saasAdmin -> accelBack "REST API / HTTPS"
-        saasTeacher -> accelBack "REST API / HTTPS"
+        # Фронтенды → Роуты
+        saasAdmin -> authRoutes "HTTP"
+        saasAdmin -> profileRoutes "HTTP"
+        saasAdmin -> usersRoutes "HTTP"
+        saasAdmin -> rolesRoutes "HTTP"
+        saasAdmin -> programsRoutes "HTTP"
+        saasAdmin -> lessonsRoutes "HTTP"
+        saasAdmin -> agentsRoutes "HTTP"
+        saasAdmin -> filesRoutes "HTTP"
 
-        # Фронтенды → Компоненты
-        saasAdmin -> authModule "POST /auth/login, /verify, /refresh, /logout"
-        saasAdmin -> profileModule "GET, PUT /profile"
-        saasAdmin -> usersModule "GET, PATCH /users"
-        saasAdmin -> rolesModule "CRUD /roles"
-        saasAdmin -> programsModule "CRUD /study/programs"
-        saasAdmin -> lessonsModule "CRUD /study/lessons, /lesson-groups"
-        saasAdmin -> agentsModule "CRUD /study/agents"
-        saasAdmin -> filesModule "POST /file/upload, /multipart"
+        saasTeacher -> authRoutes "HTTP"
+        saasTeacher -> profileRoutes "HTTP"
+        saasTeacher -> programsRoutes "HTTP"
+        saasTeacher -> lessonsRoutes "HTTP"
+        saasTeacher -> progressRoutes "HTTP"
 
-        saasTeacher -> authModule "POST /auth/login, /verify, /refresh, /logout"
-        saasTeacher -> profileModule "GET, PUT /profile"
-        saasTeacher -> programsModule "GET /study/programs"
-        saasTeacher -> lessonsModule "GET /study/lessons"
-        saasTeacher -> progressModule "GET /study/programs/:id/progress"
+        # Роуты → Middleware
+        authRoutes -> validateMiddleware "Валидирует запрос"
+        authRoutes -> authMiddleware "Защищённые маршруты (/logout, /refresh)"
 
-        # Внутренние связи компонентов
-        authModule -> authMiddleware "Использует для защищённых маршрутов"
-        authModule -> emailService "Отправляет код авторизации"
-        profileModule -> authMiddleware "Проверяет токен"
-        usersModule -> authMiddleware "Проверяет токен"
-        usersModule -> permissionMiddleware "Проверяет права users.read / users.update"
-        rolesModule -> authMiddleware "Проверяет токен"
-        rolesModule -> permissionMiddleware "Проверяет права roles.*"
-        programsModule -> authMiddleware "Проверяет токен"
-        programsModule -> permissionMiddleware "Проверяет права study_programs.*"
-        lessonsModule -> authMiddleware "Проверяет токен"
-        lessonsModule -> permissionMiddleware "Проверяет права study_lessons.*"
-        agentsModule -> authMiddleware "Проверяет токен"
-        agentsModule -> permissionMiddleware "Проверяет права study_agents.*"
-        progressModule -> authMiddleware "Проверяет токен"
-        progressModule -> openaiService "Отправляет сообщение агенту, стримит ответ"
-        filesModule -> authMiddleware "Проверяет токен"
-        filesModule -> s3Service "Загружает файлы"
+        profileRoutes -> authMiddleware "Проверяет токен"
+        profileRoutes -> validateMiddleware "Валидирует запрос"
 
-        # Компоненты → MongoDB
-        authModule -> mongodb "Читает/пишет пользователей"
-        profileModule -> mongodb "Читает/пишет профиль"
-        usersModule -> mongodb "Читает/пишет пользователей и роли"
-        rolesModule -> mongodb "Читает/пишет роли"
-        programsModule -> mongodb "Читает/пишет программы"
-        lessonsModule -> mongodb "Читает/пишет уроки"
-        agentsModule -> mongodb "Читает/пишет агентов"
-        progressModule -> mongodb "Читает/пишет прогресс и сообщения"
-        filesModule -> mongodb "Сохраняет метаданные файлов"
+        usersRoutes -> authMiddleware "Проверяет токен"
+        usersRoutes -> permissionMiddleware "users.read / users.update / users_role.update"
+        usersRoutes -> validateMiddleware "Валидирует запрос"
 
-        # Сервисы → Внешние системы
-        emailService -> google "SMTP"
-        openaiService -> openai "Assistants API / HTTPS"
-        s3Service -> s3 "AWS SDK / HTTPS"
+        rolesRoutes -> authMiddleware "Проверяет токен"
+        rolesRoutes -> permissionMiddleware "roles.read / roles.create / roles.update / roles.delete"
+        rolesRoutes -> validateMiddleware "Валидирует запрос"
+
+        programsRoutes -> authMiddleware "Проверяет токен"
+        programsRoutes -> permissionMiddleware "study_programs.*"
+        programsRoutes -> validateMiddleware "Валидирует запрос"
+
+        lessonsRoutes -> authMiddleware "Проверяет токен"
+        lessonsRoutes -> permissionMiddleware "study_lessons.*"
+        lessonsRoutes -> validateMiddleware "Валидирует запрос"
+
+        agentsRoutes -> authMiddleware "Проверяет токен"
+        agentsRoutes -> permissionMiddleware "study_agents.*"
+        agentsRoutes -> validateMiddleware "Валидирует запрос"
+
+        progressRoutes -> authMiddleware "Проверяет токен"
+        progressRoutes -> checkAccessMiddleware "Проверяет доступ к программе, уроку, агенту"
+        progressRoutes -> validateMiddleware "Валидирует запрос"
+
+        filesRoutes -> authMiddleware "Проверяет токен"
+        filesRoutes -> validateMiddleware "Валидирует запрос"
+
+        # Middleware → Контроллеры
+        authMiddleware -> authController "req.user"
+        authMiddleware -> profileController "req.user"
+        authMiddleware -> usersController "req.user"
+        authMiddleware -> rolesController "req.user"
+        authMiddleware -> programsController "req.user"
+        authMiddleware -> lessonsController "req.user"
+        authMiddleware -> agentsController "req.user"
+        authMiddleware -> progressController "req.user"
+        authMiddleware -> messagesController "req.user"
+        authMiddleware -> filesController "req.user"
+
+        validateMiddleware -> authController "req.validatedData"
+        validateMiddleware -> profileController "req.validatedData"
+        validateMiddleware -> usersController "req.validatedData"
+        validateMiddleware -> rolesController "req.validatedData"
+        validateMiddleware -> programsController "req.validatedData"
+        validateMiddleware -> lessonsController "req.validatedData"
+        validateMiddleware -> agentsController "req.validatedData"
+        validateMiddleware -> progressController "req.validatedData"
+        validateMiddleware -> messagesController "req.validatedData"
+        validateMiddleware -> filesController "req.validatedData"
+
+        permissionMiddleware -> usersController "Разрешает доступ"
+        permissionMiddleware -> rolesController "Разрешает доступ"
+        permissionMiddleware -> programsController "Разрешает доступ"
+        permissionMiddleware -> lessonsController "Разрешает доступ"
+        permissionMiddleware -> agentsController "Разрешает доступ"
+
+        checkAccessMiddleware -> progressController "Разрешает доступ"
+        checkAccessMiddleware -> messagesController "Разрешает доступ"
+
+        # Контроллеры → MongoDB
+        authController -> mongodb "User: код, токены, lastLogin"
+        profileController -> mongodb "User: профиль"
+        usersController -> mongodb "User, Role"
+        rolesController -> mongodb "Role"
+        programsController -> mongodb "StudyProgram"
+        lessonsController -> mongodb "StudyLesson, LessonGroup"
+        agentsController -> mongodb "StudyAgent"
+        progressController -> mongodb "StudyProgress, StudyLesson, StudyAgent"
+        messagesController -> mongodb "StudyMessage, User"
+        filesController -> mongodb "File"
+
+        # Контроллеры → Внешние сервисы
+        authController -> google "Отправляет код авторизации"
+        messagesController -> openai "Стримит ответ агента (SSE)"
+        filesController -> s3 "Загружает файлы"
+        agentsController -> openai "Получает список ассистентов"
     }
 
     views {
@@ -133,18 +236,22 @@ workspace "RocketMind — Компоненты r-accel-back" {
                 color #ffffff
                 shape WebBrowser
             }
-            element "Container" {
-                background #2d6a9f
-                color #ffffff
-            }
-            element "Component" {
-                background #85bbf0
-                color #000000
-            }
             element "Database" {
                 background #438dd5
                 color #ffffff
                 shape Cylinder
+            }
+            element "Route" {
+                background #2d6a9f
+                color #ffffff
+            }
+            element "Middleware" {
+                background #e67e22
+                color #ffffff
+            }
+            element "Controller" {
+                background #27ae60
+                color #ffffff
             }
         }
     }

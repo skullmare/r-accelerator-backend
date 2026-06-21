@@ -1,9 +1,8 @@
 workspace "RocketMind" "Архитектура платформы обучения" {
 
     model {
-        student = person "Клиент" "Проходит курсы, общается с AI-агентами"
+        client = person "Клиент" "Проходит курсы, общается с AI-агентами"
         admin = person "Администратор" "Управляет программами, уроками, пользователями"
-        teacher = person "Преподаватель" "Создаёт и ведёт курсы"
 
         # Внешние системы
         openai = softwareSystem "OpenAI" "AI-агенты для обучения (Assistants API)" {
@@ -21,83 +20,43 @@ workspace "RocketMind" "Архитектура платформы обучени
 
         rocketmind = softwareSystem "RocketMind" "Платформа онлайн-обучения с AI-агентами" {
 
-            # Фронтенды на Next.js
-            saasAdmin = container "saas-admin" "Административный интерфейс SaaS-платформы" "Next.js" {
+            saasAdmin = container "saas-admin" "Административный интерфейс платформы" "Next.js" {
                 tags "Frontend"
             }
-            saasTeacher = container "saas-teacher" "Интерфейс преподавателя SaaS-платформы" "Next.js" {
+            saasTeacher = container "saas-teacher" "Интерфейс преподавателя" "Next.js" {
                 tags "Frontend"
             }
-            rInternal = container "r-internal" "Внутренний портал компании" "Next.js" {
-                tags "Frontend"
-            }
-            rocketmindSaas = container "rocketmind-saas" "Публичный SaaS-сайт платформы" "Next.js" {
-                tags "Frontend"
-            }
-            rocketmindAdminApp = container "rocketmind-admin" "Панель управления продуктом" "Next.js" {
-                tags "Frontend"
-            }
-            rocketmindSite = container "rocketmind-site" "Маркетинговый сайт" "Next.js" {
+            rocketmindSaas = container "rocketmind-saas" "Клиентский интерфейс платформы" "Next.js" {
                 tags "Frontend"
             }
 
-            # Бэкенды на Express.js
-            accelBack = container "r-accel-back" "Production API сервер" "Node.js / Express.js" {
-                tags "Backend"
-            }
-            rsBackDev = container "rs-back-dev" "Development API сервер" "Node.js / Express.js" {
+            accelBack = container "r-accel-back" "API сервер" "Node.js / Express.js" {
                 tags "Backend"
             }
 
-            # Базы данных
             mongodb = container "MongoDB" "Хранит пользователей, программы, уроки, прогресс, сообщения" "MongoDB" {
-                tags "Database"
-            }
-            postgres = container "PostgreSQL" "Общая БД для Next.js приложений" "PostgreSQL" {
                 tags "Database"
             }
         }
 
         # Связи пользователей
-        student -> rocketmindSaas "Изучает курсы"
-        student -> saasAdmin "Проходит обучение"
-        admin -> rocketmindAdminApp "Управляет платформой"
-        admin -> rInternal "Использует внутренний портал"
-        teacher -> saasTeacher "Ведёт курсы"
+        client -> rocketmindSaas "Изучает курсы"
+        admin -> saasAdmin "Управляет платформой"
+        admin -> saasTeacher "Создаёт курсы"
 
-        # Фронтенды → Бэкенды
+        # Фронтенды → Бэкенд
         saasAdmin -> accelBack "REST API / HTTPS"
         saasTeacher -> accelBack "REST API / HTTPS"
         rocketmindSaas -> accelBack "REST API / HTTPS"
 
-        # Фронтенды → PostgreSQL (SSR / Server Actions)
-        rInternal -> postgres "SQL"
-        rocketmindAdminApp -> postgres "SQL"
-        rocketmindSite -> postgres "SQL"
-
-        # rocketmind-saas также читает из Postgres (SSR)
-        rocketmindSaas -> postgres "SQL (SSR)"
-
-        # Бэкенды → MongoDB
+        # Бэкенд → БД
         accelBack -> mongodb "Mongoose ODM"
-        rsBackDev -> mongodb "Mongoose ODM"
 
-        # Бэкенды → Внешние сервисы
+        # Бэкенд → Внешние сервисы
         accelBack -> openai "Assistants API / HTTPS"
         accelBack -> s3 "AWS SDK / HTTPS"
         accelBack -> google "SMTP / Nodemailer"
-
-        rsBackDev -> openai "Assistants API / HTTPS"
-        rsBackDev -> s3 "AWS SDK / HTTPS"
-        rsBackDev -> google "SMTP / Nodemailer"
-
-        # Next.js → Email
-        rocketmindSaas -> google "SMTP / Nodemailer"
-        rocketmindAdminApp -> google "SMTP / Nodemailer"
-
-        # Next.js → Bitrix
-        rocketmindAdminApp -> bitrix "REST API"
-        rocketmindSite -> bitrix "REST API"
+        accelBack -> bitrix "REST API"
     }
 
     views {

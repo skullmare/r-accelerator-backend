@@ -68,16 +68,9 @@ export const options = {
       exec: 'studentScenario',
     },
 
-    // Auth нагрузка
-    auth_flow: {
-      executor: 'constant-arrival-rate',
-      rate: 10,          // 10 запросов в секунду
-      timeUnit: '1s',
-      duration: '3m',
-      preAllocatedVUs: 5,
-      maxVUs: 20,
-      exec: 'authScenario',
-    },
+    // Auth нагрузка — умеренный темп, чтобы не триггерить rate limiting
+    // Запускай отдельно: k6 run k6/scenarios/auth.js
+    // auth_flow отключён в основном прогоне намеренно.
   },
 
   thresholds: {
@@ -89,7 +82,6 @@ export const options = {
     'http_req_duration{scenario:read_heavy}': ['p(95)<1000'],
     'http_req_duration{scenario:write_moderate}': ['p(95)<2000'],
     'http_req_duration{scenario:student_flow}': ['p(95)<1500'],
-    'http_req_duration{scenario:auth_flow}': ['p(95)<3000'],
   },
 };
 

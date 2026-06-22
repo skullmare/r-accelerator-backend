@@ -4,6 +4,7 @@ import logger from './config/logger.config.js';
 import db from './config/mongo.config.js';
 import { initSuperadminRole } from './src/init/role-superadmin.init.js';
 import { initSuperadmin } from './src/init/superadmin.init.js';
+import { migrateCourseGroupToStudyPrograms } from './src/init/migrate-course-group.init.js';
 
 const port = process.env.PORT || 3000;
 
@@ -11,6 +12,7 @@ try {
     await db.connectDB();
     await initSuperadminRole();
     await initSuperadmin();
+    await migrateCourseGroupToStudyPrograms();
 
     app.listen(port, () => {
         logger.info(`Сервер запущен на localhost:${port}`);

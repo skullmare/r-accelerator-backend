@@ -1,6 +1,4 @@
 import mongoose from "mongoose";
-import { type } from "os";
-
 const UserSchema = new mongoose.Schema({
     email: {
         type: String,
@@ -29,10 +27,10 @@ const UserSchema = new mongoose.Schema({
     city: {
         type: String
     },
-    courseGroup: {
+    studyPrograms: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'CourseGroup'
-    },
+        ref: 'StudyProgram'
+    }],
     openAiThreadId: {
         type: String
     },

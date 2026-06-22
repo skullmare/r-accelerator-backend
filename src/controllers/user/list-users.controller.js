@@ -6,14 +6,12 @@ export async function listUsers(req, res) {
         const skip = (page - 1) * limit;
 
         const filter = {};
-        if (email) {
-            filter.email = { $regex: email, $options: 'i' };
-        }
+        if (email) filter.email = { $regex: email, $options: 'i' };
 
         const [users, total] = await Promise.all([
             User.find(filter)
                 .populate('role', 'name')
-                .populate('courseGroup', 'name')
+                .populate('studyPrograms', 'name')
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit),
@@ -28,6 +26,6 @@ export async function listUsers(req, res) {
             200
         );
     } catch (error) {
-        return res.error({description: error.message, code: error.code}, 500, 'Ошибка при получении пользователей');
+        return res.error({ description: error.message, code: error.code }, 500, 'Ошибка при получении пользователей');
     }
 }

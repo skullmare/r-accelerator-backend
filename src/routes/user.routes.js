@@ -15,33 +15,29 @@ const router = express.Router();
  * /users:
  *   get:
  *     tags: [Users]
- *     summary: Список пользователей с пагинацией и поиском
- *     description: Требует право `users.read`. Поддерживает пагинацию и поиск по email.
+ *     summary: Список пользователей
+ *     description: Требует право 'users.read'. Поддерживает пагинацию и поиск по email.
  *     parameters:
  *       - in: query
  *         name: page
  *         schema:
  *           type: integer
- *           minimum: 1
  *           default: 1
- *         description: Номер страницы
  *       - in: query
  *         name: limit
  *         schema:
  *           type: integer
- *           minimum: 1
- *           maximum: 100
  *           default: 20
- *         description: Количество пользователей на странице
+ *           maximum: 100
  *       - in: query
  *         name: email
  *         schema:
  *           type: string
  *           format: email
- *         description: Фильтр по email (частичное совпадение, без учёта регистра)
+ *         description: Фильтр по email (частичное совпадение)
  *     responses:
  *       200:
- *         description: Список пользователей с метаданными пагинации
+ *         description: Список пользователей с пагинацией
  *         content:
  *           application/json:
  *             schema:
@@ -53,30 +49,8 @@ const router = express.Router();
  *                     $ref: '#/components/schemas/User'
  *                 pagination:
  *                   $ref: '#/components/schemas/Pagination'
- *       400:
- *         description: Ошибка валидации параметров
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       401:
- *         description: Не авторизован
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
  *       403:
  *         description: Недостаточно прав
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       500:
- *         description: Внутренняя ошибка сервера
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
  */
 router.get('/', authMiddleware, checkPermission('users.read'), validate(userSchemas.listUsersSchema), listUsers);
 
@@ -86,7 +60,7 @@ router.get('/', authMiddleware, checkPermission('users.read'), validate(userSche
  *   get:
  *     tags: [Users]
  *     summary: Получить пользователя по ID
- *     description: Требует право `users.read`.
+ *     description: Требует право 'users.read'. Возвращает пользователя с популяцией role и studyPrograms.
  *     parameters:
  *       - in: path
  *         name: id
@@ -102,16 +76,6 @@ router.get('/', authMiddleware, checkPermission('users.read'), validate(userSche
  *               $ref: '#/components/schemas/User'
  *       404:
  *         description: Пользователь не найден
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       500:
- *         description: Внутренняя ошибка сервера
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
  */
 router.get('/:id', authMiddleware, checkPermission('users.read'), validate(userSchemas.userIdSchema), getUser);
 
@@ -120,8 +84,8 @@ router.get('/:id', authMiddleware, checkPermission('users.read'), validate(userS
  * /users/{id}/role:
  *   put:
  *     tags: [Users]
- *     summary: Обновить роль пользователя
- *     description: Требует право `users_role.update`.
+ *     summary: Назначить роль пользователю
+ *     description: "Требует право users_role.update. Передайте role=null чтобы убрать роль."
  *     parameters:
  *       - in: path
  *         name: id
@@ -139,42 +103,28 @@ router.get('/:id', authMiddleware, checkPermission('users.read'), validate(userS
  *               role:
  *                 type: string
  *                 nullable: true
- *                 description: ID роли. Передайте null, чтобы убрать роль у пользователя
+ *                 description: ID роли или null для снятия роли
  *     responses:
  *       200:
- *         description: Роль пользователя обновлена
+ *         description: Роль обновлена
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/User'
  *       400:
- *         description: Нельзя обновить системного пользователя
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *         description: Нельзя изменить роль системного пользователя
  *       404:
  *         description: Пользователь не найден
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       500:
- *         description: Внутренняя ошибка сервера
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
  */
 router.put('/:id/role', authMiddleware, checkPermission('users_role.update'), validate(userSchemas.updateUserRoleSchema), updateUserRole);
 
 /**
  * @swagger
  * /users/{id}:
- *   put:
+ *   patch:
  *     tags: [Users]
  *     summary: Обновить данные пользователя
- *     description: Требует право `users.update`.
+ *     description: Требует право 'users.update'. Поле 'studyPrograms'принимает полный новый массив ID программ.
  *     parameters:
  *       - in: path
  *         name: id
@@ -198,10 +148,11 @@ router.put('/:id/role', authMiddleware, checkPermission('users_role.update'), va
  *                 type: string
  *               city:
  *                 type: string
- *               courseGroup:
- *                 type: string
- *                 nullable: true
- *                 description: ID группы. Передайте null, чтобы убрать группу у пользователя
+ *               studyPrograms:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Массив ID программ обучения
  *     responses:
  *       200:
  *         description: Пользователь обновлён
@@ -211,23 +162,9 @@ router.put('/:id/role', authMiddleware, checkPermission('users_role.update'), va
  *               $ref: '#/components/schemas/User'
  *       400:
  *         description: Нельзя обновить системного пользователя
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
  *       404:
  *         description: Пользователь не найден
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       500:
- *         description: Внутренняя ошибка сервера
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
  */
-router.put('/:id', authMiddleware, checkPermission('users.update'), validate(userSchemas.updateUserSchema), updateUser);
+router.patch('/:id', authMiddleware, checkPermission('users.update'), validate(userSchemas.updateUserSchema), updateUser);
 
 export default router;

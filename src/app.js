@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
@@ -10,9 +11,11 @@ import authRouter from './routes/auth.routes.js';
 import profileRouter from './routes/profile.routes.js';
 import userRouter from './routes/user.routes.js';
 import roleRouter from './routes/role.routes.js';
-import courseAgentRouter from './routes/course/agent.routes.js';
-import courseGroupRouter from './routes/course/group.routes.js';
-import courseMessageRouter from './routes/course/message.routes.js';
+import studyAgentRouter from './routes/study/agent.routes.js';
+import studyProgramRouter from './routes/study/program.routes.js';
+import studyLessonRouter from './routes/study/lesson.routes.js';
+import studyLessonGroupRouter from './routes/study/lesson-group.routes.js';
+import studyProgressRouter from './routes/study/progress.routes.js';
 import fileRouter from './routes/file.routes.js';
 
 const app = express();
@@ -21,7 +24,7 @@ const isDev = process.env.NODE_ENV === 'development';
 const allowedOrigins = isDev ? [/^http:\/\/localhost:\d+$/] : ['https://agents.rocketmind.ru', 'https://admin.rocketmind.ru'];
 
 app.use(cors({ origin: allowedOrigins, credentials: true }));
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
@@ -29,6 +32,7 @@ app.use(cookieParser());
 
 app.use(attachHelpers);
 
+app.get('/api/docs/swagger.json', (req, res) => res.json(swaggerSpec));
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use(
@@ -43,9 +47,11 @@ app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/profile', profileRouter);
 app.use('/api/v1/users', userRouter);
 app.use('/api/v1/roles', roleRouter);
-app.use('/api/v1/course/agents', courseAgentRouter);
-app.use('/api/v1/course/groups', courseGroupRouter);
-app.use('/api/v1/course/messages', courseMessageRouter);
+app.use('/api/v1/study/agents', studyAgentRouter);
+app.use('/api/v1/study/programs', studyProgramRouter);
+app.use('/api/v1/study/lessons', studyLessonRouter);
+app.use('/api/v1/study/lesson-groups', studyLessonGroupRouter);
+app.use('/api/v1/study/programs', studyProgressRouter);
 app.use('/api/v1/file', fileRouter);
 
 app.use((req, res) => {

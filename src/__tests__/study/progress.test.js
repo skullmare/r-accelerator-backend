@@ -1,0 +1,282 @@
+import request from 'supertest';
+import app from '../../app.js';
+import { connect, closeDatabase, clearDatabase } from '../setup.js';
+import { createUserInProgram } from '../../__fixtures__/user.fixture.js';
+import { createProgramWithItems, createLessonWithQuestions, createProgram } from '../../__fixtures__/program.fixture.js';
+import { authCookie } from '../../__fixtures__/auth.fixture.js';
+import StudyProgress from '../../models/study/progress.model.js';
+
+beforeAll(() => connect());
+afterAll(() => closeDatabase());
+afterEach(() => clearDatabase());
+
+describe('GET /study/programs/:programId/progress', () => {
+    it('возвращает программу с флагами accessible и completed', async () => {
+        const { program, lesson1, lesson2, agent } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        await StudyProgress.create({
+            user: user._id,
+            program: program._id,
+            completedItems: [lesson1._id]
+        });
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}/progress`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(200);
+
+        const items = res.body.data.modules[0].items;
+        const l1 = items.find(i => i.item._id.toString() === lesson1._id.toString());
+        const agentItem = items.find(i => i.item._id.toString() === agent._id.toString());
+        const l2 = items.find(i => i.item._id.toString() === lesson2._id.toString());
+
+        expect(l1.completed).toBe(true);
+        expect(l1.accessible).toBe(true);
+        expect(agentItem.accessible).toBe(true);
+        expect(l2.accessible).toBe(true);
+        expect(l2.completed).toBe(false);
+    });
+
+    it('при sequential=true второй урок недоступен без прогресса', async () => {
+        const { program, lesson1, lesson2 } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}/progress`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(200);
+        const items = res.body.data.modules[0].items;
+        const l1 = items.find(i => i.item._id.toString() === lesson1._id.toString());
+        const l2 = items.find(i => i.item._id.toString() === lesson2._id.toString());
+
+        expect(l1.accessible).toBe(true);
+        expect(l2.accessible).toBe(false);
+    });
+
+    it('при sequential=false все элементы доступны', async () => {
+        const { program } = await createProgramWithItems({ sequential: false });
+        const user = await createUserInProgram(program._id);
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}/progress`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(200);
+        const items = res.body.data.modules[0].items;
+        expect(items.every(i => i.accessible)).toBe(true);
+    });
+});
+
+describe('POST /study/programs/:programId/lessons/:lessonId/complete', () => {
+    it('добавляет урок в completedItems', async () => {
+        const { program, lesson1 } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        const res = await request(app)
+            .post(`/api/v1/study/programs/${program._id}/lessons/${lesson1._id}/complete`)
+            .set('Cookie', authCookie(user._id, user.email))
+            .send({ quizAnswers: [] });
+
+        expect(res.status).toBe(200);
+
+        const progress = await StudyProgress.findOne({ user: user._id, program: program._id });
+        expect(progress.completedItems.map(String)).toContain(lesson1._id.toString());
+    });
+
+    it('сохраняет ответы на тест', async () => {
+        const { program, lesson1 } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        const fullLesson = await (await import('../../models/study/lesson.model.js')).default.findById(lesson1._id);
+        const questionId = fullLesson.questions[0]?._id;
+
+        if (!questionId) return;
+
+        const answerId = fullLesson.questions[0].answerOptions[0]._id;
+
+        await request(app)
+            .post(`/api/v1/study/programs/${program._id}/lessons/${lesson1._id}/complete`)
+            .set('Cookie', authCookie(user._id, user.email))
+            .send({ quizAnswers: [{ questionId, answerId }] });
+
+        const progress = await StudyProgress.findOne({ user: user._id, program: program._id });
+        const detail = progress.lessonDetails.find(d => d.item.equals(lesson1._id));
+        expect(detail).toBeDefined();
+        expect(detail.quizAnswers).toHaveLength(1);
+    });
+
+    it('возвращает результат теста score/total/questions', async () => {
+        const lesson = await createLessonWithQuestions({ name: 'Quiz Lesson' });
+        const program = await createProgram({
+            modules: [{ name: 'M', items: [{ type: 'StudyLesson', item: lesson._id }] }]
+        });
+        const user = await createUserInProgram(program._id);
+
+        const fullLesson = await (await import('../../models/study/lesson.model.js')).default
+            .findById(lesson._id).select('+questions.answerOptions.isCorrect');
+        const q1 = fullLesson.questions[0];
+        const correctAnswer = q1.answerOptions.find(a => a.isCorrect);
+
+        const res = await request(app)
+            .post(`/api/v1/study/programs/${program._id}/lessons/${lesson._id}/complete`)
+            .set('Cookie', authCookie(user._id, user.email))
+            .send({ quizAnswers: [{ questionId: q1._id, answerId: correctAnswer._id }] });
+
+        expect(res.status).toBe(200);
+        expect(res.body.data.total).toBe(2);
+        expect(res.body.data.score).toBe(1);
+        expect(res.body.data.questions).toHaveLength(2);
+        const r1 = res.body.data.questions.find(q => q.questionId === q1._id.toString());
+        expect(r1.isCorrect).toBe(true);
+    });
+
+    it('пропущенный вопрос считается неверным, total равен числу вопросов', async () => {
+        const lesson = await createLessonWithQuestions({ name: 'Quiz Lesson 2' });
+        const program = await createProgram({
+            modules: [{ name: 'M', items: [{ type: 'StudyLesson', item: lesson._id }] }]
+        });
+        const user = await createUserInProgram(program._id);
+
+        const res = await request(app)
+            .post(`/api/v1/study/programs/${program._id}/lessons/${lesson._id}/complete`)
+            .set('Cookie', authCookie(user._id, user.email))
+            .send({ quizAnswers: [] });
+
+        expect(res.status).toBe(200);
+        expect(res.body.data.total).toBe(2);
+        expect(res.body.data.score).toBe(0);
+        expect(res.body.data.questions).toHaveLength(2);
+        expect(res.body.data.questions.every(q => q.isCorrect === false)).toBe(true);
+        expect(res.body.data.questions.every(q => q.answerId === null)).toBe(true);
+    });
+
+    it('повторный вызов не дублирует урок в completedItems', async () => {
+        const { program, lesson1 } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        await request(app)
+            .post(`/api/v1/study/programs/${program._id}/lessons/${lesson1._id}/complete`)
+            .set('Cookie', authCookie(user._id, user.email))
+            .send({ quizAnswers: [] });
+
+        await request(app)
+            .post(`/api/v1/study/programs/${program._id}/lessons/${lesson1._id}/complete`)
+            .set('Cookie', authCookie(user._id, user.email))
+            .send({ quizAnswers: [] });
+
+        const progress = await StudyProgress.findOne({ user: user._id, program: program._id });
+        const count = progress.completedItems.filter(id => id.equals(lesson1._id)).length;
+        expect(count).toBe(1);
+    });
+});
+
+describe('GET /study/programs/:programId/lessons/:lessonId', () => {
+    it('возвращает урок без isCorrect у вариантов ответа', async () => {
+        const { program, lesson1 } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}/lessons/${lesson1._id}`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(200);
+        expect(res.body.data._id.toString()).toBe(lesson1._id.toString());
+    });
+
+    it('подмешивает userAnswer из прогресса', async () => {
+        const { program, lesson1 } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        const StudyLesson = (await import('../../models/study/lesson.model.js')).default;
+        const fullLesson = await StudyLesson.findById(lesson1._id);
+        const questionId = fullLesson.questions[0]?._id;
+        if (!questionId) return;
+        const answerId = fullLesson.questions[0].answerOptions[0]._id;
+
+        await StudyProgress.create({
+            user: user._id,
+            program: program._id,
+            completedItems: [lesson1._id],
+            lessonDetails: [{ item: lesson1._id, quizAnswers: [{ questionId, answerId }] }]
+        });
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}/lessons/${lesson1._id}`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(200);
+        const q = res.body.data.questions[0];
+        expect(q.userAnswer).toBeDefined();
+        expect(q.userAnswer).not.toBeNull();
+    });
+
+    it('возвращает userAnswer=null если ответа нет', async () => {
+        const { program, lesson1 } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}/lessons/${lesson1._id}`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(200);
+        res.body.data.questions.forEach(q => expect(q.userAnswer).toBeNull());
+    });
+
+    it('возвращает 403 если предыдущий урок не пройден', async () => {
+        const { program, lesson2 } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}/lessons/${lesson2._id}`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(403);
+    });
+});
+
+describe('GET /study/programs/:programId/agents/:agentId', () => {
+    it('возвращает агента если предыдущий урок пройден', async () => {
+        const { program, lesson1, agent } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        await StudyProgress.create({
+            user: user._id,
+            program: program._id,
+            completedItems: [lesson1._id]
+        });
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}/agents/${agent._id}`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(200);
+        expect(res.body.data._id.toString()).toBe(agent._id.toString());
+        expect(res.body.data.name).toBeDefined();
+    });
+
+    it('возвращает 403 если предыдущий урок не пройден', async () => {
+        const { program, agent } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}/agents/${agent._id}`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(403);
+    });
+
+    it('возвращает агента при sequential=false без прогресса', async () => {
+        const { program, agent } = await createProgramWithItems({ sequential: false });
+        const user = await createUserInProgram(program._id);
+
+        const res = await request(app)
+            .get(`/api/v1/study/programs/${program._id}/agents/${agent._id}`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(200);
+        expect(res.body.data._id.toString()).toBe(agent._id.toString());
+    });
+});

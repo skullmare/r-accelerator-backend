@@ -23,7 +23,8 @@ export async function migrateCourseGroupToStudyPrograms() {
         [
             { $set: { studyPrograms: ['$courseGroup'] } },
             { $unset: 'courseGroup' },
-        ]
+        ],
+        { updatePipeline: true }
     );
 
     // Чистим оставшиеся документы с courseGroup: null (если такие есть)

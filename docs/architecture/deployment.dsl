@@ -20,9 +20,9 @@ workspace "RocketMind" "Диаграмма развёртывания" {
             mongoProd = container "mongodb-prod" "База данных (prod)" "MongoDB"
         }
 
-        openai = softwareSystem "OpenAI" { tags "External" }
-        google = softwareSystem "Google Email" { tags "External" }
-        s3     = softwareSystem "Yandex Cloud S3" { tags "External" }
+        openai = softwareSystem "OpenAI" "AI-агенты для обучения (Assistants API)" "External"
+        google = softwareSystem "Google Email" "Отправка писем с кодами авторизации" "External"
+        s3     = softwareSystem "Yandex Cloud S3" "Хранение файлов: видео, презентации, обложки" "External"
 
         // Связи
         admin   -> saasAdmin      "Управление"          "HTTPS"

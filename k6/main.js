@@ -123,7 +123,11 @@ function guard(cookies) {
 }
 
 function tryJson(body) {
-  try { return JSON.parse(body); } catch { return {}; }
+  try { return JSON.parse(body) || {}; } catch { return {}; }
+}
+
+function safeBody(res) {
+  return (res && res.body) ? tryJson(res.body) : {};
 }
 
 // ─── Сценарий 1: Студент ─────────────────────────────────────────────────────
@@ -146,7 +150,7 @@ export function studentScenario(data) {
     check(res, { 'join: 200 или 409': (r) => [200, 409].includes(r.status) });
 
     if (!programId) {
-      programId = tryJson(res.body).data?.programId;
+      programId = safeBody(res).data?.programId;
     }
   }
 
@@ -162,8 +166,8 @@ export function studentScenario(data) {
   check(progressRes, { 'progress: 200': (r) => r.status === 200 });
 
   // Найти первый доступный урок если не передан
-  if (!lessonId) {
-    const modules = tryJson(progressRes.body).data?.modules || [];
+  if (!lessonId && progressRes.status === 200) {
+    const modules = safeBody(progressRes).data?.modules || [];
     for (const mod of modules) {
       for (const item of mod.items || []) {
         if (item.accessible && item.type === 'StudyLesson') {
@@ -188,7 +192,7 @@ export function studentScenario(data) {
     sleep(2); // студент читает урок
 
     // 4. Завершить урок
-    const lesson = tryJson(lessonRes.body).data || {};
+    const lesson = (lessonRes.status === 200) ? (safeBody(lessonRes).data || {}) : {};
     const quizAnswers = (lesson.questions || []).map((q) => ({
       questionId: q._id,
       answerId:   q.answerOptions?.[0]?._id,
@@ -281,7 +285,7 @@ export function writeScenario(data) {
     );
     check(createRes, { 'POST lesson: 201': (r) => r.status === 201 });
 
-    const id = tryJson(createRes.body)._id;
+    const id = safeBody(createRes)._id;
     if (id) {
       sleep(0.3);
       http.del(`${BASE_URL}/api/v1/study/lessons/${id}`, null, { ...params, tags: { endpoint: 'delete_lesson' } });
@@ -300,7 +304,7 @@ export function writeScenario(data) {
     );
     check(createRes, { 'POST role: 201': (r) => r.status === 201 });
 
-    const id = tryJson(createRes.body)._id;
+    const id = safeBody(createRes)._id;
     if (id) {
       sleep(0.3);
       http.del(`${BASE_URL}/api/v1/roles/${id}`, null, { ...params, tags: { endpoint: 'delete_role' } });
@@ -381,7 +385,7 @@ export function programsScenario(data) {
     );
     check(createRes, { 'POST program: 201': (r) => r.status === 201 });
 
-    const progId = tryJson(createRes.body)._id;
+    const progId = safeBody(createRes)._id;
     if (!progId) return;
 
     sleep(0.3);
@@ -400,7 +404,7 @@ export function programsScenario(data) {
       { ...params, tags: { endpoint: 'create_module' } }
     );
 
-    const modules = tryJson(modRes.body).modules || [];
+    const modules = safeBody(modRes).modules || [];
     const modId = modules[modules.length - 1]?._id;
 
     if (modId) {

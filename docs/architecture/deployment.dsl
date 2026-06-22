@@ -5,114 +5,106 @@ workspace "RocketMind" "Диаграмма развёртывания" {
         admin   = person "Администратор"
 
         rocketmind = softwareSystem "RocketMind" {
-
-            // ── Фронтенды ──────────────────────────────────────────────
-            saasAdmin    = container "saas-admin"       "Административный фронт (Next.js)"   "Next.js"
-            saasTeacher  = container "saas-teacher"     "Интерфейс преподавателя (Next.js)"  "Next.js"
-            rocketmindSaas = container "rocketmind-saas" "Клиентский фронт (Next.js)"        "Next.js"
-
-            // ── Бэкенд ─────────────────────────────────────────────────
-            backDev  = container "rs-back-dev"   "API (dev-окружение)"  "Node.js / Express"
-            backProd = container "r-accel-back"  "API (prod-окружение)" "Node.js / Express"
-
-            // ── База данных ────────────────────────────────────────────
-            mongoDev  = container "mongodb-dev"  "База данных (dev)"  "MongoDB"
-            mongoProd = container "mongodb-prod" "База данных (prod)" "MongoDB"
+            saasAdmin      = container "saas-admin"      "Административный фронт (Next.js)"  "Next.js"
+            saasTeacher    = container "saas-teacher"    "Интерфейс преподавателя (Next.js)" "Next.js"
+            rocketmindSaas = container "rocketmind-saas" "Клиентский фронт (Next.js)"       "Next.js"
+            backDev        = container "rs-back-dev"     "API (dev-окружение)"               "Node.js / Express"
+            backProd       = container "r-accel-back"    "API (prod-окружение)"              "Node.js / Express"
+            mongoDev       = container "mongodb-dev"     "База данных (dev)"                 "MongoDB"
+            mongoProd      = container "mongodb-prod"    "База данных (prod)"                "MongoDB"
         }
 
-        openai = softwareSystem "OpenAI" "AI-агенты для обучения (Assistants API)" "External"
-        google = softwareSystem "Google Email" "Отправка писем с кодами авторизации" "External"
-        s3     = softwareSystem "Yandex Cloud S3" "Хранение файлов: видео, презентации, обложки" "External"
+        openai = softwareSystem "OpenAI"           "AI-агенты для обучения (Assistants API)"       "External"
+        google = softwareSystem "Google Email"     "Отправка писем с кодами авторизации"           "External"
+        s3     = softwareSystem "Yandex Cloud S3"  "Хранение файлов: видео, презентации, обложки"  "External"
 
-        // Связи
-        admin   -> saasAdmin      "Управление"          "HTTPS"
-        admin   -> saasTeacher    "Контент"             "HTTPS"
-        student -> rocketmindSaas "Обучение"            "HTTPS"
+        // ── Production ────────────────────────────────────────────────────────
+        prod = deploymentEnvironment "Production" {
 
-        saasAdmin      -> backProd "API-запросы" "HTTPS / REST"
-        saasTeacher    -> backProd "API-запросы" "HTTPS / REST"
-        rocketmindSaas -> backProd "API-запросы" "HTTPS / REST + SSE"
+            amveraProd = deploymentNode "Amvera PaaS" "Платформа контейнерного хостинга" "PaaS" {
 
-        backDev  -> mongoDev  "Чтение/запись" "TCP 27017"
+                deploymentNode "saas-admin" "Административный фронт" "Node.js container" {
+                    containerInstance saasAdmin
+                }
+                deploymentNode "saas-teacher" "Фронт преподавателя" "Node.js container" {
+                    containerInstance saasTeacher
+                }
+                deploymentNode "rocketmind-saas" "Клиентский фронт" "Node.js container" {
+                    containerInstance rocketmindSaas
+                }
+                deploymentNode "r-accel-back" "Backend API" "Node.js container" {
+                    containerInstance backProd
+                }
+                deploymentNode "mongodb-prod" "База данных" "MongoDB container" {
+                    containerInstance mongoProd
+                }
+            }
+
+            deploymentNode "OpenAI Cloud" "Внешний сервис" "SaaS" {
+                softwareSystemInstance openai
+            }
+            deploymentNode "Google Cloud" "Внешний сервис" "SaaS" {
+                softwareSystemInstance google
+            }
+            deploymentNode "Yandex Cloud" "Внешний сервис" "Cloud" {
+                softwareSystemInstance s3
+            }
+        }
+
+        // ── Development ───────────────────────────────────────────────────────
+        dev = deploymentEnvironment "Development" {
+
+            amveraDev = deploymentNode "Amvera PaaS" "Платформа контейнерного хостинга" "PaaS" {
+
+                deploymentNode "rs-back-dev" "Backend API (dev)" "Node.js container" {
+                    containerInstance backDev
+                }
+                deploymentNode "mongodb-dev" "База данных (dev)" "MongoDB container" {
+                    containerInstance mongoDev
+                }
+            }
+
+            deploymentNode "OpenAI Cloud" "Внешний сервис" "SaaS" {
+                softwareSystemInstance openai
+            }
+            deploymentNode "Google Cloud" "Внешний сервис" "SaaS" {
+                softwareSystemInstance google
+            }
+            deploymentNode "Yandex Cloud" "Внешний сервис" "Cloud" {
+                softwareSystemInstance s3
+            }
+        }
+
+        // Связи пользователей
+        admin   -> saasAdmin      "Управление"   "HTTPS"
+        admin   -> saasTeacher    "Контент"      "HTTPS"
+        student -> rocketmindSaas "Обучение"     "HTTPS"
+
+        saasAdmin      -> backProd "API-запросы"  "HTTPS / REST"
+        saasTeacher    -> backProd "API-запросы"  "HTTPS / REST"
+        rocketmindSaas -> backProd "API-запросы"  "HTTPS / REST + SSE"
+
         backProd -> mongoProd "Чтение/запись" "TCP 27017"
+        backDev  -> mongoDev  "Чтение/запись" "TCP 27017"
 
-        backProd -> openai "Assistants API" "HTTPS"
-        backDev  -> openai "Assistants API" "HTTPS"
+        backProd -> openai "Assistants API"  "HTTPS"
+        backDev  -> openai "Assistants API"  "HTTPS"
         backProd -> google "SMTP / Gmail API" "HTTPS"
         backDev  -> google "SMTP / Gmail API" "HTTPS"
-        backProd -> s3 "Загрузка файлов" "HTTPS / S3 API"
-        backDev  -> s3 "Загрузка файлов" "HTTPS / S3 API"
+        backProd -> s3     "S3 API"           "HTTPS"
+        backDev  -> s3     "S3 API"           "HTTPS"
     }
 
     views {
 
-        // ── Production окружение ──────────────────────────────────────
-        deployment rocketmind "prod" "Deployment-Prod" "Production — Amvera PaaS" {
+        deployment rocketmind "Production" "Deployment-Prod" {
             include *
-
             autoLayout
-
-            environment "Production" {
-
-                deploymentNode "Amvera PaaS" "Платформа контейнерного хостинга" "PaaS" {
-
-                    deploymentNode "saas-admin" "Административный фронт" "Node.js container" {
-                        containerInstance saasAdmin
-                    }
-                    deploymentNode "saas-teacher" "Фронт преподавателя" "Node.js container" {
-                        containerInstance saasTeacher
-                    }
-                    deploymentNode "rocketmind-saas" "Клиентский фронт" "Node.js container" {
-                        containerInstance rocketmindSaas
-                    }
-                    deploymentNode "r-accel-back" "Backend API" "Node.js container" {
-                        containerInstance backProd
-                    }
-                    deploymentNode "mongodb-prod" "База данных" "MongoDB container" {
-                        containerInstance mongoProd
-                    }
-                }
-
-                deploymentNode "OpenAI Cloud" "" "External SaaS" {
-                    softwareSystemInstance openai
-                }
-                deploymentNode "Google Cloud" "" "External SaaS" {
-                    softwareSystemInstance google
-                }
-                deploymentNode "Yandex Cloud" "" "External Cloud" {
-                    softwareSystemInstance s3
-                }
-            }
         }
 
-        // ── Dev окружение ─────────────────────────────────────────────
-        deployment rocketmind "dev" "Deployment-Dev" "Development — Amvera PaaS" {
+        deployment rocketmind "Development" "Deployment-Dev" {
             include *
-
             autoLayout
-
-            environment "Development" {
-
-                deploymentNode "Amvera PaaS" "Платформа контейнерного хостинга" "PaaS" {
-
-                    deploymentNode "rs-back-dev" "Backend API (dev)" "Node.js container" {
-                        containerInstance backDev
-                    }
-                    deploymentNode "mongodb-dev" "База данных (dev)" "MongoDB container" {
-                        containerInstance mongoDev
-                    }
-                }
-
-                deploymentNode "OpenAI Cloud" "" "External SaaS" {
-                    softwareSystemInstance openai
-                }
-                deploymentNode "Google Cloud" "" "External SaaS" {
-                    softwareSystemInstance google
-                }
-                deploymentNode "Yandex Cloud" "" "External Cloud" {
-                    softwareSystemInstance s3
-                }
-            }
         }
 
         styles {

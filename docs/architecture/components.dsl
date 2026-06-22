@@ -19,7 +19,7 @@ workspace "RocketMind — Компоненты r-accel-back" {
             saasAdmin = container "saas-admin" "Административный интерфейс" "Next.js" {
                 tags "Frontend"
             }
-            saasTeacher = container "saas-teacher" "Интерфейс преподавателя" "Next.js" {
+            saasTeacher = container "saas-teacher" "Пользовательский интерфейс онлайн школы" "Next.js" {
                 tags "Frontend"
             }
 

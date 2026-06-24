@@ -12,11 +12,15 @@
  *           enum: [StudyLesson, StudyAgent]
  *         item:
  *           type: object
- *           description: Краткие данные урока или агента (только _id и name)
+ *           description: Краткие данные урока или агента (для урока только _id и name, для агента name, avatar и role)
  *           properties:
  *             _id:
  *               type: string
  *             name:
+ *               type: string
+ *             avatar:
+ *               type: string
+ *             role:
  *               type: string
  *         completed:
  *           type: boolean

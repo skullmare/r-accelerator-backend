@@ -18,7 +18,7 @@ export async function getProgress(req, res) {
 
         const [lessons, agents, progress] = await Promise.all([
             StudyLesson.find({ _id: { $in: lessonIds } }, 'name'),
-            StudyAgent.find({ _id: { $in: agentIds } }, 'name'),
+            StudyAgent.find({ _id: { $in: agentIds } }, 'name avatar role'),
             StudyProgress.findOne({ user: req.user.id, program: programId })
         ]);
 

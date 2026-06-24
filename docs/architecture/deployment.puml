@@ -1,0 +1,58 @@
+@startuml deployment
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Deployment.puml
+
+LAYOUT_LEFT_RIGHT()
+LAYOUT_WITH_LEGEND()
+
+title Диаграмма развёртывания — RocketMind (Production)
+
+' ── Пользователи ─────────────────────────────────────────────────────────────
+Person(admin,   "Администратор", "Управляет контентом и пользователями")
+Person(student, "Клиент",        "Проходит курсы, общается с AI-агентами")
+
+' ── Amvera PaaS ──────────────────────────────────────────────────────────────
+Deployment_Node(amvera, "Amvera PaaS", "Контейнерный хостинг") {
+
+    Deployment_Node(front_cluster, "Фронтенды", "Node.js containers") {
+        Container(saas_admin,   "saas-admin",      "Next.js", "Административный интерфейс")
+        Container(saas_teacher, "saas-teacher",    "Next.js", "Интерфейс преподавателя")
+        Container(saas_client,  "rocketmind-saas", "Next.js", "Клиентский интерфейс")
+    }
+
+    Deployment_Node(back_node, "r-accel-back", "Node.js container") {
+        Container(api, "Backend API", "Node.js / Express", "REST API + SSE")
+    }
+
+    Deployment_Node(db_node, "mongodb-prod", "MongoDB container") {
+        ContainerDb(mongo, "MongoDB", "MongoDB 7", "Основная база данных")
+    }
+}
+
+' ── Внешние сервисы ───────────────────────────────────────────────────────────
+Deployment_Node(openai_cloud, "OpenAI Cloud", "External SaaS") {
+    System_Ext(openai, "OpenAI", "Assistants API — AI-агенты для обучения")
+}
+
+Deployment_Node(google_cloud, "Google Cloud", "External SaaS") {
+    System_Ext(google, "Google Email", "Gmail API — отправка кодов авторизации")
+}
+
+Deployment_Node(yandex_cloud, "Yandex Cloud", "External Cloud") {
+    System_Ext(s3, "Yandex Cloud S3", "Хранение файлов: видео, презентации, обложки")
+}
+
+' ── Связи ────────────────────────────────────────────────────────────────────
+Rel(admin,   saas_admin,   "Управление",  "HTTPS")
+Rel(admin,   saas_teacher, "Контент",     "HTTPS")
+Rel(student, saas_client,  "Обучение",    "HTTPS")
+
+Rel(saas_admin,   api, "REST API", "HTTPS")
+Rel(saas_teacher, api, "REST API", "HTTPS")
+Rel(saas_client,  api, "REST API + SSE", "HTTPS")
+
+Rel(api, mongo,  "read / write", "TCP 27017")
+Rel(api, openai, "Assistants API", "HTTPS")
+Rel(api, google, "Gmail API",      "HTTPS")
+Rel(api, s3,     "S3 API",         "HTTPS")
+
+@enduml

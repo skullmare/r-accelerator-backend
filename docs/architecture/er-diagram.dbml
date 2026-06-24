@@ -1,0 +1,177 @@
+// RocketMind — ER Diagram (DBML for dbdiagram.io)
+// Paste this file at https://dbdiagram.io/d → New Diagram → paste text
+
+// ─── Auth & Users ────────────────────────────────────────────────────────────
+
+Table users {
+  _id           ObjectId  [pk]
+  email         string    [unique, not null, note: "lowercase, trimmed"]
+  role          ObjectId  [ref: > roles._id]
+  firstName     string
+  lastName      string
+  profession    string
+  fieldOfActivity string
+  city          string
+  openAiThreadId string   [note: "OpenAI thread ID for chat history"]
+  // Auth (hidden from API responses)
+  authCodeHashed   string [note: "select: false"]
+  authCodeExpires  datetime [note: "select: false"]
+  authCodeAttempts int    [note: "0-3, select: false"]
+  lastLogin     datetime
+  isSystem      boolean   [default: false]
+  createdAt     datetime
+  updatedAt     datetime
+}
+
+Table roles {
+  _id         ObjectId  [pk]
+  name        string    [unique, not null]
+  permissions string[]  [note: "enum: ALL_PERMISSIONS"]
+  isSystem    boolean   [default: false]
+  createdAt   datetime
+  updatedAt   datetime
+}
+
+// Many-to-many: users ↔ study_programs (embedded array in users)
+Table user_study_programs {
+  userId     ObjectId [ref: > users._id]
+  programId  ObjectId [ref: > study_programs._id]
+
+  Note: "Virtual join table — stored as studyPrograms[] inside users document"
+}
+
+// ─── Study Programs ───────────────────────────────────────────────────────────
+
+Table study_programs {
+  _id         ObjectId  [pk]
+  name        string    [unique, not null]
+  description string
+  cover       string    [note: "URL to cover image in S3"]
+  coverMeta   json      [note: "S3 metadata"]
+  sequential  boolean   [default: true, note: "unlock lessons in order"]
+  active      boolean   [default: true]
+  qrCode      string    [unique, not null, note: "SHA-256 hash for join link"]
+  createdAt   datetime
+  updatedAt   datetime
+}
+
+// Embedded: study_programs.modules[]
+Table program_modules {
+  _id        ObjectId  [pk, note: "Auto-generated subdocument _id"]
+  programId  ObjectId  [ref: > study_programs._id]
+  name       string    [not null]
+
+  Note: "Embedded array inside study_programs document"
+}
+
+// Embedded: program_modules.items[]
+Table module_items {
+  _id       ObjectId  [pk, note: "Auto-generated subdocument _id"]
+  moduleId  ObjectId  [ref: > program_modules._id]
+  type      string    [not null, note: "enum: StudyLesson | StudyAgent"]
+  itemId    ObjectId  [note: "ref to study_lessons._id or study_agents._id (refPath: type)"]
+}
+
+// ─── Lessons ──────────────────────────────────────────────────────────────────
+
+Table study_lessons {
+  _id          ObjectId  [pk]
+  name         string    [unique, not null]
+  cover        string    [note: "URL to cover image"]
+  group        ObjectId  [ref: > lesson_groups._id, note: "nullable"]
+  video_url    string
+  presentation_url string
+  content      json      [not null, note: "TipTap/ProseMirror JSON doc"]
+  createdAt    datetime
+  updatedAt    datetime
+}
+
+// Embedded: study_lessons.questions[]
+Table lesson_questions {
+  _id          ObjectId  [pk, note: "Subdocument _id"]
+  lessonId     ObjectId  [ref: > study_lessons._id]
+  questionText string    [not null]
+}
+
+// Embedded: lesson_questions.answerOptions[]
+Table lesson_answer_options {
+  _id       ObjectId [pk, note: "Subdocument _id"]
+  questionId ObjectId [ref: > lesson_questions._id]
+  text      string   [not null]
+  isCorrect boolean  [default: false, note: "select: false"]
+}
+
+Table lesson_groups {
+  _id       ObjectId [pk]
+  name      string   [unique, not null]
+  createdAt datetime
+  updatedAt datetime
+}
+
+// ─── AI Agents ────────────────────────────────────────────────────────────────
+
+Table study_agents {
+  _id               ObjectId [pk]
+  name              string   [unique, not null]
+  description       string   [not null]
+  role              string   [note: "max 100 chars, system prompt role"]
+  avatar            string   [not null, note: "URL to avatar image"]
+  openAiAssistantId string   [not null, note: "OpenAI Assistants API ID"]
+  createdAt         datetime
+  updatedAt         datetime
+}
+
+Table study_messages {
+  _id         ObjectId [pk]
+  messageText string   [not null]
+  user        ObjectId [ref: > users._id, not null]
+  agent       ObjectId [ref: > study_agents._id, not null]
+  author      string   [not null, note: "enum: agent | user"]
+  createdAt   datetime
+  updatedAt   datetime
+
+  Note: "Index: { user, agent, createdAt DESC }"
+}
+
+// ─── Progress ─────────────────────────────────────────────────────────────────
+
+Table study_progress {
+  _id            ObjectId   [pk]
+  user           ObjectId   [ref: > users._id, not null]
+  program        ObjectId   [ref: > study_programs._id, not null]
+  completedItems ObjectId[] [note: "IDs of completed StudyLesson or StudyAgent items"]
+  createdAt      datetime
+  updatedAt      datetime
+
+  Note: "Unique index: { user, program }"
+}
+
+// Embedded: study_progress.lessonDetails[]
+Table progress_lesson_details {
+  progressId  ObjectId  [ref: > study_progress._id]
+  lessonId    ObjectId  [ref: > study_lessons._id, not null]
+  // quiz answers are embedded further inside
+}
+
+// Embedded: progress_lesson_details.quizAnswers[]
+Table progress_quiz_answers {
+  lessonDetailRef ObjectId [ref: > progress_lesson_details.lessonId]
+  questionId      ObjectId [ref: > lesson_questions._id, not null]
+  answerId        ObjectId [ref: > lesson_answer_options._id, not null]
+
+  Note: "_id: false — no auto-generated _id"
+}
+
+// ─── Files ────────────────────────────────────────────────────────────────────
+
+Table files {
+  _id        ObjectId [pk]
+  name       string   [not null]
+  url        string   [not null, note: "Yandex Cloud S3 URL"]
+  type       string   [not null, note: "MIME type"]
+  size       int      [not null, note: "bytes"]
+  uploadedBy ObjectId [ref: > users._id, not null]
+  source     string   [default: "system", note: "enum: user | system"]
+  createdAt  datetime
+  updatedAt  datetime
+}

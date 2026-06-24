@@ -19,10 +19,10 @@ workspace "RocketMind" "Архитектура платформы обучени
             saasAdmin = container "saas-admin" "Административный интерфейс платформы" "Next.js" {
                 tags "Frontend"
             }
-            saasTeacher = container "saas-teacher" "Интерфейс преподавателя" "Next.js" {
+            saasTeacher = container "saas-teacher" "Интерфейс онлайн школы" "Next.js" {
                 tags "Frontend"
             }
-            rocketmindSaas = container "rocketmind-saas" "Клиентский интерфейс платформы" "Next.js" {
+            rocketmindSaas = container "rocketmind-saas" "Интерфейс Р-Акселератор" "Next.js" {
                 tags "Frontend"
             }
 
@@ -36,9 +36,9 @@ workspace "RocketMind" "Архитектура платформы обучени
         }
 
         # Связи пользователей
-        client -> rocketmindSaas "Изучает курсы"
+        client -> rocketmindSaas "Использует агентов"
         admin -> saasAdmin "Управляет платформой"
-        admin -> saasTeacher "Создаёт курсы"
+        client -> saasTeacher "Проходит курсы и агентов"
 
         # Фронтенды → Бэкенд
         saasAdmin -> accelBack "REST API / HTTPS"

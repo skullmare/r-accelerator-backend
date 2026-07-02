@@ -21,7 +21,7 @@ import fileRouter from './routes/file.routes.js';
 const app = express();
 
 const isDev = process.env.NODE_ENV === 'development';
-const allowedOrigins = isDev ? [/^http:\/\/localhost:\d+$/] : ['https://agents.rocketmind.ru', 'https://admin.rocketmind.ru'];
+const allowedOrigins = isDev ? [/^http:\/\/localhost:\d+$/] : ['https://agents.rocketmind.ru', 'https://admin.rocketmind.ru', 'https://rocketmind-saas-rocketmind.amvera.io'];
 
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json({ limit: '5mb' }));

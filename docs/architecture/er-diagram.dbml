@@ -86,21 +86,6 @@ Table study_lessons {
   updatedAt    datetime
 }
 
-// Embedded: study_lessons.questions[]
-Table lesson_questions {
-  _id          ObjectId  [pk, note: "Subdocument _id"]
-  lessonId     ObjectId  [ref: > study_lessons._id]
-  questionText string    [not null]
-}
-
-// Embedded: lesson_questions.answerOptions[]
-Table lesson_answer_options {
-  _id       ObjectId [pk, note: "Subdocument _id"]
-  questionId ObjectId [ref: > lesson_questions._id]
-  text      string   [not null]
-  isCorrect boolean  [default: false, note: "select: false"]
-}
-
 Table lesson_groups {
   _id       ObjectId [pk]
   name      string   [unique, not null]
@@ -144,22 +129,6 @@ Table study_progress {
   updatedAt      datetime
 
   Note: "Unique index: { user, program }"
-}
-
-// Embedded: study_progress.lessonDetails[]
-Table progress_lesson_details {
-  progressId  ObjectId  [ref: > study_progress._id]
-  lessonId    ObjectId  [ref: > study_lessons._id, not null]
-  // quiz answers are embedded further inside
-}
-
-// Embedded: progress_lesson_details.quizAnswers[]
-Table progress_quiz_answers {
-  lessonDetailRef ObjectId [ref: > progress_lesson_details.lessonId]
-  questionId      ObjectId [ref: > lesson_questions._id, not null]
-  answerId        ObjectId [ref: > lesson_answer_options._id, not null]
-
-  Note: "_id: false — no auto-generated _id"
 }
 
 // ─── Files ────────────────────────────────────────────────────────────────────

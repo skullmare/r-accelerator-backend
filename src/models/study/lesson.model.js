@@ -1,28 +1,5 @@
 import mongoose from 'mongoose';
 
-const AnswerOptionSchema = new mongoose.Schema({
-    text: {
-        type: String,
-        required: true,
-        trim: true
-    },
-    isCorrect: {
-        type: Boolean,
-        required: true,
-        default: false,
-        select: false
-    }
-});
-
-const QuestionSchema = new mongoose.Schema({
-    questionText: {
-        type: String,
-        required: true,
-        trim: true
-    },
-    answerOptions: [AnswerOptionSchema]
-});
-
 const StudyLessonSchema = new mongoose.Schema({
     name: {
         type: String,
@@ -52,8 +29,7 @@ const StudyLessonSchema = new mongoose.Schema({
             type: 'doc',
             content: []
         }
-    },
-    questions: [QuestionSchema]
+    }
 }, {
     timestamps: true
 });

@@ -7,31 +7,6 @@ export async function createLesson(overrides = {}) {
     return StudyLesson.create({
         name: 'Test Lesson',
         content: { type: 'doc', content: [] },
-        questions: [],
-        ...overrides
-    });
-}
-
-export async function createLessonWithQuestions(overrides = {}) {
-    return StudyLesson.create({
-        name: 'Test Lesson With Questions',
-        content: { type: 'doc', content: [] },
-        questions: [
-            {
-                questionText: 'Question 1',
-                answerOptions: [
-                    { text: 'Wrong answer', isCorrect: false },
-                    { text: 'Correct answer', isCorrect: true }
-                ]
-            },
-            {
-                questionText: 'Question 2',
-                answerOptions: [
-                    { text: 'Correct answer', isCorrect: true },
-                    { text: 'Wrong answer', isCorrect: false }
-                ]
-            }
-        ],
         ...overrides
     });
 }

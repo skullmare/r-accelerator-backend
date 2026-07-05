@@ -93,9 +93,7 @@ router.get('/:programId/progress',
  *   get:
  *     tags: [Study / Progress]
  *     summary: Получить урок с ответами пользователя
- *     description: |
- *       Возвращает полный урок. К каждому вопросу подмешивается 'userAnswer'— ID ответа, который пользователь выбрал ранее (или 'null).
- *       'isCorrect'у вариантов ответа не возвращается.
+ *     description: Возвращает полный урок.
  *     parameters:
  *       - in: path
  *         name: programId
@@ -134,7 +132,7 @@ router.get('/:programId/lessons/:lessonId',
  *   post:
  *     tags: [Study / Progress]
  *     summary: Отметить урок пройденным
- *     description: Добавляет урок в 'completedItems'и сохраняет ответы на тест в 'lessonDetails'. При повторном вызове обновляет ответы.
+ *     description: Добавляет урок в 'completedItems'. Идемпотентно — повторный вызов не создаёт дубликат.
  *     parameters:
  *       - in: path
  *         name: programId
@@ -146,49 +144,9 @@ router.get('/:programId/lessons/:lessonId',
  *         required: true
  *         schema:
  *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               quizAnswers:
- *                 type: array
- *                 description: Ответы пользователя на вопросы теста
- *                 items:
- *                   type: object
- *                   required: [questionId, answerId]
- *                   properties:
- *                     questionId:
- *                       type: string
- *                     answerId:
- *                       type: string
  *     responses:
  *       200:
- *         description: Урок отмечен как пройденный, возвращается результат теста
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 score:
- *                   type: integer
- *                   description: Количество правильных ответов
- *                 total:
- *                   type: integer
- *                   description: Всего вопросов
- *                 questions:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       questionId:
- *                         type: string
- *                       answerId:
- *                         type: string
- *                       isCorrect:
- *                         type: boolean
+ *         description: Урок отмечен как пройденный
  *       403:
  *         description: Нет доступа к уроку или предыдущий элемент не пройден
  */

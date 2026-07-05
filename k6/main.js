@@ -192,15 +192,9 @@ export function studentScenario(data) {
     sleep(2); // студент читает урок
 
     // 4. Завершить урок
-    const lesson = (lessonRes.status === 200) ? (safeBody(lessonRes).data || {}) : {};
-    const quizAnswers = (lesson.questions || []).map((q) => ({
-      questionId: q._id,
-      answerId:   q.answerOptions?.[0]?._id,
-    })).filter((a) => a.questionId && a.answerId);
-
     const completeRes = http.post(
       `${BASE_URL}/api/v1/study/programs/${programId}/lessons/${lessonId}/complete`,
-      JSON.stringify({ quizAnswers }),
+      null,
       { ...params, tags: { endpoint: 'complete_lesson' } }
     );
     check(completeRes, { 'lesson complete: 200 или 409': (r) => [200, 409].includes(r.status) });

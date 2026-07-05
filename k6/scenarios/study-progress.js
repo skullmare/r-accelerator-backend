@@ -147,23 +147,12 @@ export default function (data) {
         },
       });
 
-      // Собираем вопросы для ответов
-      let quizAnswers = [];
-      try {
-        const b = JSON.parse(openRes.body);
-        const lesson = b.data || b;
-        quizAnswers = (lesson.questions || []).map((q) => ({
-          questionId: q._id,
-          answerId: q.answerOptions?.[0]?._id, // Выбираем первый вариант
-        })).filter((a) => a.questionId && a.answerId);
-      } catch {}
-
       sleep(1);
 
       // Завершение урока
       const completeRes = http.post(
         `${BASE_URL}/api/v1/study/programs/${programId}/lessons/${lessonId}/complete`,
-        JSON.stringify({ quizAnswers }),
+        null,
         { ...params, tags: { endpoint: 'complete_lesson' } }
       );
 

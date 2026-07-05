@@ -1,20 +1,9 @@
 import mongoose from 'mongoose';
 
-const QuizAnswerSchema = new mongoose.Schema({
-    questionId: { type: mongoose.Schema.Types.ObjectId, required: true },
-    answerId: { type: mongoose.Schema.Types.ObjectId, required: true }
-}, { _id: false });
-
-const LessonDetailSchema = new mongoose.Schema({
-    item: { type: mongoose.Schema.Types.ObjectId, ref: 'StudyLesson', required: true },
-    quizAnswers: [QuizAnswerSchema]
-}, { _id: false });
-
 const StudyProgressSchema = new mongoose.Schema({
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     program: { type: mongoose.Schema.Types.ObjectId, ref: 'StudyProgram', required: true },
-    completedItems: [{ type: mongoose.Schema.Types.ObjectId }],
-    lessonDetails: [LessonDetailSchema]
+    completedItems: [{ type: mongoose.Schema.Types.ObjectId }]
 }, { timestamps: true });
 
 StudyProgressSchema.index({ user: 1, program: 1 }, { unique: true });

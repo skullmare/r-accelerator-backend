@@ -5,7 +5,7 @@ import { createThreadAssistant } from '../../../services/openai/create-thread-as
 import { sendMessageAssistantStream } from '../../../services/openai/send-message-assistant-stream.js';
 
 export async function createMessage(req, res) {
-    const { agentId } = req.params;
+    const { agentId } = req.validatedData.params;
     const { messageText } = req.validatedData.body;
 
     // доступ к агенту уже проверен middleware check-access-agent и check-item-unlocked

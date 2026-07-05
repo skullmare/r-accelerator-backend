@@ -17,7 +17,7 @@ const router = express.Router();
  *   get:
  *     tags: [Study / Lessons]
  *     summary: Список всех уроков и групп
- *     description: Требует право 'study_lessons.read'. Возвращает мета-данные уроков (без content и questions) вместе со всеми группами уроков.
+ *     description: Требует право 'study_lessons.read'. Возвращает мета-данные уроков (без content) вместе со всеми группами уроков.
  *     responses:
  *       200:
  *         description: Список уроков и групп
@@ -83,25 +83,6 @@ router.get('/', authMiddleware, checkPermission('study_lessons.read'), listLesso
  *                   url:
  *                     type: string
  *                     format: uri
- *               questions:
- *                 type: array
- *                 items:
- *                   type: object
- *                   required: [questionText, answerOptions]
- *                   properties:
- *                     questionText:
- *                       type: string
- *                     answerOptions:
- *                       type: array
- *                       minItems: 2
- *                       items:
- *                         type: object
- *                         required: [text, isCorrect]
- *                         properties:
- *                           text:
- *                             type: string
- *                           isCorrect:
- *                             type: boolean
  *     responses:
  *       201:
  *         description: Урок создан
@@ -120,7 +101,7 @@ router.post('/', authMiddleware, checkPermission('study_lessons.create'), valida
  *   get:
  *     tags: [Study / Lessons]
  *     summary: Получить урок по ID
- *     description: Требует право 'study_lessons.read'. Возвращает полный урок включая вопросы с правильными ответами.
+ *     description: Требует право 'study_lessons.read'. Возвращает полный урок.
  *     parameters:
  *       - in: path
  *         name: lessonId
@@ -187,10 +168,6 @@ router.get('/:lessonId', authMiddleware, checkPermission('study_lessons.read'), 
  *                   url:
  *                     type: string
  *                     format: uri
- *               questions:
- *                 type: array
- *                 items:
- *                   $ref: '#/components/schemas/Question'
  *     responses:
  *       200:
  *         description: Урок обновлён

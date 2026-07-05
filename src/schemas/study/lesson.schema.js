@@ -2,21 +2,6 @@ import z from 'zod';
 
 const objectId = z.string().regex(/^[0-9a-f]{24}$/, 'Некорректный ID');
 
-const answerOptionSchema = z.object({
-    text: z.string().min(1).max(500),
-    isCorrect: z.boolean()
-});
-
-const questionSchema = z.object({
-    questionText: z.string().min(1).max(500),
-    answerOptions: z.array(answerOptionSchema).min(2)
-});
-
-const quizAnswerSchema = z.object({
-    questionId: objectId,
-    answerId: objectId
-});
-
 // POST /study/lessons — создание урока (admin)
 const createLessonSchema = z.object({
     body: z.object({
@@ -25,8 +10,7 @@ const createLessonSchema = z.object({
         group: objectId.nullable().optional().default(null),
         content: z.any(),
         video: z.object({ url: z.string().url() }).optional(),
-        presentation: z.object({ url: z.string().url() }).optional(),
-        questions: z.array(questionSchema).optional().default([])
+        presentation: z.object({ url: z.string().url() }).optional()
     })
 });
 
@@ -39,8 +23,7 @@ const updateLessonSchema = z.object({
         group: objectId.nullable().optional(),
         content: z.any().optional(),
         video: z.object({ url: z.string().url() }).nullable().optional(),
-        presentation: z.object({ url: z.string().url() }).nullable().optional(),
-        questions: z.array(questionSchema).optional()
+        presentation: z.object({ url: z.string().url() }).nullable().optional()
     })
 });
 
@@ -54,12 +37,9 @@ const getLessonWithProgressSchema = z.object({
     params: z.object({ programId: objectId, lessonId: objectId })
 });
 
-// POST /study/programs/:programId/lessons/:lessonId/complete — отметить урок пройденным и сохранить ответы на тест (user)
+// POST /study/programs/:programId/lessons/:lessonId/complete — отметить урок пройденным (user)
 const completeLessonSchema = z.object({
-    params: z.object({ programId: objectId, lessonId: objectId }),
-    body: z.object({
-        quizAnswers: z.array(quizAnswerSchema).optional().default([])
-    })
+    params: z.object({ programId: objectId, lessonId: objectId })
 });
 
 export default {

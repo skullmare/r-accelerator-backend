@@ -14,6 +14,7 @@ import { getProgress } from '../../controllers/study/progress/get-progress.contr
 import { getProgressLesson } from '../../controllers/study/progress/get-lesson.controller.js';
 import { completeLesson } from '../../controllers/study/progress/complete-lesson.controller.js';
 import { getProgressAgent } from '../../controllers/study/progress/get-agent.controller.js';
+import { completeAgent } from '../../controllers/study/progress/complete-agent.controller.js';
 import { createMessage } from '../../controllers/study/message/create-message.controller.js';
 import { listMessages } from '../../controllers/study/message/list-messages.controller.js';
 
@@ -60,7 +61,7 @@ router.post('/join', authMiddleware, validate(programSchemas.joinProgramSchema),
  *     description: |
  *       Возвращает структуру программы с флагами 'completed'и 'accessible'на каждом элементе.
  *       - 'completed'— элемент пройден пользователем
- *       - 'accessible'— элемент доступен (при 'sequential=true'зависит от прохождения предыдущего урока)
+ *       - 'accessible'— элемент доступен (при 'sequential=true'зависит от прохождения предыдущего элемента)
  *     parameters:
  *       - in: path
  *         name: programId
@@ -92,9 +93,7 @@ router.get('/:programId/progress',
  *   get:
  *     tags: [Study / Progress]
  *     summary: Получить урок с ответами пользователя
- *     description: |
- *       Возвращает полный урок. К каждому вопросу подмешивается 'userAnswer'— ID ответа, который пользователь выбрал ранее (или 'null).
- *       'isCorrect'у вариантов ответа не возвращается.
+ *     description: Возвращает полный урок.
  *     parameters:
  *       - in: path
  *         name: programId
@@ -114,7 +113,7 @@ router.get('/:programId/progress',
  *             schema:
  *               $ref: '#/components/schemas/StudyLessonWithProgress'
  *       403:
- *         description: Нет доступа к уроку или предыдущий урок не пройден
+ *         description: Нет доступа к уроку или предыдущий элемент не пройден
  *       404:
  *         description: Урок не найден
  */
@@ -133,7 +132,7 @@ router.get('/:programId/lessons/:lessonId',
  *   post:
  *     tags: [Study / Progress]
  *     summary: Отметить урок пройденным
- *     description: Добавляет урок в 'completedItems'и сохраняет ответы на тест в 'lessonDetails'. При повторном вызове обновляет ответы.
+ *     description: Добавляет урок в 'completedItems'. Идемпотентно — повторный вызов не создаёт дубликат.
  *     parameters:
  *       - in: path
  *         name: programId
@@ -145,51 +144,11 @@ router.get('/:programId/lessons/:lessonId',
  *         required: true
  *         schema:
  *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               quizAnswers:
- *                 type: array
- *                 description: Ответы пользователя на вопросы теста
- *                 items:
- *                   type: object
- *                   required: [questionId, answerId]
- *                   properties:
- *                     questionId:
- *                       type: string
- *                     answerId:
- *                       type: string
  *     responses:
  *       200:
- *         description: Урок отмечен как пройденный, возвращается результат теста
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 score:
- *                   type: integer
- *                   description: Количество правильных ответов
- *                 total:
- *                   type: integer
- *                   description: Всего вопросов
- *                 questions:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       questionId:
- *                         type: string
- *                       answerId:
- *                         type: string
- *                       isCorrect:
- *                         type: boolean
+ *         description: Урок отмечен как пройденный
  *       403:
- *         description: Нет доступа к уроку или предыдущий урок не пройден
+ *         description: Нет доступа к уроку или предыдущий элемент не пройден
  */
 router.post('/:programId/lessons/:lessonId/complete',
     authMiddleware,
@@ -206,7 +165,7 @@ router.post('/:programId/lessons/:lessonId/complete',
  *   get:
  *     tags: [Study / Progress]
  *     summary: Получить агента
- *     description: Возвращает данные агента. Доступен только если предыдущий урок в программе пройден (или 'sequential=false).
+ *     description: Возвращает данные агента. Доступен только если предыдущий элемент в программе пройден (или 'sequential=false).
  *     parameters:
  *       - in: path
  *         name: programId
@@ -226,7 +185,7 @@ router.post('/:programId/lessons/:lessonId/complete',
  *             schema:
  *               $ref: '#/components/schemas/StudyAgent'
  *       403:
- *         description: Нет доступа к агенту или предыдущий урок не пройден
+ *         description: Нет доступа к агенту или предыдущий элемент не пройден
  *       404:
  *         description: Агент не найден
  */
@@ -237,6 +196,41 @@ router.get('/:programId/agents/:agentId',
     checkItemUnlocked,
     validate(agentSchemas.getProgressAgentSchema),
     getProgressAgent
+);
+
+/**
+ * @swagger
+ * /study/programs/{programId}/agents/{agentId}/complete:
+ *   post:
+ *     tags: [Study / Progress]
+ *     summary: Отметить агента пройденным
+ *     description: Добавляет агента в 'completedItems'. Идемпотентно — повторный вызов не создаёт дубликат.
+ *     parameters:
+ *       - in: path
+ *         name: programId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: agentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Агент отмечен как пройденный
+ *       403:
+ *         description: Нет доступа к агенту или предыдущий элемент не пройден
+ *       404:
+ *         description: Программа не найдена
+ */
+router.post('/:programId/agents/:agentId/complete',
+    authMiddleware,
+    checkAccessProgram,
+    checkAccessAgent,
+    checkItemUnlocked,
+    validate(agentSchemas.completeAgentSchema),
+    completeAgent
 );
 
 /**
@@ -339,7 +333,7 @@ router.get('/:programId/agents/:agentId/messages',
  *             schema:
  *               type: string
  *       403:
- *         description: Нет доступа к агенту или предыдущий урок не пройден
+ *         description: Нет доступа к агенту или предыдущий элемент не пройден
  *       404:
  *         description: Агент не найден
  */

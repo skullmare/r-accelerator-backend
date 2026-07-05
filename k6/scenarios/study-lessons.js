@@ -45,18 +45,6 @@ const sampleContent = {
   ],
 };
 
-// Пример вопросов для урока с тестом
-const sampleQuestions = [
-  {
-    questionText: 'Что такое нагрузочное тестирование?',
-    answerOptions: [
-      { text: 'Проверка производительности системы', isCorrect: true },
-      { text: 'Тестирование интерфейса', isCorrect: false },
-      { text: 'Проверка безопасности', isCorrect: false },
-    ],
-  },
-];
-
 export function setup() {
   const cookies = authenticate();
   if (!cookies) throw new Error('Аутентификация не удалась');
@@ -158,7 +146,6 @@ export default function ({ cookies }) {
       JSON.stringify({
         name: lessonName,
         content: sampleContent,
-        questions: sampleQuestions,
       }),
       { ...params, tags: { endpoint: 'create_lesson' } }
     );

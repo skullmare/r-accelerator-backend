@@ -27,17 +27,13 @@ export async function getProgress(req, res) {
 
         const completedIds = new Set((progress?.completedItems ?? []).map(id => id.toString()));
 
-        // вычисляем accessible для каждого элемента
+        // вычисляем accessible для каждого элемента: доступен, если предыдущий элемент пройден
         const accessMap = new Map();
         for (let i = 0; i < allItems.length; i++) {
-            if (!program.sequential) {
-                accessMap.set(allItems[i]._id.toString(), true);
-                continue;
-            }
-            const prevLesson = allItems.slice(0, i).reverse().find(el => el.type === 'StudyLesson');
+            const prevItem = allItems[i - 1];
             accessMap.set(
                 allItems[i]._id.toString(),
-                !prevLesson || completedIds.has(prevLesson.item.toString())
+                !program.sequential || !prevItem || completedIds.has(prevItem.item.toString())
             );
         }
 
@@ -51,7 +47,7 @@ export async function getProgress(req, res) {
                     _id: el._id,
                     type: el.type,
                     item: populated ?? null,
-                    completed: el.type === 'StudyAgent' ? true : completedIds.has(itemId),
+                    completed: completedIds.has(itemId),
                     accessible: accessMap.get(el._id.toString())
                 };
             })

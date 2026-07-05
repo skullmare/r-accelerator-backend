@@ -144,7 +144,7 @@ router.post('/', authMiddleware, validate(projectSchemas.createProjectSchema), c
  *       404:
  *         description: Проект не найден
  */
-router.get('/:projectId', authMiddleware, checkAccessProject, validate(projectSchemas.projectIdSchema), getProject);
+router.get('/:projectId', authMiddleware, validate(projectSchemas.projectIdSchema), checkAccessProject, getProject);
 
 /**
  * @swagger
@@ -207,6 +207,6 @@ router.get('/:projectId', authMiddleware, checkAccessProject, validate(projectSc
  *       404:
  *         description: Проект не найден
  */
-router.patch('/:projectId', authMiddleware, checkAccessProject, validate(projectSchemas.updateProjectSchema), updateProject);
+router.patch('/:projectId', authMiddleware, validate(projectSchemas.updateProjectSchema), checkAccessProject, updateProject);
 
 export default router;

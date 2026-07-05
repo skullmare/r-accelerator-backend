@@ -86,7 +86,7 @@ describe('checkItemUnlocked middleware', () => {
             expect(res.status).not.toBe(403);
         });
 
-        it('второй урок доступен если первый пройден', async () => {
+        it('второй урок недоступен если пройден только первый урок (агент между ними не пройден)', async () => {
             const { program, lesson1, lesson2 } = await createProgramWithItems({ sequential: true });
             const user = await createUserInProgram(program._id);
 
@@ -94,6 +94,23 @@ describe('checkItemUnlocked middleware', () => {
                 user: user._id,
                 program: program._id,
                 completedItems: [lesson1._id]
+            });
+
+            const res = await request(app)
+                .get(`/api/v1/study/programs/${program._id}/lessons/${lesson2._id}`)
+                .set('Cookie', authCookie(user._id, user.email));
+
+            expect(res.status).toBe(403);
+        });
+
+        it('второй урок доступен если пройден урок 1 и агент', async () => {
+            const { program, lesson1, lesson2, agent } = await createProgramWithItems({ sequential: true });
+            const user = await createUserInProgram(program._id);
+
+            await StudyProgress.create({
+                user: user._id,
+                program: program._id,
+                completedItems: [lesson1._id, agent._id]
             });
 
             const res = await request(app)

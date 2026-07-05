@@ -35,7 +35,9 @@ describe('GET /study/programs/:programId/progress', () => {
         expect(l1.completed).toBe(true);
         expect(l1.accessible).toBe(true);
         expect(agentItem.accessible).toBe(true);
-        expect(l2.accessible).toBe(true);
+        expect(agentItem.completed).toBe(false);
+        // агент между lesson1 и lesson2 ещё не пройден, поэтому lesson2 заблокирован
+        expect(l2.accessible).toBe(false);
         expect(l2.completed).toBe(false);
     });
 

@@ -18,14 +18,9 @@ async function checkItemUnlocked(req, res, next) {
 
     const allItems = program.modules.flatMap(m => m.items);
     const currentIndex = allItems.findIndex(i => i.item.equals(itemId));
+    const prevItem = allItems[currentIndex - 1];
 
-    // ищем ближайший предыдущий урок (агенты пропускаем)
-    const prevLesson = allItems
-        .slice(0, currentIndex)
-        .reverse()
-        .find(i => i.type === 'StudyLesson');
-
-    if (!prevLesson) {
+    if (!prevItem) {
         return next();
     }
 
@@ -34,10 +29,10 @@ async function checkItemUnlocked(req, res, next) {
         'completedItems'
     );
 
-    const isPrevLessonCompleted = progress?.completedItems?.some(id => id.equals(prevLesson.item));
+    const isPrevItemCompleted = progress?.completedItems?.some(id => id.equals(prevItem.item));
 
-    if (!isPrevLessonCompleted) {
-        return res.error({}, 403, 'Предыдущий урок не пройден');
+    if (!isPrevItemCompleted) {
+        return res.error({}, 403, 'Предыдущий элемент не пройден');
     }
 
     next();

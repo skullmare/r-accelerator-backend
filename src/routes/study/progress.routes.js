@@ -60,7 +60,7 @@ router.post('/join', authMiddleware, validate(programSchemas.joinProgramSchema),
  *     description: |
  *       Возвращает структуру программы с флагами 'completed'и 'accessible'на каждом элементе.
  *       - 'completed'— элемент пройден пользователем
- *       - 'accessible'— элемент доступен (при 'sequential=true'зависит от прохождения предыдущего урока)
+ *       - 'accessible'— элемент доступен (при 'sequential=true'зависит от прохождения предыдущего элемента)
  *     parameters:
  *       - in: path
  *         name: programId
@@ -114,7 +114,7 @@ router.get('/:programId/progress',
  *             schema:
  *               $ref: '#/components/schemas/StudyLessonWithProgress'
  *       403:
- *         description: Нет доступа к уроку или предыдущий урок не пройден
+ *         description: Нет доступа к уроку или предыдущий элемент не пройден
  *       404:
  *         description: Урок не найден
  */
@@ -189,7 +189,7 @@ router.get('/:programId/lessons/:lessonId',
  *                       isCorrect:
  *                         type: boolean
  *       403:
- *         description: Нет доступа к уроку или предыдущий урок не пройден
+ *         description: Нет доступа к уроку или предыдущий элемент не пройден
  */
 router.post('/:programId/lessons/:lessonId/complete',
     authMiddleware,
@@ -206,7 +206,7 @@ router.post('/:programId/lessons/:lessonId/complete',
  *   get:
  *     tags: [Study / Progress]
  *     summary: Получить агента
- *     description: Возвращает данные агента. Доступен только если предыдущий урок в программе пройден (или 'sequential=false).
+ *     description: Возвращает данные агента. Доступен только если предыдущий элемент в программе пройден (или 'sequential=false).
  *     parameters:
  *       - in: path
  *         name: programId
@@ -226,7 +226,7 @@ router.post('/:programId/lessons/:lessonId/complete',
  *             schema:
  *               $ref: '#/components/schemas/StudyAgent'
  *       403:
- *         description: Нет доступа к агенту или предыдущий урок не пройден
+ *         description: Нет доступа к агенту или предыдущий элемент не пройден
  *       404:
  *         description: Агент не найден
  */
@@ -303,6 +303,7 @@ router.get('/:programId/agents/:agentId/messages',
  *     description: |
  *       Отправляет сообщение агенту через OpenAI Assistants API и стримит ответ по протоколу Server-Sent Events.
  *       При первом обращении создаётся OpenAI thread для пользователя.
+ *       Первое сообщение пользователя засчитывает элемент-агент как пройденный ('completedItems').
  *
  *       **Формат событий SSE:**
  *       - 'message_created'— сохранённое сообщение пользователя: '{ userMessage }
@@ -339,7 +340,7 @@ router.get('/:programId/agents/:agentId/messages',
  *             schema:
  *               type: string
  *       403:
- *         description: Нет доступа к агенту или предыдущий урок не пройден
+ *         description: Нет доступа к агенту или предыдущий элемент не пройден
  *       404:
  *         description: Агент не найден
  */

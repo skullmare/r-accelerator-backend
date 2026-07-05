@@ -1,12 +1,11 @@
 import User from '../../../models/user.model.js';
 import StudyAgent from '../../../models/study/agent.model.js';
 import StudyMessage from '../../../models/study/message.model.js';
-import StudyProgress from '../../../models/study/progress.model.js';
 import { createThreadAssistant } from '../../../services/openai/create-thread-assistant.js';
 import { sendMessageAssistantStream } from '../../../services/openai/send-message-assistant-stream.js';
 
 export async function createMessage(req, res) {
-    const { programId, agentId } = req.validatedData.params;
+    const { agentId } = req.validatedData.params;
     const { messageText } = req.validatedData.body;
 
     // доступ к агенту уже проверен middleware check-access-agent и check-item-unlocked
@@ -34,20 +33,12 @@ export async function createMessage(req, res) {
     };
 
     try {
-        const [userMessage] = await Promise.all([
-            StudyMessage.create({
-                messageText,
-                user: req.user.id,
-                agent: agentId,
-                author: 'user'
-            }),
-            // первое сообщение агенту засчитывается как выполнение этого элемента программы
-            StudyProgress.findOneAndUpdate(
-                { user: req.user.id, program: programId },
-                { $addToSet: { completedItems: agentId } },
-                { upsert: true }
-            )
-        ]);
+        const userMessage = await StudyMessage.create({
+            messageText,
+            user: req.user.id,
+            agent: agentId,
+            author: 'user'
+        });
 
         sendEvent('message_created', { userMessage });
 

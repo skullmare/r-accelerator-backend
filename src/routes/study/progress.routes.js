@@ -14,6 +14,7 @@ import { getProgress } from '../../controllers/study/progress/get-progress.contr
 import { getProgressLesson } from '../../controllers/study/progress/get-lesson.controller.js';
 import { completeLesson } from '../../controllers/study/progress/complete-lesson.controller.js';
 import { getProgressAgent } from '../../controllers/study/progress/get-agent.controller.js';
+import { completeAgent } from '../../controllers/study/progress/complete-agent.controller.js';
 import { createMessage } from '../../controllers/study/message/create-message.controller.js';
 import { listMessages } from '../../controllers/study/message/list-messages.controller.js';
 
@@ -241,6 +242,41 @@ router.get('/:programId/agents/:agentId',
 
 /**
  * @swagger
+ * /study/programs/{programId}/agents/{agentId}/complete:
+ *   post:
+ *     tags: [Study / Progress]
+ *     summary: Отметить агента пройденным
+ *     description: Добавляет агента в 'completedItems'. Идемпотентно — повторный вызов не создаёт дубликат.
+ *     parameters:
+ *       - in: path
+ *         name: programId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: agentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Агент отмечен как пройденный
+ *       403:
+ *         description: Нет доступа к агенту или предыдущий элемент не пройден
+ *       404:
+ *         description: Программа не найдена
+ */
+router.post('/:programId/agents/:agentId/complete',
+    authMiddleware,
+    checkAccessProgram,
+    checkAccessAgent,
+    checkItemUnlocked,
+    validate(agentSchemas.completeAgentSchema),
+    completeAgent
+);
+
+/**
+ * @swagger
  * /study/programs/{programId}/agents/{agentId}/messages:
  *   get:
  *     tags: [Study / Progress]
@@ -303,7 +339,6 @@ router.get('/:programId/agents/:agentId/messages',
  *     description: |
  *       Отправляет сообщение агенту через OpenAI Assistants API и стримит ответ по протоколу Server-Sent Events.
  *       При первом обращении создаётся OpenAI thread для пользователя.
- *       Первое сообщение пользователя засчитывает элемент-агент как пройденный ('completedItems').
  *
  *       **Формат событий SSE:**
  *       - 'message_created'— сохранённое сообщение пользователя: '{ userMessage }

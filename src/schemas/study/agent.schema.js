@@ -32,4 +32,9 @@ const getProgressAgentSchema = z.object({
     params: z.object({ programId: objectId, agentId: objectId })
 });
 
-export default { createAgentSchema, updateAgentSchema, agentIdSchema, getProgressAgentSchema };
+// POST /study/programs/:programId/agents/:agentId/complete — отметить агента пройденным (user)
+const completeAgentSchema = z.object({
+    params: z.object({ programId: objectId, agentId: objectId })
+});
+
+export default { createAgentSchema, updateAgentSchema, agentIdSchema, getProgressAgentSchema, completeAgentSchema };

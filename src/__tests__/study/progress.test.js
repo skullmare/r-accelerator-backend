@@ -282,3 +282,59 @@ describe('GET /study/programs/:programId/agents/:agentId', () => {
         expect(res.body.data._id.toString()).toBe(agent._id.toString());
     });
 });
+
+describe('POST /study/programs/:programId/agents/:agentId/complete', () => {
+    it('добавляет агента в completedItems', async () => {
+        const { program, lesson1, agent } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        await StudyProgress.create({
+            user: user._id,
+            program: program._id,
+            completedItems: [lesson1._id]
+        });
+
+        const res = await request(app)
+            .post(`/api/v1/study/programs/${program._id}/agents/${agent._id}/complete`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(200);
+
+        const progress = await StudyProgress.findOne({ user: user._id, program: program._id });
+        expect(progress.completedItems.map(String)).toContain(agent._id.toString());
+    });
+
+    it('повторный вызов не дублирует агента в completedItems', async () => {
+        const { program, lesson1, agent } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        await StudyProgress.create({
+            user: user._id,
+            program: program._id,
+            completedItems: [lesson1._id]
+        });
+
+        await request(app)
+            .post(`/api/v1/study/programs/${program._id}/agents/${agent._id}/complete`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        await request(app)
+            .post(`/api/v1/study/programs/${program._id}/agents/${agent._id}/complete`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        const progress = await StudyProgress.findOne({ user: user._id, program: program._id });
+        const count = progress.completedItems.filter(id => id.equals(agent._id)).length;
+        expect(count).toBe(1);
+    });
+
+    it('возвращает 403 если предыдущий элемент не пройден', async () => {
+        const { program, agent } = await createProgramWithItems({ sequential: true });
+        const user = await createUserInProgram(program._id);
+
+        const res = await request(app)
+            .post(`/api/v1/study/programs/${program._id}/agents/${agent._id}/complete`)
+            .set('Cookie', authCookie(user._id, user.email));
+
+        expect(res.status).toBe(403);
+    });
+});

@@ -82,8 +82,8 @@ router.post('/join', authMiddleware, validate(programSchemas.joinProgramSchema),
  */
 router.get('/:programId/progress',
     authMiddleware,
-    checkAccessProgram,
     validate(programSchemas.programProgressSchema),
+    checkAccessProgram,
     getProgress
 );
 
@@ -119,10 +119,10 @@ router.get('/:programId/progress',
  */
 router.get('/:programId/lessons/:lessonId',
     authMiddleware,
+    validate(lessonSchemas.getLessonWithProgressSchema),
     checkAccessProgram,
     checkAccessLesson,
     checkItemUnlocked,
-    validate(lessonSchemas.getLessonWithProgressSchema),
     getProgressLesson
 );
 
@@ -152,10 +152,10 @@ router.get('/:programId/lessons/:lessonId',
  */
 router.post('/:programId/lessons/:lessonId/complete',
     authMiddleware,
+    validate(lessonSchemas.completeLessonSchema),
     checkAccessProgram,
     checkAccessLesson,
     checkItemUnlocked,
-    validate(lessonSchemas.completeLessonSchema),
     completeLesson
 );
 
@@ -191,10 +191,10 @@ router.post('/:programId/lessons/:lessonId/complete',
  */
 router.get('/:programId/agents/:agentId',
     authMiddleware,
+    validate(agentSchemas.getProgressAgentSchema),
     checkAccessProgram,
     checkAccessAgent,
     checkItemUnlocked,
-    validate(agentSchemas.getProgressAgentSchema),
     getProgressAgent
 );
 
@@ -226,10 +226,10 @@ router.get('/:programId/agents/:agentId',
  */
 router.post('/:programId/agents/:agentId/complete',
     authMiddleware,
+    validate(agentSchemas.completeAgentSchema),
     checkAccessProgram,
     checkAccessAgent,
     checkItemUnlocked,
-    validate(agentSchemas.completeAgentSchema),
     completeAgent
 );
 
@@ -281,10 +281,10 @@ router.post('/:programId/agents/:agentId/complete',
  */
 router.get('/:programId/agents/:agentId/messages',
     authMiddleware,
+    validate(messageSchemas.listMessagesSchema),
     checkAccessProgram,
     checkAccessAgent,
     checkItemUnlocked,
-    validate(messageSchemas.listMessagesSchema),
     listMessages
 );
 
@@ -339,10 +339,10 @@ router.get('/:programId/agents/:agentId/messages',
  */
 router.post('/:programId/agents/:agentId/messages',
     authMiddleware,
+    validate(messageSchemas.createMessageSchema),
     checkAccessProgram,
     checkAccessAgent,
     checkItemUnlocked,
-    validate(messageSchemas.createMessageSchema),
     createMessage
 );
 

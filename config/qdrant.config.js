@@ -5,6 +5,9 @@ const qdrantClient = new QdrantClient({
     apiKey: process.env.QDRANT_API_KEY,
     port: null,
     https: true,
+    checkCompatibility: false, // иначе конструктор бьёт по сети при каждом импорте модуля
 });
 
-export { qdrantClient };
+const QDRANT_COLLECTION = process.env.QDRANT_COLLECTION || 'expert_context';
+
+export { qdrantClient, QDRANT_COLLECTION };

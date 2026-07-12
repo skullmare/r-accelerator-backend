@@ -41,4 +41,9 @@ const projectIdSchema = z.object({
     params: z.object({ projectId: objectId })
 });
 
-export default { createProjectSchema, updateProjectSchema, projectIdSchema };
+// /accelerator/projects/:projectId/files/:fileId/* — файл в контексте проекта (user)
+const projectFileIdSchema = z.object({
+    params: z.object({ projectId: objectId, fileId: objectId })
+});
+
+export default { createProjectSchema, updateProjectSchema, projectIdSchema, projectFileIdSchema };

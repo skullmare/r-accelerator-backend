@@ -23,7 +23,7 @@ export async function uploadFile({ buffer, mimetype, originalname }) {
         ContentType: mimetype
     }));
 
-    return `${baseUrl}/${bucket}/${key}`;
+    return { url: `${baseUrl}/${bucket}/${key}`, key };
 }
 
 export function generateKey(originalname) {

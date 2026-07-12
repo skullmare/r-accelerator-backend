@@ -52,6 +52,29 @@ const ProjectSchema = new mongoose.Schema({
         max: 100,
         default: 0
     },
+    currentAgentCode: {
+        type: String,
+        trim: true,
+        default: null
+    },
+    completedAgentCodes: {
+        type: [String],
+        default: []
+    },
+    contextSummary: {
+        type: String,
+        trim: true,
+        default: null
+    },
+    contextVersion: {
+        type: Number,
+        default: 0
+    },
+    qdrantCollection: {
+        type: String,
+        trim: true,
+        default: null
+    },
     lastActivityAt: {
         type: Date,
         default: Date.now

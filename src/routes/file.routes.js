@@ -47,6 +47,29 @@ const router = express.Router();
  *           type: string
  *           enum: [user, system]
  *           description: Источник файла — загружен пользователем или создан системой
+ *         projectId:
+ *           type: string
+ *           nullable: true
+ *           description: Проект Р-Акселератора, к которому привязан файл. Если задан — файл автоматически ставится в очередь на извлечение текста и индексацию в Qdrant.
+ *         processingStatus:
+ *           type: string
+ *           enum: [uploaded, extracting, extracted, indexing, indexed, failed, unsupported]
+ *         extractedTextStatus:
+ *           type: string
+ *           enum: [not_started, success, empty, failed, unsupported]
+ *         qdrantStatus:
+ *           type: string
+ *           enum: [not_indexed, indexed, failed, stale]
+ *         qdrantPointIds:
+ *           type: array
+ *           items: { type: string }
+ *         processingError:
+ *           type: string
+ *           nullable: true
+ *         indexedAt:
+ *           type: string
+ *           format: date-time
+ *           nullable: true
  *         createdAt:
  *           type: string
  *           format: date-time
@@ -81,6 +104,9 @@ const router = express.Router();
  *               file:
  *                 type: string
  *                 format: binary
+ *               projectId:
+ *                 type: string
+ *                 description: Опционально — привязать файл к проекту Р-Акселератора. Владение проектом проверяется на сервере. Если указан, запускается асинхронная индексация в Qdrant.
  *     responses:
  *       200:
  *         description: Файл загружен и сохранён в БД
@@ -297,6 +323,10 @@ router.post('/multipart/presign', authMiddleware, validate(fileSchemas.presignUp
  *               size:
  *                 type: integer
  *                 example: 2147483648
+ *               projectId:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Опционально — привязать файл к проекту Р-Акселератора. Владение проектом проверяется на сервере. Если указан, запускается асинхронная индексация в Qdrant (обработка не блокирует этот запрос).
  *     responses:
  *       200:
  *         description: Файл загружен и сохранён в БД
@@ -306,6 +336,8 @@ router.post('/multipart/presign', authMiddleware, validate(fileSchemas.presignUp
  *               $ref: '#/components/schemas/File'
  *       401:
  *         description: Не авторизован
+ *       404:
+ *         description: Проект не найден
  *       500:
  *         description: Ошибка S3 или БД
  */

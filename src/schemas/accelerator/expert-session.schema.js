@@ -4,7 +4,7 @@ const objectId = z.string().regex(/^[0-9a-f]{24}$/, 'Некорректный ID
 
 const createSessionSchema = z.object({
     params: z.object({ projectId: objectId }),
-    body: z.object({ agentCode: z.string().trim().min(1).max(50) }).strict()
+    body: z.object({ agentId: objectId }).strict()
 });
 
 const sessionIdSchema = z.object({

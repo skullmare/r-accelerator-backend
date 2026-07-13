@@ -20,17 +20,17 @@ export class ExpertSessionError extends Error {
 }
 
 // Self-healing fallback for EXP-2: an old/new project with no
-// currentAgentCode falls back to the first active agent by `order`,
+// currentAgentId falls back to the first active agent by `order`,
 // and that resolution is persisted so it only happens once.
 export async function resolveCurrentAgent(project) {
-    let agent = project.currentAgentCode
-        ? await Agent.findOne({ code: project.currentAgentCode })
+    let agent = project.currentAgentId
+        ? await Agent.findById(project.currentAgentId)
         : null;
 
     if (!agent) {
         agent = await Agent.findOne({ isActive: true }).sort({ order: 1 });
         if (agent) {
-            project.currentAgentCode = agent.code;
+            project.currentAgentId = agent._id;
             await project.save();
         }
     }
@@ -44,7 +44,7 @@ export async function loadSessionAndAgent(project, sessionId) {
         throw new ExpertSessionError('Экспертная сессия не найдена', 404, 'SESSION_NOT_FOUND');
     }
 
-    const agent = await Agent.findOne({ code: session.agentCode });
+    const agent = await Agent.findById(session.agentId);
     if (!agent) {
         throw new ExpertSessionError('Агент сессии не найден', 404, 'AGENT_NOT_FOUND');
     }
@@ -52,25 +52,25 @@ export async function loadSessionAndAgent(project, sessionId) {
     return { session, agent };
 }
 
-export async function createSession(project, agentCode) {
-    const agent = await Agent.findOne({ code: agentCode, isActive: true });
+export async function createSession(project, agentId) {
+    const agent = await Agent.findOne({ _id: agentId, isActive: true });
     if (!agent) {
         throw new ExpertSessionError('Агент не найден или отключён', 404, 'AGENT_NOT_FOUND');
     }
 
     const currentAgent = await resolveCurrentAgent(project);
-    if (!currentAgent || currentAgent.code !== agentCode) {
+    if (!currentAgent || !currentAgent._id.equals(agent._id)) {
         throw new ExpertSessionError('Этот агент сейчас недоступен в маршруте проекта', 409, 'AGENT_NOT_CURRENT');
     }
 
     let session = await ExpertSession.findOne({
         projectId: project._id,
-        agentCode,
+        agentId: agent._id,
         status: { $in: ['draft', 'active', 'waiting_user_confirmation'] }
     }).sort({ createdAt: -1 });
 
     if (!session) {
-        session = await ExpertSession.create({ projectId: project._id, agentCode, status: 'active' });
+        session = await ExpertSession.create({ projectId: project._id, agentId: agent._id, status: 'active' });
     }
 
     return { session, agent };
@@ -132,7 +132,7 @@ function appendContextSummary(project, agentName, artifactSummary) {
 // falsy) produces a 'ready' draft and puts the session in
 // waiting_user_confirmation without switching the project's agent. Only a
 // confirmArtifact:true call flips the artifact to 'confirmed', advances
-// Project.currentAgentCode via Agent.nextAgentCode, folds the artifact
+// Project.currentAgentId via Agent.nextAgentId, folds the artifact
 // summary into Project.contextSummary, and indexes it into Qdrant.
 export async function completeSession(project, session, agent, confirmArtifact) {
     if (session.status === 'completed') {
@@ -155,7 +155,7 @@ export async function completeSession(project, session, agent, confirmArtifact) 
         artifact = await Artifact.create({
             projectId: project._id,
             expertSessionId: session._id,
-            agentCode: agent.code,
+            agentId: agent._id,
             type: agent.artifactDefinition.artifactType,
             title: generated.title,
             content: generated.content,
@@ -174,7 +174,7 @@ export async function completeSession(project, session, agent, confirmArtifact) 
         session.outputSummary = artifact.summary;
         await session.save();
 
-        return { artifact, nextAgentCode: null, projectContextVersion: project.contextVersion, confirmed: false };
+        return { artifact, nextAgentId: null, projectContextVersion: project.contextVersion, confirmed: false };
     }
 
     artifact.status = 'confirmed';
@@ -182,17 +182,17 @@ export async function completeSession(project, session, agent, confirmArtifact) 
 
     await upsertChunks({
         projectId: project._id,
-        agentCode: agent.code,
+        agentId: String(agent._id),
         sourceType: 'artifact',
         sourceId: String(artifact._id),
         chunks: chunkText(JSON.stringify(artifact.content))
     });
 
     appendContextSummary(project, agent.name, artifact.summary);
-    if (!project.completedAgentCodes.includes(agent.code)) {
-        project.completedAgentCodes.push(agent.code);
+    if (!project.completedAgentIds.some((id) => id.equals(agent._id))) {
+        project.completedAgentIds.push(agent._id);
     }
-    project.currentAgentCode = agent.nextAgentCode || null;
+    project.currentAgentId = agent.nextAgentId || null;
     project.lastActivityAt = new Date();
     await project.save();
 
@@ -200,5 +200,5 @@ export async function completeSession(project, session, agent, confirmArtifact) 
     session.outputSummary = artifact.summary;
     await session.save();
 
-    return { artifact, nextAgentCode: project.currentAgentCode, projectContextVersion: project.contextVersion, confirmed: true };
+    return { artifact, nextAgentId: project.currentAgentId, projectContextVersion: project.contextVersion, confirmed: true };
 }

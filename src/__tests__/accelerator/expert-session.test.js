@@ -29,7 +29,6 @@ import app from '../../app.js';
 import { connect, closeDatabase, clearDatabase } from '../setup.js';
 import { createUser } from '../../__fixtures__/user.fixture.js';
 import { authCookie } from '../../__fixtures__/auth.fixture.js';
-import Role from '../../models/role.model.js';
 import Project from '../../models/accelerator/project.model.js';
 import Agent from '../../models/accelerator/agent.model.js';
 import { upsertChunks } from '../../services/qdrant.service.js';
@@ -42,25 +41,11 @@ afterEach(async () => {
 });
 
 async function seedAgents() {
-    await Agent.create({
-        code: 'R1',
-        name: 'Роман',
-        roleTitle: 'Эксперт по рынку',
-        order: 1,
-        nextAgentCode: 'R2',
-        systemPrompt: 'Ты эксперт по рынку.',
-        completionCriteria: 'Собран рыночный бриф.',
-        artifactDefinition: {
-            artifactType: 'market_brief',
-            requiredFields: ['marketDescription', 'nicheHypothesis', 'competitors', 'risks', 'summary']
-        }
-    });
-    await Agent.create({
-        code: 'R2',
+    const r2 = await Agent.create({
         name: 'Регина',
         roleTitle: 'Эксперт по аудитории',
         order: 2,
-        nextAgentCode: null,
+        nextAgentId: null,
         systemPrompt: 'Ты эксперт по аудитории.',
         completionCriteria: 'Собран бриф аудитории.',
         artifactDefinition: {
@@ -68,6 +53,19 @@ async function seedAgents() {
             requiredFields: ['summary']
         }
     });
+    const r1 = await Agent.create({
+        name: 'Роман',
+        roleTitle: 'Эксперт по рынку',
+        order: 1,
+        nextAgentId: r2._id,
+        systemPrompt: 'Ты эксперт по рынку.',
+        completionCriteria: 'Собран рыночный бриф.',
+        artifactDefinition: {
+            artifactType: 'market_brief',
+            requiredFields: ['marketDescription', 'nicheHypothesis', 'competitors', 'risks', 'summary']
+        }
+    });
+    return { r1, r2 };
 }
 
 async function setupProject() {
@@ -78,14 +76,14 @@ async function setupProject() {
 
 describe('Экспертный маршрут R1 -> R2 (сквозной сценарий)', () => {
     it('проходит create session -> message -> draft complete -> confirm complete -> R2', async () => {
-        await seedAgents();
+        const { r1, r2 } = await seedAgents();
         const { owner, project } = await setupProject();
         const cookie = authCookie(owner._id, owner.email);
 
         const sessionRes = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
             .set('Cookie', cookie)
-            .send({ agentCode: 'R1' });
+            .send({ agentId: String(r1._id) });
         expect(sessionRes.status).toBe(201);
         const sessionId = sessionRes.body.data.session._id;
 
@@ -102,10 +100,10 @@ describe('Экспертный маршрут R1 -> R2 (сквозной сце�
             .send({});
         expect(draftRes.status).toBe(200);
         expect(draftRes.body.data.artifact.status).toBe('ready');
-        expect(draftRes.body.data.nextAgentCode).toBeNull();
+        expect(draftRes.body.data.nextAgentId).toBeNull();
 
         const projectAfterDraft = await Project.findById(project._id);
-        expect(projectAfterDraft.currentAgentCode).toBe('R1');
+        expect(String(projectAfterDraft.currentAgentId)).toBe(String(r1._id));
 
         const confirmRes = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
@@ -113,16 +111,16 @@ describe('Экспертный маршрут R1 -> R2 (сквозной сце�
             .send({ confirmArtifact: true });
         expect(confirmRes.status).toBe(200);
         expect(confirmRes.body.data.artifact.status).toBe('confirmed');
-        expect(confirmRes.body.data.nextAgentCode).toBe('R2');
+        expect(confirmRes.body.data.nextAgentId).toBe(String(r2._id));
 
         const projectAfterConfirm = await Project.findById(project._id);
-        expect(projectAfterConfirm.currentAgentCode).toBe('R2');
-        expect(projectAfterConfirm.completedAgentCodes).toContain('R1');
+        expect(String(projectAfterConfirm.currentAgentId)).toBe(String(r2._id));
+        expect(projectAfterConfirm.completedAgentIds.map(String)).toContain(String(r1._id));
         expect(projectAfterConfirm.contextSummary).toContain('Итоговая сводка по рынку');
 
         expect(upsertChunks).toHaveBeenCalledWith(expect.objectContaining({
             projectId: project._id,
-            agentCode: 'R1',
+            agentId: String(r1._id),
             sourceType: 'artifact'
         }));
 
@@ -130,10 +128,10 @@ describe('Экспертный маршрут R1 -> R2 (сквозной сце�
             .get(`/api/v1/accelerator/projects/${project._id}/expert-route`)
             .set('Cookie', cookie);
         expect(routeRes.status).toBe(200);
-        expect(routeRes.body.data.currentAgentCode).toBe('R2');
+        expect(routeRes.body.data.currentAgentId).toBe(String(r2._id));
         expect(routeRes.body.data.items).toEqual([
-            { code: 'R1', name: 'Роман', status: 'completed', nextAgentCode: 'R2' },
-            { code: 'R2', name: 'Регина', status: 'current', nextAgentCode: null }
+            { _id: String(r1._id), name: 'Роман', status: 'completed', nextAgentId: String(r2._id) },
+            { _id: String(r2._id), name: 'Регина', status: 'current', nextAgentId: null }
         ]);
 
         const repeatCompleteRes = await request(app)
@@ -144,25 +142,25 @@ describe('Экспертный маршрут R1 -> R2 (сквозной сце�
     });
 
     it('чужой пользователь не может создать сессию в проекте (403)', async () => {
-        await seedAgents();
+        const { r1 } = await seedAgents();
         const { project } = await setupProject();
         const stranger = await createUser();
 
         const res = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
             .set('Cookie', authCookie(stranger._id, stranger.email))
-            .send({ agentCode: 'R1' });
+            .send({ agentId: String(r1._id) });
 
         expect(res.status).toBe(403);
     });
 
-    it('возвращает 404 при создании сессии с несуществующим agentCode', async () => {
+    it('возвращает 404 при создании сессии с несуществующим agentId', async () => {
         const { owner, project } = await setupProject();
 
         const res = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
             .set('Cookie', authCookie(owner._id, owner.email))
-            .send({ agentCode: 'GHOST' });
+            .send({ agentId: '507f1f77bcf86cd799439099' });
 
         expect(res.status).toBe(404);
         expect(res.body.error.code).toBe('AGENT_NOT_FOUND');

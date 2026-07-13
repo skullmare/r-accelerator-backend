@@ -8,8 +8,8 @@
 
 | Поле | Тип | Обяз. | Назначение |
 |---|---|---|---|
-| `currentAgentCode` | string \| null | нет | Код текущего агента маршрута |
-| `completedAgentCodes` | string[] | да (default []) | Завершённые агенты |
+| `currentAgentId` | ObjectId → Agent \| null | нет | Текущий агент маршрута |
+| `completedAgentIds` | ObjectId[] → Agent | да (default []) | Завершённые агенты |
 | `contextSummary` | string \| null | нет | Краткая сводка, добавляемая в каждый LLM-запрос |
 | `contextVersion` | number | да (default 0) | Инкрементируется при каждом обновлении summary |
 | `qdrantCollection` | string \| null | нет | Переопределение коллекции Qdrant (по умолчанию — `expert_context`) |
@@ -23,7 +23,7 @@
 | Поле | Тип | Обяз. |
 |---|---|---|
 | `projectId` | ObjectId → Project | да |
-| `agentCode` | string | да |
+| `agentId` | ObjectId → Agent | да |
 | `status` | enum: draft, active, waiting_user_confirmation, completed, failed | да |
 | `inputContextSnapshot` | object | нет — снимок того, что реально ушло в LLM-запрос (audit trail) |
 | `outputSummary` | string | нет |
@@ -45,7 +45,7 @@
 |---|---|---|
 | `projectId` | ObjectId → Project | да |
 | `expertSessionId` | ObjectId → ExpertSession | да |
-| `agentCode` | string | да |
+| `agentId` | ObjectId → Agent | да |
 | `type` | string | да |
 | `title` | string | да |
 | `content` | object | да |

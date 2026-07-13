@@ -164,8 +164,8 @@ Table accelerator_projects {
   description          string
   stage                string   [note: "enum: idea|mvp|launched|growth|scale"]
   status               string   [note: "enum: active|paused|completed|archived"]
-  currentAgentCode     string   [note: "nullable — self-heals to first active agent by order"]
-  completedAgentCodes  string[]
+  currentAgentId       ObjectId [ref: > accelerator_agents._id, note: "nullable — self-heals to first active agent by order"]
+  completedAgentIds    ObjectId[]
   contextSummary       string   [note: "always included in the LLM prompt (CTX-2)"]
   contextVersion       int      [default: 0]
   qdrantCollection     string   [note: "nullable — overrides the default expert_context collection"]
@@ -175,8 +175,7 @@ Table accelerator_projects {
 }
 
 Table accelerator_agents {
-  _id                 ObjectId [pk]
-  code                string   [unique, not null, note: "free-form, admin-defined — not a fixed R1..R5 enum"]
+  _id                 ObjectId [pk, note: "the only identifier — no separate human-readable code (see open-questions.md)"]
   name                string   [not null]
   roleTitle           string   [not null]
   order               int      [not null]
@@ -184,7 +183,7 @@ Table accelerator_agents {
   systemPrompt        string   [not null]
   completionCriteria  string   [not null]
   artifactDefinition  json     [not null, note: "{ artifactType, titleTemplate, requiredFields[], outputSchema, summaryField }"]
-  nextAgentCode       string   [note: "nullable — must reference an existing agent code"]
+  nextAgentId         ObjectId [ref: > accelerator_agents._id, note: "nullable — must reference an existing agent"]
   contextPolicy       json     [note: "{ includeProjectSummary, includePreviousArtifacts, qdrantTopK, maxContextChars, allowedSourceTypes[] }"]
   modelConfig         json     [note: "{ provider: openai|openrouter, model, temperature, maxTokens }"]
   createdAt           datetime
@@ -194,7 +193,7 @@ Table accelerator_agents {
 Table expert_sessions {
   _id                     ObjectId [pk]
   projectId               ObjectId [ref: > accelerator_projects._id, not null]
-  agentCode               string   [not null]
+  agentId                 ObjectId [ref: > accelerator_agents._id, not null]
   status                  string   [note: "enum: draft|active|waiting_user_confirmation|completed|failed"]
   inputContextSnapshot    json     [note: "audit trail of what was actually sent to the LLM"]
   outputSummary           string
@@ -219,7 +218,7 @@ Table accelerator_artifacts {
   _id              ObjectId [pk]
   projectId        ObjectId [ref: > accelerator_projects._id, not null]
   expertSessionId  ObjectId [ref: > expert_sessions._id, not null]
-  agentCode        string   [not null]
+  agentId          ObjectId [ref: > accelerator_agents._id, not null]
   type             string   [not null]
   title            string   [not null]
   content          json     [not null]

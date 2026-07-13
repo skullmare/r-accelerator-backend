@@ -11,10 +11,10 @@ const ArtifactSchema = new mongoose.Schema({
         ref: 'ExpertSession',
         required: true
     },
-    agentCode: {
-        type: String,
-        required: true,
-        trim: true
+    agentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Agent',
+        required: true
     },
     type: {
         type: String,
@@ -45,7 +45,7 @@ const ArtifactSchema = new mongoose.Schema({
     timestamps: true
 });
 
-ArtifactSchema.index({ projectId: 1, agentCode: 1 });
+ArtifactSchema.index({ projectId: 1, agentId: 1 });
 
 const Artifact = mongoose.model('Artifact', ArtifactSchema);
 export default Artifact;

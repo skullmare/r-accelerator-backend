@@ -52,13 +52,14 @@ const ProjectSchema = new mongoose.Schema({
         max: 100,
         default: 0
     },
-    currentAgentCode: {
-        type: String,
-        trim: true,
+    currentAgentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Agent',
         default: null
     },
-    completedAgentCodes: {
-        type: [String],
+    completedAgentIds: {
+        type: [mongoose.Schema.Types.ObjectId],
+        ref: 'Agent',
         default: []
     },
     contextSummary: {

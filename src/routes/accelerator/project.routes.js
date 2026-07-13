@@ -319,14 +319,15 @@ router.get('/:projectId/expert-route', authMiddleware, validate(projectSchemas.p
  *         application/json:
  *           schema:
  *             type: object
- *             required: [agentCode]
+ *             required: [agentId]
  *             properties:
- *               agentCode: { type: string }
+ *               agentId: { type: string }
  *     responses:
  *       201: { description: Сессия создана или найдена активная }
  *       401: { description: Требуется авторизация }
  *       403: { description: Нет доступа к проекту }
  *       404: { description: Проект или агент не найден }
+ *       409: { description: Агент сейчас недоступен в маршруте проекта (AGENT_NOT_CURRENT) }
  */
 router.post('/:projectId/expert-sessions', authMiddleware, validate(expertSessionSchemas.createSessionSchema), checkAccessProject, createExpertSession);
 
@@ -375,7 +376,7 @@ router.post('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, v
  *       (status=ready) и сессия переходит в waiting_user_confirmation, но проект
  *       не переключается на следующего агента. С confirmArtifact=true артефакт
  *       подтверждается (status=confirmed), индексируется в Qdrant, summary проекта
- *       обновляется и currentAgentCode переключается на nextAgentCode агента.
+ *       обновляется и currentAgentId переключается на nextAgentId агента.
  *     parameters:
  *       - in: path
  *         name: projectId

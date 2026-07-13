@@ -1,5 +1,7 @@
 import z from 'zod';
 
+const objectId = z.string().regex(/^[0-9a-f]{24}$/, 'Некорректный ID');
+
 const artifactDefinitionSchema = z.object({
     artifactType: z.string().trim().min(1).max(100),
     titleTemplate: z.string().trim().max(200).nullable().optional(),
@@ -26,7 +28,6 @@ const modelConfigSchema = z.object({
 // POST /accelerator/admin/agents — создание агента (agents:manage)
 const createAgentSchema = z.object({
     body: z.object({
-        code: z.string().trim().min(1).max(50),
         name: z.string().trim().min(1).max(150),
         roleTitle: z.string().trim().min(1).max(150),
         order: z.number().int(),
@@ -34,7 +35,7 @@ const createAgentSchema = z.object({
         systemPrompt: z.string().trim().min(1).max(20000),
         completionCriteria: z.string().trim().min(1).max(5000),
         artifactDefinition: artifactDefinitionSchema,
-        nextAgentCode: z.string().trim().min(1).max(50).nullable().optional(),
+        nextAgentId: objectId.nullable().optional(),
         contextPolicy: contextPolicySchema.default({}),
         modelConfig: modelConfigSchema.default({})
     }).strict()
@@ -42,9 +43,8 @@ const createAgentSchema = z.object({
 
 // PATCH /accelerator/admin/agents/:agentId — обновление агента (agents:manage)
 const updateAgentSchema = z.object({
-    params: z.object({ agentId: z.string().regex(/^[0-9a-f]{24}$/, 'Некорректный ID') }),
+    params: z.object({ agentId: objectId }),
     body: z.object({
-        code: z.string().trim().min(1).max(50).optional(),
         name: z.string().trim().min(1).max(150).optional(),
         roleTitle: z.string().trim().min(1).max(150).optional(),
         order: z.number().int().optional(),
@@ -52,14 +52,14 @@ const updateAgentSchema = z.object({
         systemPrompt: z.string().trim().min(1).max(20000).optional(),
         completionCriteria: z.string().trim().min(1).max(5000).optional(),
         artifactDefinition: artifactDefinitionSchema.optional(),
-        nextAgentCode: z.string().trim().min(1).max(50).nullable().optional(),
+        nextAgentId: objectId.nullable().optional(),
         contextPolicy: contextPolicySchema.optional(),
         modelConfig: modelConfigSchema.optional()
     }).strict()
 });
 
 const agentIdSchema = z.object({
-    params: z.object({ agentId: z.string().regex(/^[0-9a-f]{24}$/, 'Некорректный ID') })
+    params: z.object({ agentId: objectId })
 });
 
 export default { createAgentSchema, updateAgentSchema, agentIdSchema };

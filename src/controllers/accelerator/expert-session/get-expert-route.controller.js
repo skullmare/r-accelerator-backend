@@ -8,18 +8,18 @@ export async function getExpertRoute(req, res) {
             Agent.find({ isActive: true }).sort({ order: 1 }),
             resolveCurrentAgent(project)
         ]);
-        const currentAgentCode = currentAgent?.code ?? null;
+        const currentAgentId = currentAgent?._id ?? null;
 
         const items = agents.map((agent) => ({
-            code: agent.code,
+            _id: agent._id,
             name: agent.name,
-            status: project.completedAgentCodes.includes(agent.code)
+            status: project.completedAgentIds.some((id) => id.equals(agent._id))
                 ? 'completed'
-                : agent.code === currentAgentCode ? 'current' : 'locked',
-            nextAgentCode: agent.nextAgentCode
+                : currentAgentId && agent._id.equals(currentAgentId) ? 'current' : 'locked',
+            nextAgentId: agent.nextAgentId
         }));
 
-        return res.success({ currentAgentCode, items }, 'Маршрут агентов получен', 200);
+        return res.success({ currentAgentId, items }, 'Маршрут агентов получен', 200);
     } catch (error) {
         return res.error({ description: error.message, code: error.code }, 500, 'Ошибка при получении маршрута агентов');
     }

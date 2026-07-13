@@ -10,17 +10,10 @@ export async function updateAgent(req, res) {
             return res.error({ code: 'AGENT_NOT_FOUND' }, 404, 'Агент не найден');
         }
 
-        if (updates.code && updates.code !== agent.code) {
-            const codeTaken = await Agent.exists({ code: updates.code, _id: { $ne: agent._id } });
-            if (codeTaken) {
-                return res.error({ code: 'AGENT_CODE_TAKEN', description: `Агент с code "${updates.code}" уже существует` }, 409, 'Код агента уже используется');
-            }
-        }
-
-        if (updates.nextAgentCode) {
-            const nextExists = await Agent.exists({ code: updates.nextAgentCode });
+        if (updates.nextAgentId) {
+            const nextExists = await Agent.exists({ _id: updates.nextAgentId });
             if (!nextExists) {
-                return res.error({ code: 'AGENT_NOT_FOUND', description: `nextAgentCode "${updates.nextAgentCode}" не найден` }, 400, 'nextAgentCode должен ссылаться на существующего агента');
+                return res.error({ code: 'AGENT_NOT_FOUND', description: `nextAgentId "${updates.nextAgentId}" не найден` }, 400, 'nextAgentId должен ссылаться на существующего агента');
             }
         }
 

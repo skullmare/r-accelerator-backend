@@ -47,7 +47,7 @@ export async function ensureCollection() {
 }
 
 // chunks: [{ chunkIndex, text, textHash }]
-export async function upsertChunks({ projectId, agentCode = null, sourceType, sourceId, chunks, visibility = 'private_project' }) {
+export async function upsertChunks({ projectId, agentId = null, sourceType, sourceId, chunks, visibility = 'private_project' }) {
     if (!projectId) throw new Error('projectId обязателен для индексации в Qdrant');
     if (chunks.length === 0) return [];
 
@@ -61,7 +61,7 @@ export async function upsertChunks({ projectId, agentCode = null, sourceType, so
         vector: vectors[i],
         payload: {
             projectId: String(projectId),
-            agentCode: agentCode ?? null,
+            agentId: agentId ?? null,
             sourceType,
             sourceId: String(sourceId),
             chunkIndex: chunk.chunkIndex,

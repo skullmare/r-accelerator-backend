@@ -17,7 +17,6 @@ async function createAdminUser() {
 
 function agentPayload(overrides = {}) {
     return {
-        code: 'R1',
         name: 'Роман',
         roleTitle: 'Эксперт по рынку',
         order: 1,
@@ -32,16 +31,17 @@ function agentPayload(overrides = {}) {
 }
 
 describe('POST /accelerator/admin/agents', () => {
-    it('создаёт агента с generic code (не завязанным на фиксированный enum)', async () => {
+    it('создаёт агента, идентифицируемого по _id (без отдельного человекочитаемого кода)', async () => {
         const admin = await createAdminUser();
 
         const res = await request(app)
             .post('/api/v1/accelerator/admin/agents')
             .set('Cookie', authCookie(admin._id, admin.email))
-            .send(agentPayload({ code: 'onboarding-coach', name: 'Коуч' }));
+            .send(agentPayload({ name: 'Коуч' }));
 
         expect(res.status).toBe(201);
-        expect(res.body.data.code).toBe('onboarding-coach');
+        expect(res.body.data._id).toEqual(expect.any(String));
+        expect(res.body.data.code).toBeUndefined();
         expect(res.body.data.contextPolicy.qdrantTopK).toBe(6);
         expect(res.body.data.modelConfig.provider).toBe('openai');
     });
@@ -65,55 +65,43 @@ describe('POST /accelerator/admin/agents', () => {
         expect(res.status).toBe(401);
     });
 
-    it('возвращает 409 при повторном code', async () => {
-        const admin = await createAdminUser();
-        await Agent.create(agentPayload());
-
-        const res = await request(app)
-            .post('/api/v1/accelerator/admin/agents')
-            .set('Cookie', authCookie(admin._id, admin.email))
-            .send(agentPayload());
-
-        expect(res.status).toBe(409);
-    });
-
-    it('возвращает 400 если nextAgentCode ссылается на несуществующего агента', async () => {
+    it('возвращает 400 если nextAgentId ссылается на несуществующего агента', async () => {
         const admin = await createAdminUser();
 
         const res = await request(app)
             .post('/api/v1/accelerator/admin/agents')
             .set('Cookie', authCookie(admin._id, admin.email))
-            .send(agentPayload({ nextAgentCode: 'R2' }));
+            .send(agentPayload({ nextAgentId: '507f1f77bcf86cd799439099' }));
 
         expect(res.status).toBe(400);
     });
 
-    it('создаёт R1 -> R2 маршрут когда R2 уже существует', async () => {
+    it('создаёт R1 -> R2 маршрут по _id, когда R2 уже существует', async () => {
         const admin = await createAdminUser();
-        await Agent.create(agentPayload({ code: 'R2', name: 'Регина', order: 2 }));
+        const regina = await Agent.create(agentPayload({ name: 'Регина', order: 2 }));
 
         const res = await request(app)
             .post('/api/v1/accelerator/admin/agents')
             .set('Cookie', authCookie(admin._id, admin.email))
-            .send(agentPayload({ nextAgentCode: 'R2' }));
+            .send(agentPayload({ nextAgentId: String(regina._id) }));
 
         expect(res.status).toBe(201);
-        expect(res.body.data.nextAgentCode).toBe('R2');
+        expect(res.body.data.nextAgentId).toBe(String(regina._id));
     });
 });
 
 describe('GET /accelerator/admin/agents', () => {
     it('возвращает список агентов, отсортированный по order', async () => {
         const admin = await createAdminUser();
-        await Agent.create(agentPayload({ code: 'R2', name: 'Регина', order: 2 }));
-        await Agent.create(agentPayload({ code: 'R1', name: 'Роман', order: 1 }));
+        await Agent.create(agentPayload({ name: 'Регина', order: 2 }));
+        await Agent.create(agentPayload({ name: 'Роман', order: 1 }));
 
         const res = await request(app)
             .get('/api/v1/accelerator/admin/agents')
             .set('Cookie', authCookie(admin._id, admin.email));
 
         expect(res.status).toBe(200);
-        expect(res.body.data.map((a) => a.code)).toEqual(['R1', 'R2']);
+        expect(res.body.data.map((a) => a.name)).toEqual(['Роман', 'Регина']);
     });
 
     it('обычный пользователь не видит systemPrompt агентов (403)', async () => {
@@ -151,5 +139,17 @@ describe('PATCH /accelerator/admin/agents/:agentId', () => {
             .send({ isActive: false });
 
         expect(res.status).toBe(404);
+    });
+
+    it('возвращает 400 если nextAgentId ссылается на несуществующего агента', async () => {
+        const admin = await createAdminUser();
+        const agent = await Agent.create(agentPayload());
+
+        const res = await request(app)
+            .patch(`/api/v1/accelerator/admin/agents/${agent._id}`)
+            .set('Cookie', authCookie(admin._id, admin.email))
+            .send({ nextAgentId: '507f1f77bcf86cd799439099' });
+
+        expect(res.status).toBe(400);
     });
 });

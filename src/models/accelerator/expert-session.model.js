@@ -6,10 +6,10 @@ const ExpertSessionSchema = new mongoose.Schema({
         ref: 'Project',
         required: true
     },
-    agentCode: {
-        type: String,
-        required: true,
-        trim: true
+    agentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Agent',
+        required: true
     },
     status: {
         type: String,
@@ -34,7 +34,7 @@ const ExpertSessionSchema = new mongoose.Schema({
     timestamps: true
 });
 
-ExpertSessionSchema.index({ projectId: 1, agentCode: 1, createdAt: -1 });
+ExpertSessionSchema.index({ projectId: 1, agentId: 1, createdAt: -1 });
 
 const ExpertSession = mongoose.model('ExpertSession', ExpertSessionSchema);
 export default ExpertSession;

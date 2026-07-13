@@ -4,15 +4,10 @@ export async function createAgent(req, res) {
     try {
         const data = req.validatedData.body;
 
-        const existing = await Agent.findOne({ code: data.code });
-        if (existing) {
-            return res.error({ code: 'AGENT_CODE_TAKEN', description: `Агент с code "${data.code}" уже существует` }, 409, 'Код агента уже используется');
-        }
-
-        if (data.nextAgentCode) {
-            const nextExists = await Agent.exists({ code: data.nextAgentCode });
+        if (data.nextAgentId) {
+            const nextExists = await Agent.exists({ _id: data.nextAgentId });
             if (!nextExists) {
-                return res.error({ code: 'AGENT_NOT_FOUND', description: `nextAgentCode "${data.nextAgentCode}" не найден` }, 400, 'nextAgentCode должен ссылаться на существующего агента');
+                return res.error({ code: 'AGENT_NOT_FOUND', description: `nextAgentId "${data.nextAgentId}" не найден` }, 400, 'nextAgentId должен ссылаться на существующего агента');
             }
         }
 

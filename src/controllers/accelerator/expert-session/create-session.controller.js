@@ -2,9 +2,9 @@ import { createSession, ExpertSessionError } from '../../../services/accelerator
 
 export async function createExpertSession(req, res) {
     try {
-        const { agentCode } = req.validatedData.body;
+        const { agentId } = req.validatedData.body;
 
-        const { session } = await createSession(req.project, agentCode);
+        const { session } = await createSession(req.project, agentId);
 
         return res.success({ session }, 'Экспертная сессия создана', 201);
     } catch (error) {

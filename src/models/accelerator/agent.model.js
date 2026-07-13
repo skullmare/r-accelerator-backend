@@ -1,17 +1,10 @@
 import mongoose from 'mongoose';
 
-// Generic, admin-defined AI agent. `code` is a free-form string chosen by
-// whoever creates the agent (e.g. "R1", "onboarding-coach") — this schema
-// makes no assumption about a fixed R1..R5 route. Ordering and routing
-// between agents is entirely data-driven via `order` and `nextAgentCode`.
+// Generic, admin-defined AI agent — this schema makes no assumption about
+// a fixed R1..R5 route. Agents are identified by their Mongo _id (a stable,
+// immutable surrogate key); ordering and routing between agents is
+// data-driven via `order` and `nextAgentId`.
 const AgentSchema = new mongoose.Schema({
-    code: {
-        type: String,
-        required: true,
-        unique: true,
-        trim: true,
-        maxlength: 50
-    },
     name: {
         type: String,
         required: true,
@@ -49,9 +42,9 @@ const AgentSchema = new mongoose.Schema({
         outputSchema: { type: mongoose.Schema.Types.Mixed, default: null },
         summaryField: { type: String, trim: true, default: 'summary', maxlength: 100 }
     },
-    nextAgentCode: {
-        type: String,
-        trim: true,
+    nextAgentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Agent',
         default: null
     },
     contextPolicy: {

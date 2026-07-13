@@ -37,19 +37,19 @@ router.get('/', listAgents);
  *     tags: [Accelerator / Admin Agents]
  *     summary: Создать агента
  *     description: |
- *       Агент — универсальная сущность: code задаётся администратором произвольно
- *       (например "R1", "onboarding-coach"), система не завязана на фиксированный
- *       набор R1-R5. order определяет последовательность, nextAgentCode — переход
- *       после завершения (должен ссылаться на существующий code или быть пустым).
+ *       Агент — универсальная сущность, система не завязана на фиксированный
+ *       набор R1-R5. Идентифицируется своим _id (Mongo ObjectId) — отдельного
+ *       человекочитаемого кода нет. order определяет последовательность,
+ *       nextAgentId — переход после завершения (должен ссылаться на
+ *       существующего агента по _id или быть пустым).
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [code, name, roleTitle, order, systemPrompt, completionCriteria, artifactDefinition]
+ *             required: [name, roleTitle, order, systemPrompt, completionCriteria, artifactDefinition]
  *             properties:
- *               code: { type: string }
  *               name: { type: string }
  *               roleTitle: { type: string }
  *               order: { type: integer }
@@ -65,7 +65,7 @@ router.get('/', listAgents);
  *                   requiredFields: { type: array, items: { type: string } }
  *                   outputSchema: { type: object, nullable: true }
  *                   summaryField: { type: string, default: summary }
- *               nextAgentCode: { type: string, nullable: true }
+ *               nextAgentId: { type: string, nullable: true, description: "_id другого агента" }
  *               contextPolicy:
  *                 type: object
  *                 properties:
@@ -85,13 +85,11 @@ router.get('/', listAgents);
  *       201:
  *         description: Агент создан
  *       400:
- *         description: Ошибка валидации или nextAgentCode не существует
+ *         description: Ошибка валидации или nextAgentId не существует
  *       401:
  *         description: Требуется авторизация
  *       403:
  *         description: Недостаточно прав
- *       409:
- *         description: code уже используется
  */
 router.post('/', validate(agentSchemas.createAgentSchema), createAgent);
 
@@ -128,11 +126,10 @@ router.get('/:agentId', validate(agentSchemas.agentIdSchema), getAgent);
  *         schema: { type: string }
  *     responses:
  *       200: { description: Агент обновлён }
- *       400: { description: Ошибка валидации или nextAgentCode не существует }
+ *       400: { description: Ошибка валидации или nextAgentId не существует }
  *       401: { description: Требуется авторизация }
  *       403: { description: Недостаточно прав }
  *       404: { description: Агент не найден }
- *       409: { description: code уже используется }
  */
 router.patch('/:agentId', validate(agentSchemas.updateAgentSchema), updateAgent);
 

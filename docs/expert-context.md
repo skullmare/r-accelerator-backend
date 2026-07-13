@@ -17,7 +17,7 @@
 
 ```
 projectId    string   — обязателен, единственный ключ фильтрации при поиске
-agentCode    string | null
+agentId      string | null   — строковое представление Agent._id
 sourceType   enum     — project_summary | agent_summary | artifact | file_chunk | user_note
 sourceId     string   — id исходной сущности в MongoDB
 chunkIndex   number
@@ -68,9 +68,9 @@ Point id — детерминированный UUID v5 от `sourceId:chunkInde
 Два прохода завершения (DONE-3..DONE-5):
 
 - без `confirmArtifact` — создаётся `Artifact.status=ready`,
-  `ExpertSession.status=waiting_user_confirmation`, `Project.currentAgentCode`
+  `ExpertSession.status=waiting_user_confirmation`, `Project.currentAgentId`
   **не меняется**;
 - с `confirmArtifact:true` — `Artifact.status=confirmed`, артефакт
   индексируется в Qdrant (`sourceType=artifact`), `Project.contextSummary`
-  дополняется его summary, `Project.currentAgentCode` переключается на
-  `Agent.nextAgentCode`.
+  дополняется его summary, `Project.currentAgentId` переключается на
+  `Agent.nextAgentId`.

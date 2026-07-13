@@ -80,6 +80,14 @@ const PERMISSIONS_CONFIG = {
                 key: 'study_agents.delete', label: 'Удаление обучающего агента'
             }
         }
+    },
+    ACCELERATOR_AGENTS: {
+        label: "Агенты Р-Акселератора",
+        actions: {
+            MANAGE: {
+                key: 'accelerator_agents.manage', label: 'Управление агентами Р-Акселератора (системные промпты, критерии завершения, артефакты)'
+            }
+        }
     }
 }
 

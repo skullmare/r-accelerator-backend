@@ -18,18 +18,27 @@ const router = express.Router();
  *   get:
  *     tags: [Study / Agents]
  *     summary: Список ассистентов OpenAI
- *     description: Возвращает id и имя каждого ассистента из OpenAI для привязки к агенту. Требует одно из прав 'study_agents.read', 'study_agents.create', 'study_agents.update'.
+ *     description: Возвращает id и имя каждого ассистента из OpenAI для привязки к агенту (при создании/редактировании через openAiAssistantId). Требует одно из прав 'study_agents.read', 'study_agents.create', 'study_agents.update'.
  *     responses:
  *       200:
  *         description: Список ассистентов
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/OpenAiAssistant'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Список ассистентов получен" }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/OpenAiAssistant'
  *       403:
  *         description: Недостаточно прав
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/assistants', authMiddleware, checkPermission(['study_agents.read', 'study_agents.create', 'study_agents.update'], 'any'), listOpenAiAssistants);
 
@@ -46,11 +55,20 @@ router.get('/assistants', authMiddleware, checkPermission(['study_agents.read', 
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/StudyAgent'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Список агентов получен" }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/StudyAgent'
  *       403:
  *         description: Недостаточно прав
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/', authMiddleware, checkPermission('study_agents.read'), listAgents);
 
@@ -72,27 +90,41 @@ router.get('/', authMiddleware, checkPermission('study_agents.read'), listAgents
  *               name:
  *                 type: string
  *                 maxLength: 100
+ *                 description: Имя агента для интерфейса.
  *               description:
  *                 type: string
  *                 maxLength: 500
+ *                 description: Описание агента для каталога.
  *               role:
  *                 type: string
  *                 maxLength: 100
  *                 nullable: true
+ *                 description: Короткая пометка роли — только для отображения.
  *               avatar:
  *                 type: string
  *                 format: uri
+ *                 description: URL аватарки агента.
  *               openAiAssistantId:
  *                 type: string
+ *                 description: Id существующего ассистента в OpenAI (см. GET /study/agents/assistants).
  *     responses:
  *       201:
  *         description: Агент создан
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/StudyAgent'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Агент создан" }
+ *                 data:
+ *                   $ref: '#/components/schemas/StudyAgent'
  *       400:
  *         description: Ошибка валидации
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/', authMiddleware, checkPermission('study_agents.create'), validate(agentSchemas.createAgentSchema), createAgent);
 
@@ -115,9 +147,18 @@ router.post('/', authMiddleware, checkPermission('study_agents.create'), validat
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/StudyAgent'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Агент получен" }
+ *                 data:
+ *                   $ref: '#/components/schemas/StudyAgent'
  *       404:
  *         description: Агент не найден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/:id', authMiddleware, checkPermission('study_agents.read'), validate(agentSchemas.agentIdSchema), getAgent);
 
@@ -162,9 +203,18 @@ router.get('/:id', authMiddleware, checkPermission('study_agents.read'), validat
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/StudyAgent'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Агент обновлён" }
+ *                 data:
+ *                   $ref: '#/components/schemas/StudyAgent'
  *       404:
  *         description: Агент не найден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.patch('/:id', authMiddleware, checkPermission('study_agents.update'), validate(agentSchemas.updateAgentSchema), updateAgent);
 
@@ -184,8 +234,20 @@ router.patch('/:id', authMiddleware, checkPermission('study_agents.update'), val
  *     responses:
  *       200:
  *         description: Агент удалён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Агент удалён" }
+ *                 data: { type: object, example: {} }
  *       404:
  *         description: Агент не найден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.delete('/:id', authMiddleware, checkPermission('study_agents.delete'), validate(agentSchemas.agentIdSchema), deleteAgent);
 

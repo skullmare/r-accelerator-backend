@@ -31,36 +31,63 @@ const router = express.Router();
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   _id:
- *                     type: string
- *                   name:
- *                     type: string
- *                   description:
- *                     type: string
- *                     nullable: true
- *                   coverMeta:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Список программ получен" }
+ *                 data:
+ *                   type: array
+ *                   description: >
+ *                     list-programs.controller.js делает StudyProgram.find с проекцией
+ *                     'name description coverMeta cover sequential active qrCode createdAt'
+ *                     без populate — поле modules в списке отсутствует.
+ *                   items:
  *                     type: object
- *                     nullable: true
- *                     additionalProperties: true
- *                   cover:
- *                     type: string
- *                     nullable: true
- *                     description: URL обложки программы
- *                   sequential:
- *                     type: boolean
- *                   active:
- *                     type: boolean
- *                   qrCode:
- *                     type: string
- *                   createdAt:
- *                     type: string
- *                     format: date-time
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                         description: Идентификатор программы.
+ *                       name:
+ *                         type: string
+ *                         description: Название программы обучения.
+ *                       description:
+ *                         type: string
+ *                         nullable: true
+ *                         description: Описание программы для каталога.
+ *                       coverMeta:
+ *                         type: object
+ *                         nullable: true
+ *                         additionalProperties: true
+ *                         description: >
+ *                           Технические метаданные обложки из S3 (например, размер/тип) —
+ *                           произвольная структура, задаётся на загрузке обложки.
+ *                       cover:
+ *                         type: string
+ *                         nullable: true
+ *                         description: URL обложки программы для каталога.
+ *                       sequential:
+ *                         type: boolean
+ *                         description: Если true — элементы программы открываются строго по порядку.
+ *                       active:
+ *                         type: boolean
+ *                         description: >
+ *                           Активна ли программа. join-program.controller.js ищет программу
+ *                           по qrCode только среди active:true.
+ *                       qrCode:
+ *                         type: string
+ *                         description: >
+ *                           Уникальный код (по факту — SHA-256-хэш) для присоединения к
+ *                           программе через POST /study/programs/join.
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Момент создания программы.
  *       403:
  *         description: Недостаточно прав
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/', authMiddleware, checkPermission('study_programs.read'), listPrograms);
 
@@ -82,60 +109,86 @@ router.get('/', authMiddleware, checkPermission('study_programs.read'), listProg
  *               name:
  *                 type: string
  *                 maxLength: 100
+ *                 description: Название программы обучения.
  *               description:
  *                 type: string
  *                 nullable: true
  *                 maxLength: 2000
- *                 description: Небольшой текст для UI
+ *                 description: Небольшой текст описания для каталога программ.
  *               coverMeta:
  *                 type: object
  *                 nullable: true
  *                 additionalProperties: true
- *                 description: Произвольный JSON-объект с мета-данными обложки для UI
+ *                 description: Произвольный JSON-объект с мета-данными обложки для UI (например, размер/тип из S3).
  *               cover:
  *                 type: string
  *                 nullable: true
- *                 description: URL обложки программы
+ *                 description: URL обложки программы.
  *               sequential:
  *                 type: boolean
  *                 default: true
- *                 description: Если true — уроки открываются последовательно
+ *                 description: >
+ *                   Если true — элементы программы открываются строго по порядку
+ *                   (см. check-item-unlocked.middleware.js). Если false — доступны сразу все.
  *               active:
  *                 type: boolean
  *                 default: true
+ *                 description: >
+ *                   Активна ли программа. join-program.controller.js позволяет присоединиться
+ *                   по qrCode только к программам с active:true.
  *     responses:
  *       201:
- *         description: Программа создана
+ *         description: Программа создана. qrCode генерируется автоматически (SHA-256-хэш), modules всегда пуст при создании.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 _id:
- *                   type: string
- *                 name:
- *                   type: string
- *                 cover:
- *                   type: string
- *                   nullable: true
- *                 sequential:
- *                   type: boolean
- *                 active:
- *                   type: boolean
- *                 qrCode:
- *                   type: string
- *                 modules:
- *                   type: array
- *                   items: {}
- *                   example: []
- *                 createdAt:
- *                   type: string
- *                   format: date-time
- *                 updatedAt:
- *                   type: string
- *                   format: date-time
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Программа создана" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                       description: Идентификатор программы.
+ *                     name:
+ *                       type: string
+ *                       description: Название программы обучения.
+ *                     cover:
+ *                       type: string
+ *                       nullable: true
+ *                       description: URL обложки программы.
+ *                     sequential:
+ *                       type: boolean
+ *                       description: Если true — элементы программы открываются строго по порядку.
+ *                     active:
+ *                       type: boolean
+ *                       description: Активна ли программа.
+ *                     qrCode:
+ *                       type: string
+ *                       description: >
+ *                         Уникальный код (SHA-256-хэш) для присоединения к программе через
+ *                         POST /study/programs/join.
+ *                     modules:
+ *                       type: array
+ *                       items: {}
+ *                       example: []
+ *                       description: Модули программы — всегда пустой массив сразу после создания.
+ *                     createdAt:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Момент создания программы.
+ *                     updatedAt:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Момент последнего изменения программы.
  *       400:
  *         description: Ошибка валидации
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/', authMiddleware, checkPermission('study_programs.create'), validate(programSchemas.createProgramSchema), createProgram);
 
@@ -145,7 +198,11 @@ router.post('/', authMiddleware, checkPermission('study_programs.create'), valid
  *   get:
  *     tags: [Study / Programs]
  *     summary: Получить программу по ID
- *     description: Требует право 'study_programs.read'. Возвращает программу с модулями. items внутри модулей содержат item как ID строку (не популяция).
+ *     description: >
+ *       Требует право 'study_programs.read'. Возвращает программу с модулями.
+ *       get-program.controller.js делает .populate('modules.items.item') без выбора
+ *       полей, поэтому item внутри каждого элемента модуля — это ПОЛНЫЙ документ
+ *       StudyLesson или StudyAgent (в зависимости от соседнего поля type), а не ID-строка.
  *     parameters:
  *       - in: path
  *         name: programId
@@ -160,49 +217,16 @@ router.post('/', authMiddleware, checkPermission('study_programs.create'), valid
  *             schema:
  *               type: object
  *               properties:
- *                 _id:
- *                   type: string
- *                 name:
- *                   type: string
- *                 cover:
- *                   type: string
- *                   nullable: true
- *                 sequential:
- *                   type: boolean
- *                 active:
- *                   type: boolean
- *                 qrCode:
- *                   type: string
- *                 modules:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       _id:
- *                         type: string
- *                       name:
- *                         type: string
- *                       items:
- *                         type: array
- *                         items:
- *                           type: object
- *                           properties:
- *                             _id:
- *                               type: string
- *                             type:
- *                               type: string
- *                               enum: [StudyLesson, StudyAgent]
- *                             item:
- *                               type: string
- *                               description: ID урока или агента
- *                 createdAt:
- *                   type: string
- *                   format: date-time
- *                 updatedAt:
- *                   type: string
- *                   format: date-time
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Программа получена" }
+ *                 data:
+ *                   $ref: '#/components/schemas/StudyProgram'
  *       404:
  *         description: Программа не найдена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/:programId', authMiddleware, checkPermission('study_programs.read'), validate(programSchemas.programIdSchema), getProgram);
 
@@ -228,26 +252,33 @@ router.get('/:programId', authMiddleware, checkPermission('study_programs.read')
  *             properties:
  *               name:
  *                 type: string
+ *                 description: Название программы обучения.
  *               description:
  *                 type: string
  *                 nullable: true
  *                 maxLength: 2000
+ *                 description: Небольшой текст описания для каталога программ.
  *               coverMeta:
  *                 type: object
  *                 nullable: true
  *                 additionalProperties: true
- *                 description: Произвольный JSON-объект с мета-данными обложки
+ *                 description: Произвольный JSON-объект с мета-данными обложки.
  *               cover:
  *                 type: string
  *                 nullable: true
- *                 description: URL обложки программы
+ *                 description: URL обложки программы.
  *               sequential:
  *                 type: boolean
+ *                 description: Если true — элементы программы открываются строго по порядку.
  *               active:
  *                 type: boolean
+ *                 description: Активна ли программа (только активные доступны для join по qrCode).
  *               updateQRCode:
  *                 type: boolean
- *                 description: Перегенерировать QR-код
+ *                 description: >
+ *                   Если true — сгенерировать новый qrCode (update-program.controller.js
+ *                   заменяет его свежим crypto.randomBytes(32).toString('hex')). Само поле
+ *                   updateQRCode в базу не пишется, используется только как флаг для контроллера.
  *     responses:
  *       200:
  *         description: Программа обновлена
@@ -256,49 +287,51 @@ router.get('/:programId', authMiddleware, checkPermission('study_programs.read')
  *             schema:
  *               type: object
  *               properties:
- *                 _id:
- *                   type: string
- *                 name:
- *                   type: string
- *                 cover:
- *                   type: string
- *                   nullable: true
- *                 sequential:
- *                   type: boolean
- *                 active:
- *                   type: boolean
- *                 qrCode:
- *                   type: string
- *                 modules:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       _id:
- *                         type: string
- *                       name:
- *                         type: string
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Программа обновлена" }
+ *                 data:
+ *                   type: object
+ *                   description: >
+ *                     Полный документ программы без populate — items внутри модулей
+ *                     содержат item как ID-строку (в отличие от GET /study/programs/{programId}).
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                       description: Идентификатор программы.
+ *                     name:
+ *                       type: string
+ *                       description: Название программы обучения.
+ *                     cover:
+ *                       type: string
+ *                       nullable: true
+ *                       description: URL обложки программы.
+ *                     sequential:
+ *                       type: boolean
+ *                       description: Если true — элементы программы открываются строго по порядку.
+ *                     active:
+ *                       type: boolean
+ *                       description: Активна ли программа.
+ *                     qrCode:
+ *                       type: string
+ *                       description: Уникальный код (SHA-256-хэш) для присоединения к программе.
+ *                     modules:
+ *                       type: array
  *                       items:
- *                         type: array
- *                         items:
- *                           type: object
- *                           properties:
- *                             _id:
- *                               type: string
- *                             type:
- *                               type: string
- *                               enum: [StudyLesson, StudyAgent]
- *                             item:
- *                               type: string
- *                               description: ID урока или агента
- *                 createdAt:
- *                   type: string
- *                   format: date-time
- *                 updatedAt:
- *                   type: string
- *                   format: date-time
+ *                         $ref: '#/components/schemas/StudyModule'
+ *                     createdAt:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Момент создания программы.
+ *                     updatedAt:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Момент последнего изменения программы.
  *       404:
  *         description: Программа не найдена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.patch('/:programId', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.updateProgramSchema), updateProgram);
 
@@ -318,8 +351,20 @@ router.patch('/:programId', authMiddleware, checkPermission('study_programs.upda
  *     responses:
  *       200:
  *         description: Программа удалена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Программа удалена" }
+ *                 data: { type: object, example: {} }
  *       404:
  *         description: Программа не найдена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.delete('/:programId', authMiddleware, checkPermission('study_programs.delete'), validate(programSchemas.programIdSchema), deleteProgram);
 
@@ -347,24 +392,37 @@ router.delete('/:programId', authMiddleware, checkPermission('study_programs.del
  *               name:
  *                 type: string
  *                 maxLength: 100
+ *                 description: Название модуля программы.
  *     responses:
  *       201:
- *         description: Модуль добавлен
+ *         description: Модуль добавлен. items всегда пуст сразу после добавления.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 _id:
- *                   type: string
- *                 name:
- *                   type: string
- *                 items:
- *                   type: array
- *                   items: {}
- *                   example: []
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Модуль добавлен" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                       description: Идентификатор модуля.
+ *                     name:
+ *                       type: string
+ *                       description: Название модуля программы.
+ *                     items:
+ *                       type: array
+ *                       items: {}
+ *                       example: []
+ *                       description: Список элементов модуля — пуст сразу после создания.
  *       404:
  *         description: Программа не найдена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/:programId/modules', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.addModuleSchema), addModule);
 
@@ -394,38 +452,34 @@ router.post('/:programId/modules', authMiddleware, checkPermission('study_progra
  *                 minItems: 1
  *                 items:
  *                   type: string
- *                 description: Массив ID модулей в новом порядке
+ *                 description: Массив ID модулей в новом порядке — должен содержать все moduleId программы.
  *     responses:
  *       200:
  *         description: Порядок модулей обновлён
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   _id:
- *                     type: string
- *                   name:
- *                     type: string
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Порядок модулей обновлён" }
+ *                 data:
+ *                   type: array
+ *                   description: Модули программы (program.modules) в новом порядке.
  *                   items:
- *                     type: array
- *                     items:
- *                       type: object
- *                       properties:
- *                         _id:
- *                           type: string
- *                         type:
- *                           type: string
- *                           enum: [StudyLesson, StudyAgent]
- *                         item:
- *                           type: string
- *                           description: ID урока или агента
+ *                     $ref: '#/components/schemas/StudyModule'
  *       400:
  *         description: Один или несколько moduleId не принадлежат программе
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         description: Программа не найдена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.patch('/:programId/modules/reorder', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.reorderModulesSchema), reorderModules);
 
@@ -458,6 +512,7 @@ router.patch('/:programId/modules/reorder', authMiddleware, checkPermission('stu
  *               name:
  *                 type: string
  *                 maxLength: 100
+ *                 description: Новое название модуля программы.
  *     responses:
  *       200:
  *         description: Модуль обновлён
@@ -466,25 +521,16 @@ router.patch('/:programId/modules/reorder', authMiddleware, checkPermission('stu
  *             schema:
  *               type: object
  *               properties:
- *                 _id:
- *                   type: string
- *                 name:
- *                   type: string
- *                 items:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       _id:
- *                         type: string
- *                       type:
- *                         type: string
- *                         enum: [StudyLesson, StudyAgent]
- *                       item:
- *                         type: string
- *                         description: ID урока или агента
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Модуль обновлён" }
+ *                 data:
+ *                   $ref: '#/components/schemas/StudyModule'
  *       404:
  *         description: Программа или модуль не найдены
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.patch('/:programId/modules/:moduleId', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.updateModuleSchema), updateModule);
 
@@ -509,8 +555,20 @@ router.patch('/:programId/modules/:moduleId', authMiddleware, checkPermission('s
  *     responses:
  *       200:
  *         description: Модуль удалён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Модуль удалён" }
+ *                 data: { type: object, example: {} }
  *       404:
  *         description: Программа не найдена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.delete('/:programId/modules/:moduleId', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.deleteModuleSchema), deleteModule);
 
@@ -543,28 +601,30 @@ router.delete('/:programId/modules/:moduleId', authMiddleware, checkPermission('
  *               type:
  *                 type: string
  *                 enum: [StudyLesson, StudyAgent]
+ *                 description: Тип добавляемого элемента — определяет, в какую коллекцию ссылается item.
  *               item:
  *                 type: string
- *                 description: ID урока или агента
+ *                 description: ID урока (если type=StudyLesson) или агента (если type=StudyAgent).
  *     responses:
  *       201:
- *         description: Элемент добавлен. item возвращается как ID (не популяция)
+ *         description: >
+ *           Элемент добавлен. add-module-item.controller.js не делает populate, поэтому
+ *           item в ответе — это ID-строка, а не документ.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 _id:
- *                   type: string
- *                 type:
- *                   type: string
- *                   enum: [StudyLesson, StudyAgent]
- *                   description: StudyLesson — урок, StudyAgent — агент
- *                 item:
- *                   type: string
- *                   description: ID урока или агента
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Элемент добавлен в модуль" }
+ *                 data:
+ *                   $ref: '#/components/schemas/ModuleItem'
  *       404:
  *         description: Программа или модуль не найдены
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/:programId/modules/:moduleId/items', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.addModuleItemSchema), addModuleItem);
 
@@ -594,8 +654,20 @@ router.post('/:programId/modules/:moduleId/items', authMiddleware, checkPermissi
  *     responses:
  *       200:
  *         description: Элемент удалён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Элемент удалён из модуля" }
+ *                 data: { type: object, example: {} }
  *       404:
  *         description: Программа или модуль не найдены
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.delete('/:programId/modules/:moduleId/items/:itemId', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.deleteModuleItemSchema), deleteModuleItem);
 
@@ -628,6 +700,10 @@ router.delete('/:programId/modules/:moduleId/items/:itemId', authMiddleware, che
  *               items:
  *                 type: array
  *                 minItems: 1
+ *                 description: >
+ *                   Полный новый массив элементов модуля в нужном порядке — полностью
+ *                   заменяет modules.$.items (reorder-module-items.controller.js делает
+ *                   $set, а не переупорядочивание по _id).
  *                 items:
  *                   type: object
  *                   required: [type, item]
@@ -635,28 +711,31 @@ router.delete('/:programId/modules/:moduleId/items/:itemId', authMiddleware, che
  *                     type:
  *                       type: string
  *                       enum: [StudyLesson, StudyAgent]
+ *                       description: Тип элемента — определяет, в какую коллекцию ссылается item.
  *                     item:
  *                       type: string
+ *                       description: ID урока или агента.
  *     responses:
  *       200:
  *         description: Порядок элементов обновлён
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   _id:
- *                     type: string
- *                   type:
- *                     type: string
- *                     enum: [StudyLesson, StudyAgent]
- *                   item:
- *                     type: string
- *                     description: ID урока или агента
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Порядок элементов обновлён" }
+ *                 data:
+ *                   type: array
+ *                   description: Обновлённый список items модуля (без populate).
+ *                   items:
+ *                     $ref: '#/components/schemas/ModuleItem'
  *       404:
  *         description: Программа или модуль не найдены
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.patch('/:programId/modules/:moduleId/items/reorder', authMiddleware, checkPermission('study_programs.update'), validate(programSchemas.reorderModuleItemsSchema), reorderModuleItems);
 

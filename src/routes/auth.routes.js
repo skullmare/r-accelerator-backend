@@ -14,7 +14,7 @@ const router = express.Router();
  *   post:
  *     tags: [Auth]
  *     summary: Отправить код подтверждения на email
- *     description: Отправляет 6-значный код на указанный email. Создаёт пользователя, если он не существует.
+ *     description: Отправляет 6-значный код на указанный email (действителен 15 минут). Создаёт пользователя, если он не существует.
  *     security: []
  *     requestBody:
  *       required: true
@@ -27,11 +27,24 @@ const router = express.Router();
  *               email:
  *                 type: string
  *                 format: email
+ *                 description: Email, на который будет отправлен код.
  *     responses:
  *       200:
- *         description: Код отправлен
+ *         description: Код отправлен.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Код подтверждения отправлен на почту" }
+ *                 data: { type: object, example: {} }
  *       429:
- *         description: Код уже был отправлен, подождите перед повторной отправкой
+ *         description: Код уже был отправлен — нужно подождать (тот же статус используется и при сбое отправки письма на стороне SMTP).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/login', validate(authSchemas.emailSchema), sendCodeToEmail);
 
@@ -41,7 +54,7 @@ router.post('/login', validate(authSchemas.emailSchema), sendCodeToEmail);
  *   post:
  *     tags: [Auth]
  *     summary: Подтвердить код и получить токены
- *     description: Верифицирует код, устанавливает accessToken и refreshToken в cookies.
+ *     description: Проверяет код, выставляет httpOnly cookie accessToken (15 минут) и refreshToken (7 дней, scope /api/v1/auth). После 3 неверных попыток текущий код блокируется — нужно запросить новый через /auth/login.
  *     security: []
  *     requestBody:
  *       required: true
@@ -56,14 +69,35 @@ router.post('/login', validate(authSchemas.emailSchema), sendCodeToEmail);
  *                 format: email
  *               code:
  *                 type: string
+ *                 description: 6-значный код, полученный на email.
  *                 example: "123456"
  *     responses:
  *       200:
- *         description: Авторизация прошла успешно
+ *         description: Авторизация прошла успешно, accessToken/refreshToken установлены в cookies.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Авторизация прошла успешно" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string, description: "Id пользователя." }
+ *                     email: { type: string, format: email }
  *       400:
- *         description: Неверный или истёкший код
+ *         description: Код не найден, истёк или неверен.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       429:
- *         description: Превышено количество попыток
+ *         description: Превышено количество попыток ввода кода (3) — нужно запросить новый код.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/verify', validate(authSchemas.verifyCodeSchema), verificationCode);
 
@@ -73,13 +107,29 @@ router.post('/verify', validate(authSchemas.verifyCodeSchema), verificationCode)
  *   post:
  *     tags: [Auth]
  *     summary: Обновить access token
- *     description: Использует refreshToken из cookie для выдачи новой пары токенов.
+ *     description: Использует refreshToken из cookie, чтобы выдать новую пару accessToken/refreshToken (те же сроки жизни, что и в /auth/verify).
  *     security: []
  *     responses:
  *       200:
- *         description: Токены обновлены
+ *         description: Токены обновлены, новые accessToken/refreshToken установлены в cookies.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Токены обновлены" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string, description: "Id пользователя из refresh-токена." }
+ *                     email: { type: string, format: email }
  *       401:
- *         description: Недействительный refresh token
+ *         description: refreshToken отсутствует или недействителен.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/refresh', refreshToken);
 
@@ -89,10 +139,18 @@ router.post('/refresh', refreshToken);
  *   post:
  *     tags: [Auth]
  *     summary: Выйти из аккаунта
- *     description: Очищает cookies с токенами.
+ *     description: Очищает cookies accessToken и refreshToken.
  *     responses:
  *       200:
- *         description: Выход выполнен
+ *         description: Выход выполнен.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Выход выполнен успешно" }
+ *                 data: { type: object, example: {} }
  */
 router.post('/logout', logout);
 

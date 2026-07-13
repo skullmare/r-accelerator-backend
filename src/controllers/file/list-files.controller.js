@@ -2,11 +2,12 @@ import File from '../../models/file.model.js';
 
 export async function listFiles(req, res) {
     try {
-        const { page, limit, source } = req.validatedData.query;
+        const { page, limit, source, projectId } = req.validatedData.query;
         const skip = (page - 1) * limit;
 
         const filter = { uploadedBy: req.user.id };
         if (source) filter.source = source;
+        if (projectId) filter.projectId = projectId;
 
         const [files, total] = await Promise.all([
             File.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),

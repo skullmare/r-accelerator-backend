@@ -113,12 +113,11 @@ const AgentSchema = new mongoose.Schema({
             default: ['project_summary', 'artifact', 'file_chunk']
         }
     },
-    // Настройки конкретного LLM-вызова для этого агента.
+    // Настройки конкретного LLM-вызова для этого агента. Провайдер сейчас
+    // всегда OpenAI (см. src/services/llm.service.js) — отдельного поля
+    // provider нет, выбирать нечего.
     modelConfig: {
-        // Какой провайдер использовать — openai или openrouter
-        // (см. src/services/llm.service.js).
-        provider: { type: String, enum: ['openai', 'openrouter'], default: 'openai' },
-        // Имя модели у провайдера ("gpt-4o-mini").
+        // Имя модели OpenAI ("gpt-4o-mini").
         model: { type: String, trim: true, default: 'gpt-4o-mini' },
         // Температура генерации — выше значение, разнообразнее (и менее
         // предсказуемее) ответы модели.

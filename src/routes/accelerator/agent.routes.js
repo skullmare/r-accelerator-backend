@@ -95,9 +95,9 @@ router.get('/', listAgents);
  *                   allowedSourceTypes: { type: array, items: { type: string }, description: "Какие типы источников участвуют в поиске." }
  *               modelConfig:
  *                 type: object
+ *                 description: Провайдер сейчас всегда OpenAI.
  *                 properties:
- *                   provider: { type: string, enum: [openai, openrouter], description: "Провайдер LLM." }
- *                   model: { type: string, description: "Модель провайдера." }
+ *                   model: { type: string, description: "Модель OpenAI." }
  *                   temperature: { type: number, description: "Температура генерации." }
  *                   maxTokens: { type: integer, description: "Лимит токенов на ответ модели." }
  *     responses:

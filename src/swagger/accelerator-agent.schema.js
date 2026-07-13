@@ -76,15 +76,11 @@
  *               description: Какие типы источников участвуют в Qdrant-поиске для этого агента.
  *         modelConfig:
  *           type: object
- *           description: Настройки конкретного LLM-вызова для этого агента.
+ *           description: Настройки конкретного LLM-вызова для этого агента. Провайдер сейчас всегда OpenAI.
  *           properties:
- *             provider:
- *               type: string
- *               enum: [openai, openrouter]
- *               description: Какой провайдер использовать для вызовов модели.
  *             model:
  *               type: string
- *               description: Имя модели у провайдера ("gpt-4o-mini").
+ *               description: Имя модели OpenAI ("gpt-4o-mini").
  *             temperature:
  *               type: number
  *               description: Температура генерации — выше значение, разнообразнее и менее предсказуемее ответы.

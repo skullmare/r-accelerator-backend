@@ -46,7 +46,7 @@ async function seedDemoAgents() {
             maxContextChars: 6000,
             allowedSourceTypes: ['project_summary', 'artifact', 'file_chunk']
         },
-        modelConfig: { provider: 'openai', model: 'gpt-4o-mini', temperature: 0.4, maxTokens: 1500 }
+        modelConfig: { model: 'gpt-4o-mini', temperature: 0.4, maxTokens: 1500 }
     });
     console.log(`Агент "Регина" готов (_id: ${regina._id})`);
 
@@ -76,7 +76,7 @@ async function seedDemoAgents() {
             maxContextChars: 6000,
             allowedSourceTypes: ['project_summary', 'artifact', 'file_chunk']
         },
-        modelConfig: { provider: 'openai', model: 'gpt-4o-mini', temperature: 0.4, maxTokens: 1500 }
+        modelConfig: { model: 'gpt-4o-mini', temperature: 0.4, maxTokens: 1500 }
     });
     console.log(`Агент "Роман" готов (_id: ${roman._id}, nextAgentId -> Регина)`);
 

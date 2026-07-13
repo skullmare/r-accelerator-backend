@@ -3,7 +3,7 @@ import ExpertSession from '../../models/accelerator/expert-session.model.js';
 import Message from '../../models/accelerator/message.model.js';
 import Artifact from '../../models/accelerator/artifact.model.js';
 import { assembleContext } from './context-assembly.service.js';
-import { chatComplete } from '../llm.service.js';
+import { chatCompleteStream } from '../llm.service.js';
 import { generateArtifactJson } from './artifact-generation.service.js';
 import { upsertChunks } from '../qdrant.service.js';
 import { chunkText } from '../file-processing/chunker.js';
@@ -81,7 +81,13 @@ async function getSessionHistory(sessionId) {
     return messages.map((m) => ({ role: m.senderType === 'assistant' ? 'assistant' : 'user', content: m.content }));
 }
 
-export async function sendMessage(project, session, agent, content) {
+// Delivers the agent's reply over SSE: onUserMessage fires as soon as the
+// user's own message is persisted (so the UI can render it optimistically,
+// before the LLM call even starts), onDelta fires per text fragment as the
+// model streams its answer. The full assistant message is only persisted
+// once the stream ends, so a dropped connection mid-stream can't leave a
+// half-written message in the database.
+export async function sendMessage(project, session, agent, content, { onUserMessage, onDelta } = {}) {
     if (session.status === 'completed') {
         throw new ExpertSessionError('Сессия уже завершена', 409, 'SESSION_ALREADY_COMPLETED');
     }
@@ -92,16 +98,17 @@ export async function sendMessage(project, session, agent, content) {
         senderType: 'user',
         content
     });
+    onUserMessage?.(userMessage);
 
     const { systemPrompt, contextSnapshot } = await assembleContext({ project, agent, userMessageText: content });
     const history = await getSessionHistory(session._id);
 
-    const { content: replyText, tokenUsage } = await chatComplete({
-        provider: agent.modelConfig.provider,
+    const { content: replyText, tokenUsage } = await chatCompleteStream({
         model: agent.modelConfig.model,
         temperature: agent.modelConfig.temperature,
         maxTokens: agent.modelConfig.maxTokens,
-        messages: [{ role: 'system', content: systemPrompt }, ...history]
+        messages: [{ role: 'system', content: systemPrompt }, ...history],
+        onDelta
     });
 
     const assistantMessage = await Message.create({

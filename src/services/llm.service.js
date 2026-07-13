@@ -1,23 +1,9 @@
 import openai from '../../config/openai.config.js';
 
 // messages: [{ role: 'system'|'user'|'assistant', content }]
-export async function chatComplete({ provider, model, temperature, maxTokens, messages }) {
-    if (provider === 'openrouter') {
-        // Loaded lazily: @openrouter/sdk is ESM-only with no CJS build, so
-        // importing it eagerly would force every test file that touches the
-        // routing layer to pay for transforming its whole dependency tree,
-        // even when no agent actually uses this provider.
-        const { default: openrouter } = await import('../../config/openrouter.config.js');
-        const result = await openrouter.chat.send({
-            chatRequest: { messages, model, temperature, maxTokens, stream: false }
-        });
-
-        return {
-            content: result.choices?.[0]?.message?.content ?? '',
-            tokenUsage: result.usage ?? null
-        };
-    }
-
+// Single non-streaming call — used where the full response is needed before
+// anything happens next (artifact generation parses the whole JSON reply).
+export async function chatComplete({ model, temperature, maxTokens, messages }) {
     const result = await openai.chat.completions.create({
         model,
         temperature,
@@ -29,4 +15,35 @@ export async function chatComplete({ provider, model, temperature, maxTokens, me
         content: result.choices?.[0]?.message?.content ?? '',
         tokenUsage: result.usage ?? null
     };
+}
+
+// Same call, streamed — used for chat turns delivered to the user over SSE.
+// onDelta is invoked with each text fragment as it arrives; the full
+// accumulated text (and usage, if the API returned it) is returned once the
+// stream ends, so callers can persist the complete message afterwards.
+export async function chatCompleteStream({ model, temperature, maxTokens, messages, onDelta }) {
+    const stream = await openai.chat.completions.create({
+        model,
+        temperature,
+        max_tokens: maxTokens,
+        messages,
+        stream: true,
+        stream_options: { include_usage: true }
+    });
+
+    let content = '';
+    let tokenUsage = null;
+
+    for await (const chunk of stream) {
+        const delta = chunk.choices?.[0]?.delta?.content;
+        if (delta) {
+            content += delta;
+            onDelta?.(delta);
+        }
+        if (chunk.usage) {
+            tokenUsage = chunk.usage;
+        }
+    }
+
+    return { content, tokenUsage };
 }

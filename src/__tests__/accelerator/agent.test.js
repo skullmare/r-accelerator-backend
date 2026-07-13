@@ -43,7 +43,8 @@ describe('POST /accelerator/admin/agents', () => {
         expect(res.body.data._id).toEqual(expect.any(String));
         expect(res.body.data.code).toBeUndefined();
         expect(res.body.data.contextPolicy.qdrantTopK).toBe(6);
-        expect(res.body.data.modelConfig.provider).toBe('openai');
+        expect(res.body.data.modelConfig.model).toBe('gpt-4o-mini');
+        expect(res.body.data.modelConfig.provider).toBeUndefined();
     });
 
     it('возвращает 403 без права accelerator_agents.manage', async () => {

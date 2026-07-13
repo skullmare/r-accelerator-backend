@@ -55,7 +55,6 @@ export async function generateArtifactJson({ agent, systemPrompt, conversationMe
     ];
 
     const { content: rawContent, tokenUsage } = await chatComplete({
-        provider: agent.modelConfig.provider,
         model: agent.modelConfig.model,
         temperature: agent.modelConfig.temperature,
         maxTokens: agent.modelConfig.maxTokens,

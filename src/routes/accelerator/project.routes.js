@@ -455,8 +455,23 @@ router.post('/:projectId/expert-sessions', authMiddleware, validate(expertSessio
  * /accelerator/projects/{projectId}/expert-sessions/{sessionId}/messages:
  *   post:
  *     tags: [Accelerator / Expert Sessions]
- *     summary: Отправить сообщение агенту
- *     description: Сервер собирает контекст (summary проекта, системный промпт агента, релевантные фрагменты из Qdrant, отфильтрованные по projectId) и вызывает LLM. Клиент никогда не обращается к LLM/Qdrant напрямую.
+ *     summary: Отправить сообщение агенту (SSE-стриминг)
+ *     description: |
+ *       Сервер собирает контекст (summary проекта, системный промпт агента,
+ *       релевантные фрагменты из Qdrant, отфильтрованные по projectId) и
+ *       стримит ответ модели по протоколу Server-Sent Events. Клиент
+ *       никогда не обращается к LLM/Qdrant напрямую.
+ *
+ *       Ошибки, которые можно определить до начала стриминга (сессия/агент
+ *       не найдены, сессия уже завершена), возвращаются обычным JSON-ответом
+ *       с кодом ошибки — заголовки переключаются на text/event-stream только
+ *       после этих проверок.
+ *
+ *       **Формат событий SSE:**
+ *       - `message_created` — сохранённое сообщение пользователя: `{ userMessage }`
+ *       - `delta` — фрагмент ответа агента по мере генерации: `{ text: "..." }`
+ *       - `done` — финальное сохранённое сообщение агента: `{ assistantMessage }`
+ *       - `error` — ошибка в процессе стриминга (например, сбой LLM-провайдера): `{ message, code }`
  *     parameters:
  *       - in: path
  *         name: projectId
@@ -479,25 +494,11 @@ router.post('/:projectId/expert-sessions', authMiddleware, validate(expertSessio
  *                 description: Текст сообщения пользователя агенту.
  *     responses:
  *       200:
- *         description: Сообщение обработано
+ *         description: SSE-поток с событиями стриминга (см. описание выше).
  *         content:
- *           application/json:
+ *           text/event-stream:
  *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean, example: true }
- *                 message: { type: string, example: "Сообщение обработано" }
- *                 data:
- *                   type: object
- *                   properties:
- *                     userMessage:
- *                       allOf:
- *                         - $ref: '#/components/schemas/ExpertMessage'
- *                       description: Сохранённое сообщение пользователя (senderType=user).
- *                     assistantMessage:
- *                       allOf:
- *                         - $ref: '#/components/schemas/ExpertMessage'
- *                       description: Ответ модели (senderType=assistant).
+ *               type: string
  *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       403: { description: Нет доступа к проекту, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       404: { description: Проект или сессия не найдена, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

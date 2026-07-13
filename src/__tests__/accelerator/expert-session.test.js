@@ -1,21 +1,21 @@
 import request from 'supertest';
 
 jest.mock('../../services/llm.service.js', () => ({
-    chatComplete: jest.fn(async ({ messages }) => {
-        const last = messages[messages.length - 1];
-        if (last.content.includes('Сформируй финальный артефакт')) {
-            return {
-                content: JSON.stringify({
-                    marketDescription: 'Описание рынка',
-                    nicheHypothesis: 'Гипотеза ниши',
-                    competitors: 'Конкуренты',
-                    risks: 'Риски',
-                    summary: 'Итоговая сводка по рынку'
-                }),
-                tokenUsage: { totalTokens: 42 }
-            };
-        }
-        return { content: 'Ответ агента пользователю', tokenUsage: null };
+    // Only used by artifact generation now (messages use chatCompleteStream).
+    chatComplete: jest.fn(async () => ({
+        content: JSON.stringify({
+            marketDescription: 'Описание рынка',
+            nicheHypothesis: 'Гипотеза ниши',
+            competitors: 'Конкуренты',
+            risks: 'Риски',
+            summary: 'Итоговая сводка по рынку'
+        }),
+        tokenUsage: { totalTokens: 42 }
+    })),
+    chatCompleteStream: jest.fn(async ({ onDelta }) => {
+        const text = 'Ответ агента пользователю';
+        onDelta?.(text);
+        return { content: text, tokenUsage: null };
     })
 }));
 
@@ -39,6 +39,18 @@ afterEach(async () => {
     await clearDatabase();
     jest.clearAllMocks();
 });
+
+// SSE responses come back as raw "event: X\ndata: {...}\n\n" blocks.
+function parseSSE(text) {
+    return text
+        .split('\n\n')
+        .filter((block) => block.trim().length > 0)
+        .map((block) => {
+            const event = block.match(/^event: (.+)$/m)?.[1];
+            const data = block.match(/^data: (.+)$/m)?.[1];
+            return { event, data: data ? JSON.parse(data) : null };
+        });
+}
 
 async function seedAgents() {
     const r2 = await Agent.create({
@@ -75,7 +87,7 @@ async function setupProject() {
 }
 
 describe('Экспертный маршрут R1 -> R2 (сквозной сценарий)', () => {
-    it('проходит create session -> message -> draft complete -> confirm complete -> R2', async () => {
+    it('проходит create session -> message (SSE) -> draft complete -> confirm complete -> R2', async () => {
         const { r1, r2 } = await seedAgents();
         const { owner, project } = await setupProject();
         const cookie = authCookie(owner._id, owner.email);
@@ -92,7 +104,17 @@ describe('Экспертный маршрут R1 -> R2 (сквозной сце�
             .set('Cookie', cookie)
             .send({ content: 'Опишите рынок для моего проекта' });
         expect(messageRes.status).toBe(200);
-        expect(messageRes.body.data.assistantMessage.content).toBe('Ответ агента пользователю');
+        expect(messageRes.headers['content-type']).toMatch(/text\/event-stream/);
+
+        const events = parseSSE(messageRes.text);
+        const createdEvent = events.find((e) => e.event === 'message_created');
+        const deltaEvents = events.filter((e) => e.event === 'delta');
+        const doneEvent = events.find((e) => e.event === 'done');
+
+        expect(createdEvent.data.userMessage.content).toBe('Опишите рынок для моего проекта');
+        expect(deltaEvents.length).toBeGreaterThan(0);
+        expect(deltaEvents.map((e) => e.data.text).join('')).toBe('Ответ агента пользователю');
+        expect(doneEvent.data.assistantMessage.content).toBe('Ответ агента пользователю');
 
         const draftRes = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
@@ -164,5 +186,31 @@ describe('Экспертный маршрут R1 -> R2 (сквозной сце�
 
         expect(res.status).toBe(404);
         expect(res.body.error.code).toBe('AGENT_NOT_FOUND');
+    });
+
+    it('возвращает 409 JSON-ошибкой (не SSE), если сессия уже завершена', async () => {
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+
+        const sessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', cookie)
+            .send({ agentId: String(r1._id) });
+        const sessionId = sessionRes.body.data.session._id;
+
+        await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({ confirmArtifact: true });
+
+        const res = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
+            .set('Cookie', cookie)
+            .send({ content: 'Ещё вопрос' });
+
+        expect(res.status).toBe(409);
+        expect(res.headers['content-type']).toMatch(/application\/json/);
+        expect(res.body.error.code).toBe('SESSION_ALREADY_COMPLETED');
     });
 });

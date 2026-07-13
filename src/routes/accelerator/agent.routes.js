@@ -19,14 +19,33 @@ router.use(authMiddleware, checkPermission(MANAGE));
  *   get:
  *     tags: [Accelerator / Admin Agents]
  *     summary: Список агентов Р-Акселератора
- *     description: Только для пользователей с правом accelerator_agents.manage (или superadmin). Возвращает агентов вместе с systemPrompt и completionCriteria.
+ *     description: Только для пользователей с правом accelerator_agents.manage (или superadmin). Возвращает агентов вместе с systemPrompt и completionCriteria — обычные пользователи этот эндпоинт не видят.
  *     responses:
  *       200:
- *         description: Список агентов
+ *         description: Список агентов, отсортированный по order.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Список агентов получен" }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/AcceleratorAgent'
  *       401:
  *         description: Требуется авторизация
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       403:
  *         description: Недостаточно прав
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/', listAgents);
 
@@ -50,46 +69,67 @@ router.get('/', listAgents);
  *             type: object
  *             required: [name, roleTitle, order, systemPrompt, completionCriteria, artifactDefinition]
  *             properties:
- *               name: { type: string }
- *               roleTitle: { type: string }
- *               order: { type: integer }
- *               isActive: { type: boolean, default: true }
- *               systemPrompt: { type: string }
- *               completionCriteria: { type: string }
+ *               name: { type: string, description: "Имя агента для интерфейса." }
+ *               roleTitle: { type: string, description: "Короткое описание специализации." }
+ *               order: { type: integer, description: "Порядковое место агента в маршруте." }
+ *               isActive: { type: boolean, default: true, description: "Если false — агент не участвует в пользовательском маршруте." }
+ *               systemPrompt: { type: string, description: "Базовая системная инструкция роли — уходит в LLM при каждом сообщении." }
+ *               completionCriteria: { type: string, description: "Когда этап считается завершённым (инструкция для модели, не хард-гейт на сервере)." }
  *               artifactDefinition:
  *                 type: object
  *                 required: [artifactType]
  *                 properties:
- *                   artifactType: { type: string }
- *                   titleTemplate: { type: string, nullable: true }
- *                   requiredFields: { type: array, items: { type: string } }
- *                   outputSchema: { type: object, nullable: true }
- *                   summaryField: { type: string, default: summary }
- *               nextAgentId: { type: string, nullable: true, description: "_id другого агента" }
+ *                   artifactType: { type: string, description: "Тип артефакта, попадает в Artifact.type." }
+ *                   titleTemplate: { type: string, nullable: true, description: "Шаблон заголовка артефакта." }
+ *                   requiredFields: { type: array, items: { type: string }, description: "Обязательные ключи JSON-артефакта." }
+ *                   outputSchema: { type: object, nullable: true, description: "Доп. JSON Schema для строгой валидации." }
+ *                   summaryField: { type: string, default: summary, description: "Какое поле артефакта использовать как краткую сводку." }
+ *               nextAgentId: { type: string, nullable: true, description: "_id другого агента — куда переключить проект после подтверждения артефакта." }
  *               contextPolicy:
  *                 type: object
  *                 properties:
- *                   includeProjectSummary: { type: boolean }
- *                   includePreviousArtifacts: { type: boolean }
- *                   qdrantTopK: { type: integer }
- *                   maxContextChars: { type: integer }
- *                   allowedSourceTypes: { type: array, items: { type: string } }
+ *                   includeProjectSummary: { type: boolean, description: "Подмешивать ли Project.contextSummary в промпт." }
+ *                   includePreviousArtifacts: { type: boolean, description: "Включать ли артефакты предыдущих этапов в Qdrant-поиск." }
+ *                   qdrantTopK: { type: integer, description: "Сколько фрагментов забирать из Qdrant-поиска." }
+ *                   maxContextChars: { type: integer, description: "Лимит символов на весь retrieved-контекст." }
+ *                   allowedSourceTypes: { type: array, items: { type: string }, description: "Какие типы источников участвуют в поиске." }
  *               modelConfig:
  *                 type: object
  *                 properties:
- *                   provider: { type: string, enum: [openai, openrouter] }
- *                   model: { type: string }
- *                   temperature: { type: number }
- *                   maxTokens: { type: integer }
+ *                   provider: { type: string, enum: [openai, openrouter], description: "Провайдер LLM." }
+ *                   model: { type: string, description: "Модель провайдера." }
+ *                   temperature: { type: number, description: "Температура генерации." }
+ *                   maxTokens: { type: integer, description: "Лимит токенов на ответ модели." }
  *     responses:
  *       201:
  *         description: Агент создан
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Агент создан" }
+ *                 data:
+ *                   $ref: '#/components/schemas/AcceleratorAgent'
  *       400:
  *         description: Ошибка валидации или nextAgentId не существует
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       401:
  *         description: Требуется авторизация
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       403:
  *         description: Недостаточно прав
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/', validate(agentSchemas.createAgentSchema), createAgent);
 
@@ -105,10 +145,20 @@ router.post('/', validate(agentSchemas.createAgentSchema), createAgent);
  *         required: true
  *         schema: { type: string }
  *     responses:
- *       200: { description: Агент получен }
- *       401: { description: Требуется авторизация }
- *       403: { description: Недостаточно прав }
- *       404: { description: Агент не найден }
+ *       200:
+ *         description: Агент получен
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Агент получен" }
+ *                 data:
+ *                   $ref: '#/components/schemas/AcceleratorAgent'
+ *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       403: { description: Недостаточно прав, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: Агент не найден, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 router.get('/:agentId', validate(agentSchemas.agentIdSchema), getAgent);
 
@@ -118,18 +168,51 @@ router.get('/:agentId', validate(agentSchemas.agentIdSchema), getAgent);
  *   patch:
  *     tags: [Accelerator / Admin Agents]
  *     summary: Обновить агента
- *     description: Позволяет, среди прочего, временно отключить агента полем isActive=false.
+ *     description: Позволяет, среди прочего, временно отключить агента полем isActive=false. Все поля запроса опциональны — обновляются только переданные.
  *     parameters:
  *       - in: path
  *         name: agentId
  *         required: true
  *         schema: { type: string }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string }
+ *               roleTitle: { type: string }
+ *               order: { type: integer }
+ *               isActive: { type: boolean, description: "false — временно исключить агента из пользовательского маршрута." }
+ *               systemPrompt: { type: string }
+ *               completionCriteria: { type: string }
+ *               artifactDefinition:
+ *                 type: object
+ *                 properties:
+ *                   artifactType: { type: string }
+ *                   titleTemplate: { type: string, nullable: true }
+ *                   requiredFields: { type: array, items: { type: string } }
+ *                   outputSchema: { type: object, nullable: true }
+ *                   summaryField: { type: string }
+ *               nextAgentId: { type: string, nullable: true, description: "_id следующего агента; должен существовать." }
+ *               contextPolicy: { type: object }
+ *               modelConfig: { type: object }
  *     responses:
- *       200: { description: Агент обновлён }
- *       400: { description: Ошибка валидации или nextAgentId не существует }
- *       401: { description: Требуется авторизация }
- *       403: { description: Недостаточно прав }
- *       404: { description: Агент не найден }
+ *       200:
+ *         description: Агент обновлён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Агент обновлён" }
+ *                 data:
+ *                   $ref: '#/components/schemas/AcceleratorAgent'
+ *       400: { description: Ошибка валидации или nextAgentId не существует, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       403: { description: Недостаточно прав, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: Агент не найден, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 router.patch('/:agentId', validate(agentSchemas.updateAgentSchema), updateAgent);
 

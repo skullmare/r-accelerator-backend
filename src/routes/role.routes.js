@@ -18,35 +18,52 @@ const router = express.Router();
  *   get:
  *     tags: [Roles]
  *     summary: Список всех возможных прав
- *     description: Возвращает все доступные права, спрограммированные по категориям. Требует одно из прав 'roles.read''roles.create''roles.update'.
+ *     description: Возвращает справочник всех прав, сгруппированных по категориям (для построения формы выдачи прав роли в админке). Требует одно из прав 'roles.read', 'roles.create', 'roles.update'.
  *     responses:
  *       200:
  *         description: Список прав по программам
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   program:
- *                     type: string
- *                     example: Роли
- *                   actions:
- *                     type: array
- *                     items:
- *                       type: object
- *                       properties:
- *                         key:
- *                           type: string
- *                           example: roles.read
- *                         label:
- *                           type: string
- *                           example: Просмотр списка ролей
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Список прав получен" }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       program:
+ *                         type: string
+ *                         description: Название категории прав для группировки в UI.
+ *                         example: Роли
+ *                       actions:
+ *                         type: array
+ *                         description: Права внутри этой категории.
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             key:
+ *                               type: string
+ *                               description: Машиночитаемый код права — именно эта строка кладётся в Role.permissions.
+ *                               example: roles.read
+ *                             label:
+ *                               type: string
+ *                               description: Человекочитаемая подпись права для чекбокса в UI.
+ *                               example: Просмотр списка ролей
  *       401:
  *         description: Не авторизован
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       403:
  *         description: Недостаточно прав
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/permissions', authMiddleware, checkPermission(['roles.read', 'roles.create', 'roles.update'], 'any'), listPermissions);
 
@@ -63,11 +80,20 @@ router.get('/permissions', authMiddleware, checkPermission(['roles.read', 'roles
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Role'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Список ролей получен" }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Role'
  *       403:
  *         description: Недостаточно прав
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/', authMiddleware, checkPermission('roles.read'), listRoles);
 
@@ -88,10 +114,12 @@ router.get('/', authMiddleware, checkPermission('roles.read'), listRoles);
  *             properties:
  *               name:
  *                 type: string
+ *                 description: Название новой роли.
  *               permissions:
  *                 type: array
  *                 items:
  *                   type: string
+ *                 description: Права роли — коды из справочника GET /roles/permissions.
  *                 example: ["agents.read", "study_programs.read"]
  *     responses:
  *       201:
@@ -99,9 +127,18 @@ router.get('/', authMiddleware, checkPermission('roles.read'), listRoles);
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Role'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Роль создана" }
+ *                 data:
+ *                   $ref: '#/components/schemas/Role'
  *       400:
  *         description: Ошибка валидации
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/', authMiddleware, checkPermission('roles.create'), validate(roleSchemas.createRoleSchema), createRole);
 
@@ -124,9 +161,18 @@ router.post('/', authMiddleware, checkPermission('roles.create'), validate(roleS
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Role'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Роль получена" }
+ *                 data:
+ *                   $ref: '#/components/schemas/Role'
  *       404:
  *         description: Роль не найдена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/:id', authMiddleware, checkPermission('roles.read'), validate(roleSchemas.roleIdSchema), getRole);
 
@@ -152,21 +198,36 @@ router.get('/:id', authMiddleware, checkPermission('roles.read'), validate(roleS
  *             properties:
  *               name:
  *                 type: string
+ *                 description: Новое название роли.
  *               permissions:
  *                 type: array
  *                 items:
  *                   type: string
+ *                 description: Новый полный список прав роли (замена, не добавление).
  *     responses:
  *       200:
  *         description: Роль обновлена
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Role'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Роль обновлена" }
+ *                 data:
+ *                   $ref: '#/components/schemas/Role'
  *       403:
  *         description: Системную роль нельзя изменить
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         description: Роль не найдена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.put('/:id', authMiddleware, checkPermission('roles.update'), validate(roleSchemas.updateRoleSchema), updateRole);
 
@@ -186,10 +247,26 @@ router.put('/:id', authMiddleware, checkPermission('roles.update'), validate(rol
  *     responses:
  *       200:
  *         description: Роль удалена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Роль удалена" }
+ *                 data: { type: object, example: {} }
  *       403:
  *         description: Системную роль нельзя удалить
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         description: Роль не найдена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.delete('/:id', authMiddleware, checkPermission('roles.delete'), validate(roleSchemas.roleIdSchema), deleteRole);
 

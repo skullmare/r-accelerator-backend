@@ -16,18 +16,31 @@ const router = express.Router();
  *   get:
  *     tags: [Study / Lesson Groups]
  *     summary: Список всех групп уроков
- *     description: Требует право 'study_lessons.read'.
+ *     description: Требует право 'study_lessons.read'. Возвращает урезанную проекцию (без updatedAt) — используйте create/update-ответ, если нужно точное время последнего изменения.
  *     responses:
  *       200:
  *         description: Список групп
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/LessonGroup'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Список групп получен" }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id: { type: string, description: "Идентификатор группы." }
+ *                       name: { type: string, description: "Название группы." }
+ *                       createdAt: { type: string, format: date-time, description: "Момент создания группы." }
  *       403:
  *         description: Недостаточно прав
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/', authMiddleware, checkPermission('study_lessons.read'), listLessonGroups);
 
@@ -49,15 +62,25 @@ router.get('/', authMiddleware, checkPermission('study_lessons.read'), listLesso
  *               name:
  *                 type: string
  *                 maxLength: 100
+ *                 description: Название группы.
  *     responses:
  *       201:
  *         description: Группа создана
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/LessonGroup'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Группа создана" }
+ *                 data:
+ *                   $ref: '#/components/schemas/LessonGroup'
  *       400:
  *         description: Ошибка валидации
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/', authMiddleware, checkPermission('study_lessons.create'), validate(lessonGroupSchemas.createLessonGroupSchema), createLessonGroup);
 
@@ -85,15 +108,25 @@ router.post('/', authMiddleware, checkPermission('study_lessons.create'), valida
  *               name:
  *                 type: string
  *                 maxLength: 100
+ *                 description: Новое название группы.
  *     responses:
  *       200:
  *         description: Группа обновлена
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/LessonGroup'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Группа обновлена" }
+ *                 data:
+ *                   $ref: '#/components/schemas/LessonGroup'
  *       404:
  *         description: Группа не найдена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.patch('/:groupId', authMiddleware, checkPermission('study_lessons.update'), validate(lessonGroupSchemas.updateLessonGroupSchema), updateLessonGroup);
 
@@ -103,7 +136,7 @@ router.patch('/:groupId', authMiddleware, checkPermission('study_lessons.update'
  *   delete:
  *     tags: [Study / Lesson Groups]
  *     summary: Удалить группу уроков
- *     description: Требует право 'study_lessons.delete'. У уроков, принадлежавших этой группе, поле group обнуляется.
+ *     description: Требует право 'study_lessons.delete'. У уроков, принадлежавших этой группе, поле group обнуляется (не удаляются сами уроки).
  *     parameters:
  *       - in: path
  *         name: groupId
@@ -113,8 +146,20 @@ router.patch('/:groupId', authMiddleware, checkPermission('study_lessons.update'
  *     responses:
  *       200:
  *         description: Группа удалена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Группа удалена" }
+ *                 data: { type: object, example: {} }
  *       404:
  *         description: Группа не найдена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.delete('/:groupId', authMiddleware, checkPermission('study_lessons.delete'), validate(lessonGroupSchemas.lessonGroupIdSchema), deleteLessonGroup);
 

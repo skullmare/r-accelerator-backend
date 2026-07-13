@@ -24,54 +24,27 @@ const router = express.Router();
  *   get:
  *     tags: [Accelerator / Projects]
  *     summary: Список проектов текущего пользователя
- *     description: Возвращает только проекты, принадлежащие авторизованному пользователю.
+ *     description: Возвращает только проекты, принадлежащие авторизованному пользователю, отсортированные по lastActivityAt.
  *     responses:
  *       200:
  *         description: Список проектов
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   _id:
- *                     type: string
- *                   ownerId:
- *                     type: string
- *                   name:
- *                     type: string
- *                   description:
- *                     type: string
- *                     nullable: true
- *                   userRole:
- *                     type: string
- *                     nullable: true
- *                   industry:
- *                     type: string
- *                     nullable: true
- *                   businessSpecifics:
- *                     type: string
- *                     nullable: true
- *                   stage:
- *                     type: string
- *                     enum: [idea, mvp, launched, growth, scale]
- *                   goal:
- *                     type: string
- *                     nullable: true
- *                   status:
- *                     type: string
- *                     enum: [active, paused, completed, archived]
- *                   progress:
- *                     type: number
- *                   lastActivityAt:
- *                     type: string
- *                     format: date-time
- *                   createdAt:
- *                     type: string
- *                     format: date-time
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Список проектов получен" }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/AcceleratorProject'
  *       401:
  *         description: Требуется авторизация
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/', authMiddleware, listProjects);
 
@@ -81,7 +54,7 @@ router.get('/', authMiddleware, listProjects);
  *   post:
  *     tags: [Accelerator / Projects]
  *     summary: Создать проект
- *     description: Владельцем создаваемого проекта становится текущий авторизованный пользователь.
+ *     description: Владельцем создаваемого проекта становится текущий авторизованный пользователь. currentAgentId, contextSummary и остальные поля экспертного маршрута выставляются позже автоматически, при первом обращении к маршруту.
  *     requestBody:
  *       required: true
  *       content:
@@ -93,39 +66,64 @@ router.get('/', authMiddleware, listProjects);
  *               name:
  *                 type: string
  *                 maxLength: 150
+ *                 description: Название проекта/стартапа.
  *               description:
  *                 type: string
  *                 nullable: true
  *                 maxLength: 2000
+ *                 description: Свободное описание проекта.
  *               userRole:
  *                 type: string
  *                 nullable: true
  *                 maxLength: 150
+ *                 description: Роль пользователя в проекте.
  *               industry:
  *                 type: string
  *                 nullable: true
  *                 maxLength: 150
+ *                 description: Отрасль/индустрия проекта.
  *               businessSpecifics:
  *                 type: string
  *                 nullable: true
  *                 maxLength: 2000
+ *                 description: Специфика бизнеса, свободный текст.
  *               stage:
  *                 type: string
  *                 enum: [idea, mvp, launched, growth, scale]
+ *                 description: Стадия проекта.
  *               goal:
  *                 type: string
  *                 nullable: true
  *                 maxLength: 1000
+ *                 description: Текущая цель пользователя по проекту.
  *               status:
  *                 type: string
  *                 enum: [active, paused, completed, archived]
+ *                 description: Статус проекта.
  *     responses:
  *       201:
  *         description: Проект создан
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Проект создан" }
+ *                 data:
+ *                   $ref: '#/components/schemas/AcceleratorProject'
  *       400:
  *         description: Ошибка валидации
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       401:
  *         description: Требуется авторизация
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/', authMiddleware, validate(projectSchemas.createProjectSchema), createProject);
 
@@ -145,12 +143,33 @@ router.post('/', authMiddleware, validate(projectSchemas.createProjectSchema), c
  *     responses:
  *       200:
  *         description: Проект получен
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Проект получен" }
+ *                 data:
+ *                   $ref: '#/components/schemas/AcceleratorProject'
  *       401:
  *         description: Требуется авторизация
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       403:
  *         description: Нет доступа к проекту
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         description: Проект не найден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/:projectId', authMiddleware, validate(projectSchemas.projectIdSchema), checkAccessProject, getProject);
 
@@ -160,7 +179,7 @@ router.get('/:projectId', authMiddleware, validate(projectSchemas.projectIdSchem
  *   patch:
  *     tags: [Accelerator / Projects]
  *     summary: Обновить проект
- *     description: Доступ только у владельца проекта. lastActivityAt обновляется автоматически.
+ *     description: Доступ только у владельца проекта. lastActivityAt обновляется автоматически. Поля экспертного маршрута (currentAgentId, contextSummary и т.д.) через этот эндпоинт не редактируются — только сервером.
  *     parameters:
  *       - in: path
  *         name: projectId
@@ -206,14 +225,39 @@ router.get('/:projectId', authMiddleware, validate(projectSchemas.projectIdSchem
  *     responses:
  *       200:
  *         description: Проект обновлён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Проект обновлён" }
+ *                 data:
+ *                   $ref: '#/components/schemas/AcceleratorProject'
  *       400:
  *         description: Ошибка валидации
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       401:
  *         description: Требуется авторизация
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       403:
  *         description: Нет доступа к проекту
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         description: Проект не найден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.patch('/:projectId', authMiddleware, validate(projectSchemas.updateProjectSchema), checkAccessProject, updateProject);
 
@@ -229,10 +273,22 @@ router.patch('/:projectId', authMiddleware, validate(projectSchemas.updateProjec
  *         required: true
  *         schema: { type: string }
  *     responses:
- *       200: { description: Список файлов проекта }
- *       401: { description: Требуется авторизация }
- *       403: { description: Нет доступа к проекту }
- *       404: { description: Проект не найден }
+ *       200:
+ *         description: Список файлов проекта
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Файлы проекта получены" }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/File'
+ *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       403: { description: Нет доступа к проекту, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: Проект не найден, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 router.get('/:projectId/files', authMiddleware, validate(projectSchemas.projectIdSchema), checkAccessProject, listProjectFiles);
 
@@ -253,10 +309,25 @@ router.get('/:projectId/files', authMiddleware, validate(projectSchemas.projectI
  *         required: true
  *         schema: { type: string }
  *     responses:
- *       202: { description: Индексация поставлена в очередь }
- *       401: { description: Требуется авторизация }
- *       403: { description: Нет доступа к проекту }
- *       404: { description: Проект или файл не найден }
+ *       202:
+ *         description: Индексация поставлена в очередь
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Индексация запущена" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     processingStatus:
+ *                       type: string
+ *                       example: indexing
+ *                       description: Новый статус файла сразу после постановки в очередь (см. File.processingStatus).
+ *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       403: { description: Нет доступа к проекту, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: Проект или файл не найден, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 router.post('/:projectId/files/:fileId/index', authMiddleware, validate(projectSchemas.projectFileIdSchema), checkAccessProject, reindexFile);
 
@@ -266,6 +337,7 @@ router.post('/:projectId/files/:fileId/index', authMiddleware, validate(projectS
  *   get:
  *     tags: [Accelerator / Files]
  *     summary: Статус обработки и индексирования файла
+ *     description: Возвращает только статусные поля (не полную запись File — см. GET .../files для полного списка).
  *     parameters:
  *       - in: path
  *         name: projectId
@@ -276,10 +348,20 @@ router.post('/:projectId/files/:fileId/index', authMiddleware, validate(projectS
  *         required: true
  *         schema: { type: string }
  *     responses:
- *       200: { description: Статус обработки файла }
- *       401: { description: Требуется авторизация }
- *       403: { description: Нет доступа к проекту }
- *       404: { description: Проект или файл не найден }
+ *       200:
+ *         description: Статус обработки файла
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Статус обработки файла получен" }
+ *                 data:
+ *                   $ref: '#/components/schemas/FileProcessingStatus'
+ *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       403: { description: Нет доступа к проекту, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: Проект или файл не найден, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 router.get('/:projectId/files/:fileId/processing-status', authMiddleware, validate(projectSchemas.projectFileIdSchema), checkAccessProject, getFileProcessingStatus);
 
@@ -289,16 +371,37 @@ router.get('/:projectId/files/:fileId/processing-status', authMiddleware, valida
  *   get:
  *     tags: [Accelerator / Expert Route]
  *     summary: Текущий агент и маршрут проекта
+ *     description: Если у проекта ещё нет currentAgentId (новый проект), он самолечится здесь — подставляется первый активный агент по order. Если в системе вообще нет ни одного активного агента, currentAgentId будет null, а items — пустым массивом.
  *     parameters:
  *       - in: path
  *         name: projectId
  *         required: true
  *         schema: { type: string }
  *     responses:
- *       200: { description: Маршрут получен }
- *       401: { description: Требуется авторизация }
- *       403: { description: Нет доступа к проекту }
- *       404: { description: Проект не найден }
+ *       200:
+ *         description: Маршрут получен
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Маршрут агентов получен" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     currentAgentId:
+ *                       type: string
+ *                       nullable: true
+ *                       description: _id текущего активного агента проекта (см. Project.currentAgentId).
+ *                     items:
+ *                       type: array
+ *                       description: Все активные агенты системы, по порядку, со статусом относительно этого проекта.
+ *                       items:
+ *                         $ref: '#/components/schemas/ExpertRouteItem'
+ *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       403: { description: Нет доступа к проекту, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: Проект не найден, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 router.get('/:projectId/expert-route', authMiddleware, validate(projectSchemas.projectIdSchema), checkAccessProject, getExpertRoute);
 
@@ -308,6 +411,7 @@ router.get('/:projectId/expert-route', authMiddleware, validate(projectSchemas.p
  *   post:
  *     tags: [Accelerator / Expert Sessions]
  *     summary: Создать (или продолжить активную) экспертную сессию для агента
+ *     description: agentId должен совпадать с текущим Project.currentAgentId — иначе 409 AGENT_NOT_CURRENT (нельзя перепрыгнуть агента, минуя маршрут). Если для этого агента уже есть активная сессия (draft/active/waiting_user_confirmation), возвращается именно она, новая не создаётся.
  *     parameters:
  *       - in: path
  *         name: projectId
@@ -321,13 +425,28 @@ router.get('/:projectId/expert-route', authMiddleware, validate(projectSchemas.p
  *             type: object
  *             required: [agentId]
  *             properties:
- *               agentId: { type: string }
+ *               agentId:
+ *                 type: string
+ *                 description: _id агента, с которым нужно начать/продолжить диалог.
  *     responses:
- *       201: { description: Сессия создана или найдена активная }
- *       401: { description: Требуется авторизация }
- *       403: { description: Нет доступа к проекту }
- *       404: { description: Проект или агент не найден }
- *       409: { description: Агент сейчас недоступен в маршруте проекта (AGENT_NOT_CURRENT) }
+ *       201:
+ *         description: Сессия создана или найдена активная
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Экспертная сессия создана" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     session:
+ *                       $ref: '#/components/schemas/ExpertSession'
+ *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       403: { description: Нет доступа к проекту, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: Проект или агент не найден, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       409: { description: Агент сейчас недоступен в маршруте проекта (AGENT_NOT_CURRENT), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 router.post('/:projectId/expert-sessions', authMiddleware, validate(expertSessionSchemas.createSessionSchema), checkAccessProject, createExpertSession);
 
@@ -355,13 +474,34 @@ router.post('/:projectId/expert-sessions', authMiddleware, validate(expertSessio
  *             type: object
  *             required: [content]
  *             properties:
- *               content: { type: string }
+ *               content:
+ *                 type: string
+ *                 description: Текст сообщения пользователя агенту.
  *     responses:
- *       200: { description: Сообщение обработано, возвращены userMessage и assistantMessage }
- *       401: { description: Требуется авторизация }
- *       403: { description: Нет доступа к проекту }
- *       404: { description: Проект или сессия не найдена }
- *       409: { description: Сессия уже завершена }
+ *       200:
+ *         description: Сообщение обработано
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Сообщение обработано" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     userMessage:
+ *                       allOf:
+ *                         - $ref: '#/components/schemas/ExpertMessage'
+ *                       description: Сохранённое сообщение пользователя (senderType=user).
+ *                     assistantMessage:
+ *                       allOf:
+ *                         - $ref: '#/components/schemas/ExpertMessage'
+ *                       description: Ответ модели (senderType=assistant).
+ *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       403: { description: Нет доступа к проекту, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: Проект или сессия не найдена, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       409: { description: Сессия уже завершена, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 router.post('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, validate(expertSessionSchemas.sendMessageSchema), checkAccessProject, sendExpertMessage);
 
@@ -377,6 +517,7 @@ router.post('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, v
  *       не переключается на следующего агента. С confirmArtifact=true артефакт
  *       подтверждается (status=confirmed), индексируется в Qdrant, summary проекта
  *       обновляется и currentAgentId переключается на nextAgentId агента.
+ *       Повторный вызов уже завершённой сессии — 409.
  *     parameters:
  *       - in: path
  *         name: projectId
@@ -392,14 +533,40 @@ router.post('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, v
  *           schema:
  *             type: object
  *             properties:
- *               confirmArtifact: { type: boolean, default: false }
+ *               confirmArtifact:
+ *                 type: boolean
+ *                 default: false
+ *                 description: true — подтвердить артефакт и продвинуть маршрут; false/не передано — только создать черновик на проверку.
  *     responses:
- *       200: { description: Артефакт создан/подтверждён }
- *       401: { description: Требуется авторизация }
- *       403: { description: Нет доступа к проекту }
- *       404: { description: Проект или сессия не найдена }
- *       409: { description: Сессия уже завершена }
- *       422: { description: Артефакт не прошёл валидацию (ARTIFACT_VALIDATION_FAILED) }
+ *       200:
+ *         description: Артефакт создан/подтверждён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Этап завершён" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     artifact:
+ *                       $ref: '#/components/schemas/ExpertArtifact'
+ *                     nextAgentId:
+ *                       type: string
+ *                       nullable: true
+ *                       description: Новый Project.currentAgentId, если артефакт был подтверждён (confirmArtifact=true); null, если это только черновик.
+ *                     projectContextVersion:
+ *                       type: integer
+ *                       description: Актуальное значение Project.contextVersion после этого вызова.
+ *                     confirmed:
+ *                       type: boolean
+ *                       description: true, если это был подтверждающий вызов (confirmArtifact=true), false — если только черновик.
+ *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       403: { description: Нет доступа к проекту, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: Проект или сессия не найдена, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       409: { description: Сессия уже завершена, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       422: { description: Артефакт не прошёл валидацию (ARTIFACT_VALIDATION_FAILED), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 router.post('/:projectId/expert-sessions/:sessionId/complete', authMiddleware, validate(expertSessionSchemas.completeSessionSchema), checkAccessProject, completeExpertSession);
 

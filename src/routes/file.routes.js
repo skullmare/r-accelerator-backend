@@ -23,56 +23,117 @@ const router = express.Router();
  *   schemas:
  *     File:
  *       type: object
+ *       description: Метаданные загруженного файла. Бинарное содержимое лежит в S3, эта запись — только описание файла в MongoDB.
  *       properties:
  *         _id:
  *           type: string
+ *           description: Идентификатор записи о файле.
  *         name:
  *           type: string
- *           description: Оригинальное имя файла
+ *           description: Оригинальное имя файла, как оно называлось у пользователя при загрузке.
  *         url:
  *           type: string
  *           format: uri
- *           description: Публичная ссылка в S3
+ *           description: Публичная ссылка на файл в Yandex Cloud S3.
+ *         key:
+ *           type: string
+ *           nullable: true
+ *           description: Ключ (путь) объекта внутри S3-бакета. Нужен серверу для повторного скачивания файла при (пере)индексации, самостоятельной ценности для клиента не несёт.
  *         type:
  *           type: string
- *           description: MIME-тип файла
+ *           description: MIME-тип файла — по нему сервер выбирает, можно ли извлечь из файла текст (поддерживаются text/plain, text/markdown, application/pdf, .docx).
  *           example: image/jpeg
  *         size:
  *           type: integer
- *           description: Размер файла в байтах
+ *           description: Размер файла в байтах.
  *         uploadedBy:
  *           type: string
- *           description: ID пользователя, загрузившего файл
+ *           description: ID пользователя, загрузившего файл.
  *         source:
  *           type: string
  *           enum: [user, system]
- *           description: Источник файла — загружен пользователем или создан системой
+ *           description: Источник файла — загружен пользователем или создан системой. Сейчас все файлы через /file/upload и /file/multipart/complete всегда 'user'.
  *         projectId:
  *           type: string
  *           nullable: true
- *           description: Проект Р-Акселератора, к которому привязан файл. Если задан — файл автоматически ставится в очередь на извлечение текста и индексацию в Qdrant.
+ *           description: Проект Р-Акселератора, к которому привязан файл. Если задан при загрузке — файл автоматически ставится в очередь на извлечение текста и индексацию в Qdrant; если null — обычный файл вне экспертного контекста, не обрабатывается.
  *         processingStatus:
  *           type: string
  *           enum: [uploaded, extracting, extracted, indexing, indexed, failed, unsupported]
+ *           description: |
+ *             Текущий шаг асинхронного пайплайна обработки файла:
+ *              * uploaded — загружен, ждёт очереди на обработку;
+ *              * extracting — воркер читает и разбивает файл на текстовые фрагменты;
+ *              * extracted — текст извлечён, идёт подготовка к индексации;
+ *              * indexing — идёт запись фрагментов в Qdrant;
+ *              * indexed — обработка полностью завершена успешно;
+ *              * failed — ошибка на любом шаге (см. processingError), можно повторить через /files/{fileId}/index;
+ *              * unsupported — формат не поддерживается или файл превысил лимит размера для формата (сейчас 20 МБ для PDF/DOCX).
  *         extractedTextStatus:
  *           type: string
  *           enum: [not_started, success, empty, failed, unsupported]
+ *           description: Результат именно шага извлечения текста — отдельно от общего processingStatus, т.к. текст может извлечься успешно, а последующая запись в Qdrant упасть.
  *         qdrantStatus:
  *           type: string
  *           enum: [not_indexed, indexed, failed, stale]
+ *           description: Результат именно шага записи в Qdrant.
  *         qdrantPointIds:
  *           type: array
  *           items: { type: string }
+ *           description: Id точек, созданных в Qdrant из фрагментов этого файла. Пустой массив, пока файл не проиндексирован.
+ *         textHash:
+ *           type: string
+ *           nullable: true
+ *           description: Хэш всего извлечённого текста файла — служебное поле для определения, изменился ли текст при последующей переиндексации.
+ *         extractedTextPreview:
+ *           type: string
+ *           nullable: true
+ *           description: Первые ~300 символов извлечённого текста — для превью в интерфейсе, без похода в Qdrant за содержимым.
  *         processingError:
  *           type: string
  *           nullable: true
+ *           description: Короткое безопасное описание последней ошибки обработки (без технических деталей/стектрейса) — то, что можно показать пользователю.
  *         indexedAt:
  *           type: string
  *           format: date-time
  *           nullable: true
+ *           description: Момент последней успешной индексации файла в Qdrant.
  *         createdAt:
  *           type: string
  *           format: date-time
+ *           description: Момент загрузки файла.
+ *         updatedAt:
+ *           type: string
+ *           format: date-time
+ *           description: Момент последнего изменения записи (в т.ч. смены статуса обработки).
+ *     FileProcessingStatus:
+ *       type: object
+ *       description: Краткий статус обработки файла — то, что реально возвращает GET .../files/{fileId}/processing-status (не полная запись File).
+ *       properties:
+ *         processingStatus:
+ *           type: string
+ *           enum: [uploaded, extracting, extracted, indexing, indexed, failed, unsupported]
+ *           description: См. File.processingStatus.
+ *         extractedTextStatus:
+ *           type: string
+ *           enum: [not_started, success, empty, failed, unsupported]
+ *           description: См. File.extractedTextStatus.
+ *         qdrantStatus:
+ *           type: string
+ *           enum: [not_indexed, indexed, failed, stale]
+ *           description: См. File.qdrantStatus.
+ *         qdrantPointsCount:
+ *           type: integer
+ *           description: Количество точек, созданных в Qdrant из этого файла (длина File.qdrantPointIds, отдаётся числом, а не списком id).
+ *         processingError:
+ *           type: string
+ *           nullable: true
+ *           description: Короткое безопасное описание последней ошибки обработки, если она была.
+ *         indexedAt:
+ *           type: string
+ *           format: date-time
+ *           nullable: true
+ *           description: Момент последней успешной индексации в Qdrant.
  *     UploadPart:
  *       type: object
  *       required: [PartNumber, ETag]
@@ -113,11 +174,24 @@ const router = express.Router();
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/File'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Файл загружен" }
+ *                 data:
+ *                   $ref: '#/components/schemas/File'
  *       400:
  *         description: Файл не передан
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       401:
  *         description: Не авторизован
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/upload', authMiddleware, upload.single('file'), uploadFileController);
 
@@ -146,6 +220,11 @@ router.post('/upload', authMiddleware, upload.single('file'), uploadFileControll
  *           type: string
  *           enum: [user, system]
  *         description: Фильтр по источнику файла
+ *       - in: query
+ *         name: projectId
+ *         schema:
+ *           type: string
+ *         description: Фильтр по проекту Р-Акселератора, к которому привязан файл.
  *     responses:
  *       200:
  *         description: Список файлов с пагинацией
@@ -154,14 +233,23 @@ router.post('/upload', authMiddleware, upload.single('file'), uploadFileControll
  *             schema:
  *               type: object
  *               properties:
- *                 files:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/File'
- *                 pagination:
- *                   $ref: '#/components/schemas/Pagination'
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Список файлов получен" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     files:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/File'
+ *                     pagination:
+ *                       $ref: '#/components/schemas/Pagination'
  *       401:
  *         description: Не авторизован
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/', authMiddleware, validate(fileSchemas.listFilesSchema), listFiles);
 
@@ -195,9 +283,11 @@ router.get('/', authMiddleware, validate(fileSchemas.listFilesSchema), listFiles
  *             properties:
  *               filename:
  *                 type: string
+ *                 description: Оригинальное имя файла — по расширению из него формируется ключ объекта в S3.
  *                 example: video.mp4
  *               mimetype:
  *                 type: string
+ *                 description: MIME-тип загружаемого файла, сохраняется в записи File.
  *                 example: video/mp4
  *               size:
  *                 type: integer
@@ -211,16 +301,29 @@ router.get('/', authMiddleware, validate(fileSchemas.listFilesSchema), listFiles
  *             schema:
  *               type: object
  *               properties:
- *                 uploadId:
- *                   type: string
- *                   description: ID multipart upload в S3
- *                 key:
- *                   type: string
- *                   description: Ключ объекта в S3 (путь к файлу)
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Multipart upload инициирован" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     uploadId:
+ *                       type: string
+ *                       description: ID multipart upload в S3
+ *                     key:
+ *                       type: string
+ *                       description: Ключ объекта в S3 (путь к файлу)
  *       401:
  *         description: Не авторизован
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       500:
  *         description: Ошибка S3
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/multipart/initiate', authMiddleware, validate(fileSchemas.initiateUploadSchema), initiateUploadController);
 
@@ -271,16 +374,29 @@ router.post('/multipart/initiate', authMiddleware, validate(fileSchemas.initiate
  *             schema:
  *               type: object
  *               properties:
- *                 urls:
- *                   type: array
- *                   items:
- *                     type: string
- *                     format: uri
- *                   description: Presigned URLs в том же порядке, что и partNumbers. Действительны 1 час.
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Presigned URLs получены" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     urls:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                         format: uri
+ *                       description: Presigned URLs в том же порядке, что и partNumbers. Действительны 1 час.
  *       401:
  *         description: Не авторизован
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       500:
  *         description: Ошибка S3
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/multipart/presign', authMiddleware, validate(fileSchemas.presignUploadSchema), presignUploadController);
 
@@ -308,20 +424,26 @@ router.post('/multipart/presign', authMiddleware, validate(fileSchemas.presignUp
  *             properties:
  *               uploadId:
  *                 type: string
+ *                 description: ID multipart upload из шага initiate.
  *               key:
  *                 type: string
+ *                 description: Ключ объекта в S3 из шага initiate.
  *               parts:
  *                 type: array
+ *                 description: Все загруженные части в порядке возрастания PartNumber, с ETag каждой.
  *                 items:
  *                   $ref: '#/components/schemas/UploadPart'
  *               originalname:
  *                 type: string
+ *                 description: Оригинальное имя файла — сохраняется в File.name.
  *                 example: video.mp4
  *               mimetype:
  *                 type: string
+ *                 description: MIME-тип файла — сохраняется в File.type.
  *                 example: video/mp4
  *               size:
  *                 type: integer
+ *                 description: Размер файла в байтах — сохраняется в File.size.
  *                 example: 2147483648
  *               projectId:
  *                 type: string
@@ -333,13 +455,30 @@ router.post('/multipart/presign', authMiddleware, validate(fileSchemas.presignUp
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/File'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Файл успешно загружен" }
+ *                 data:
+ *                   $ref: '#/components/schemas/File'
  *       401:
  *         description: Не авторизован
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         description: Проект не найден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       500:
  *         description: Ошибка S3 или БД
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/multipart/complete', authMiddleware, validate(fileSchemas.completeUploadSchema), completeUploadController);
 
@@ -365,15 +504,33 @@ router.post('/multipart/complete', authMiddleware, validate(fileSchemas.complete
  *             properties:
  *               uploadId:
  *                 type: string
+ *                 description: ID multipart upload, который нужно отменить.
  *               key:
  *                 type: string
+ *                 description: Ключ объекта в S3, связанный с этим upload.
  *     responses:
  *       200:
  *         description: Загрузка отменена, части удалены из S3
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Загрузка отменена" }
+ *                 data: { type: object, example: {} }
  *       401:
  *         description: Не авторизован
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       500:
  *         description: Ошибка S3
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/multipart/abort', authMiddleware, validate(fileSchemas.abortUploadSchema), abortUploadController);
 

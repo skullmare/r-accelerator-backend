@@ -11,7 +11,14 @@ const options = {
         info: {
             title: 'Rocketmind API',
             version: '1.0.0',
-            description: 'API платформы Rocketmind'
+            description:
+                'API платформы Rocketmind.\n\n' +
+                '**Формат ответа.** Все ответы оборачиваются в единый конверт ' +
+                '(см. resify-express): успешный — `{ success: true, message, data }`, ' +
+                'где `data` — это как раз то, что описано в схеме ответа каждого ' +
+                'эндпоинта ниже; ошибка — `{ success: false, message, error: { code, description } }` ' +
+                '(см. схему Error). Схемы ответов ниже всегда описывают именно ' +
+                'содержимое поля `data`, а не тело ответа целиком.'
         },
         servers: [{ url: serverUrl }],
         components: {

@@ -49,8 +49,16 @@ Point id — детерминированный UUID v5 от `sourceId:chunkInde
    ограниченные `qdrantTopK` и `maxContextChars`
 
 Дальше `src/services/accelerator/expert-session.service.js` добавляет историю
-сообщений сессии (до 30 последних) и вызывает `llm.service.chatComplete`
-с провайдером/моделью из `Agent.modelConfig` (`openai` или `openrouter`).
+сообщений сессии (до 30 последних) и вызывает `llm.service.chatCompleteStream`
+с моделью из `Agent.modelConfig` (провайдер зафиксирован — только OpenAI, см.
+`docs/open-questions.md`). Ответ модели стримится клиенту по SSE
+(`POST .../expert-sessions/:id/messages`, события `message_created` / `delta`
+/ `done` / `error`) — сохраняется в MongoDB только после того, как стрим
+полностью завершился, чтобы разрыв соединения на середине не оставил
+недописанное сообщение в базе. Генерация артефакта (`/complete`) — отдельный,
+не потоковый вызов через `llm.service.chatComplete`: там нужен единый цельный
+JSON-ответ для валидации, а не текст, который можно постепенно показывать
+пользователю.
 
 ## Создание артефакта
 

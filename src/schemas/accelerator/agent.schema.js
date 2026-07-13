@@ -19,7 +19,6 @@ const contextPolicySchema = z.object({
 }).strict();
 
 const modelConfigSchema = z.object({
-    provider: z.enum(['openai', 'openrouter']).default('openai'),
     model: z.string().trim().min(1).max(100).default('gpt-4o-mini'),
     temperature: z.number().min(0).max(2).default(0.4),
     maxTokens: z.number().int().min(100).max(8000).default(1500)

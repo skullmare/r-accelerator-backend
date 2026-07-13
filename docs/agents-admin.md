@@ -29,8 +29,7 @@
 | `contextPolicy.qdrantTopK` | number | нет (default 6) | Сколько фрагментов подтягивать из Qdrant |
 | `contextPolicy.maxContextChars` | number | нет (default 6000) | Лимит символов на retrieved-контекст |
 | `contextPolicy.allowedSourceTypes` | string[] | нет | Какие sourceType участвуют в поиске |
-| `modelConfig.provider` | `openai` \| `openrouter` | нет (default openai) | Провайдер LLM |
-| `modelConfig.model` | string | нет | Модель провайдера |
+| `modelConfig.model` | string | нет (default `gpt-4o-mini`) | Модель OpenAI. Провайдер зафиксирован — только OpenAI (см. `docs/open-questions.md`) |
 
 В UI связывание агентов друг с другом (`nextAgentId`) должно делаться через
 выпадающий список, заполненный из `GET /accelerator/admin/agents` (там уже

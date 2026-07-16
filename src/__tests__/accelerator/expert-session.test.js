@@ -31,6 +31,7 @@ import { createUser } from '../../__fixtures__/user.fixture.js';
 import { authCookie } from '../../__fixtures__/auth.fixture.js';
 import Project from '../../models/accelerator/project.model.js';
 import Agent from '../../models/accelerator/agent.model.js';
+import Artifact from '../../models/accelerator/artifact.model.js';
 import { upsertChunks } from '../../services/qdrant.service.js';
 
 beforeAll(() => connect());
@@ -212,5 +213,154 @@ describe('Экспертный маршрут R1 -> R2 (сквозной сце�
         expect(res.status).toBe(409);
         expect(res.headers['content-type']).toMatch(/application\/json/);
         expect(res.body.error.code).toBe('SESSION_ALREADY_COMPLETED');
+    });
+});
+
+describe('GET /accelerator/projects/:projectId/expert-sessions/:sessionId/messages', () => {
+    it('возвращает историю сообщений сессии в хронологическом порядке', async () => {
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+
+        const sessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', cookie)
+            .send({ agentId: String(r1._id) });
+        const sessionId = sessionRes.body.data.session._id;
+
+        await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
+            .set('Cookie', cookie)
+            .send({ content: 'Первое сообщение' });
+
+        const res = await request(app)
+            .get(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
+            .set('Cookie', cookie);
+
+        expect(res.status).toBe(200);
+        expect(res.body.data.items).toHaveLength(2);
+        expect(res.body.data.items[0].senderType).toBe('user');
+        expect(res.body.data.items[0].content).toBe('Первое сообщение');
+        expect(res.body.data.items[1].senderType).toBe('assistant');
+        expect(res.body.data.items[1].content).toBe('Ответ агента пользователю');
+    });
+
+    it('чужой пользователь не может прочитать историю сообщений (403)', async () => {
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const stranger = await createUser();
+
+        const sessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', authCookie(owner._id, owner.email))
+            .send({ agentId: String(r1._id) });
+        const sessionId = sessionRes.body.data.session._id;
+
+        const res = await request(app)
+            .get(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
+            .set('Cookie', authCookie(stranger._id, stranger.email));
+
+        expect(res.status).toBe(403);
+    });
+
+    it('возвращает 404 для несуществующей сессии', async () => {
+        const { owner, project } = await setupProject();
+
+        const res = await request(app)
+            .get(`/api/v1/accelerator/projects/${project._id}/expert-sessions/507f1f77bcf86cd799439099/messages`)
+            .set('Cookie', authCookie(owner._id, owner.email));
+
+        expect(res.status).toBe(404);
+        expect(res.body.error.code).toBe('SESSION_NOT_FOUND');
+    });
+
+    it('возвращает 401 без авторизации', async () => {
+        const { project } = await setupProject();
+
+        const res = await request(app)
+            .get(`/api/v1/accelerator/projects/${project._id}/expert-sessions/507f1f77bcf86cd799439099/messages`);
+
+        expect(res.status).toBe(401);
+    });
+});
+
+describe('GET /accelerator/projects/:projectId/artifacts', () => {
+    it('возвращает артефакты проекта в порядке создания', async () => {
+        const { r1, r2 } = await seedAgents();
+        const { owner, project } = await setupProject();
+
+        const sessionA = await Artifact.create({
+            projectId: project._id,
+            expertSessionId: '507f1f77bcf86cd799439011',
+            agentId: r1._id,
+            type: 'market_brief',
+            title: 'Рыночный бриф',
+            content: { summary: 'Сводка рынка' },
+            summary: 'Сводка рынка',
+            status: 'confirmed'
+        });
+        const sessionB = await Artifact.create({
+            projectId: project._id,
+            expertSessionId: '507f1f77bcf86cd799439012',
+            agentId: r2._id,
+            type: 'audience_brief',
+            title: 'Бриф аудитории',
+            content: { summary: 'Сводка аудитории' },
+            summary: 'Сводка аудитории',
+            status: 'ready'
+        });
+
+        const res = await request(app)
+            .get(`/api/v1/accelerator/projects/${project._id}/artifacts`)
+            .set('Cookie', authCookie(owner._id, owner.email));
+
+        expect(res.status).toBe(200);
+        expect(res.body.data.items.map((a) => a._id)).toEqual([String(sessionA._id), String(sessionB._id)]);
+        expect(res.body.data.items[0].status).toBe('confirmed');
+        expect(res.body.data.items[1].status).toBe('ready');
+    });
+
+    it('не включает артефакты чужих проектов', async () => {
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const { project: otherProject } = await setupProject();
+
+        await Artifact.create({
+            projectId: otherProject._id,
+            expertSessionId: '507f1f77bcf86cd799439011',
+            agentId: r1._id,
+            type: 'market_brief',
+            title: 'Рыночный бриф',
+            content: { summary: 'Сводка' },
+            summary: 'Сводка',
+            status: 'confirmed'
+        });
+
+        const res = await request(app)
+            .get(`/api/v1/accelerator/projects/${project._id}/artifacts`)
+            .set('Cookie', authCookie(owner._id, owner.email));
+
+        expect(res.status).toBe(200);
+        expect(res.body.data.items).toEqual([]);
+    });
+
+    it('возвращает 403 не владельцу проекта', async () => {
+        const { project } = await setupProject();
+        const stranger = await createUser();
+
+        const res = await request(app)
+            .get(`/api/v1/accelerator/projects/${project._id}/artifacts`)
+            .set('Cookie', authCookie(stranger._id, stranger.email));
+
+        expect(res.status).toBe(403);
+    });
+
+    it('возвращает 401 без авторизации', async () => {
+        const { project } = await setupProject();
+
+        const res = await request(app)
+            .get(`/api/v1/accelerator/projects/${project._id}/artifacts`);
+
+        expect(res.status).toBe(401);
     });
 });

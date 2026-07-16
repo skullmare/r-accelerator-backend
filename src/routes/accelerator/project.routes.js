@@ -14,7 +14,9 @@ import expertSessionSchemas from '../../schemas/accelerator/expert-session.schem
 import { getExpertRoute } from '../../controllers/accelerator/expert-session/get-expert-route.controller.js';
 import { createExpertSession } from '../../controllers/accelerator/expert-session/create-session.controller.js';
 import { sendExpertMessage } from '../../controllers/accelerator/expert-session/send-message.controller.js';
+import { getSessionMessages } from '../../controllers/accelerator/expert-session/get-session-messages.controller.js';
 import { completeExpertSession } from '../../controllers/accelerator/expert-session/complete-session.controller.js';
+import { listProjectArtifacts } from '../../controllers/accelerator/artifact/list-project-artifacts.controller.js';
 
 const router = express.Router();
 
@@ -508,6 +510,45 @@ router.post('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, v
 
 /**
  * @swagger
+ * /accelerator/projects/{projectId}/expert-sessions/{sessionId}/messages:
+ *   get:
+ *     tags: [Accelerator / Expert Sessions]
+ *     summary: История сообщений сессии
+ *     description: Возвращает все сообщения сессии в хронологическом порядке (createdAt по возрастанию) — и пользователя, и агента. Используется для восстановления диалога после перезагрузки страницы.
+ *     parameters:
+ *       - in: path
+ *         name: projectId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: История сообщений получена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "История сообщений получена" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     items:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/ExpertMessage'
+ *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       403: { description: Нет доступа к проекту, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: Проект или сессия не найдена, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ */
+router.get('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, validate(expertSessionSchemas.sessionIdSchema), checkAccessProject, getSessionMessages);
+
+/**
+ * @swagger
  * /accelerator/projects/{projectId}/expert-sessions/{sessionId}/complete:
  *   post:
  *     tags: [Accelerator / Expert Sessions]
@@ -570,5 +611,40 @@ router.post('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, v
  *       422: { description: Артефакт не прошёл валидацию (ARTIFACT_VALIDATION_FAILED), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 router.post('/:projectId/expert-sessions/:sessionId/complete', authMiddleware, validate(expertSessionSchemas.completeSessionSchema), checkAccessProject, completeExpertSession);
+
+/**
+ * @swagger
+ * /accelerator/projects/{projectId}/artifacts:
+ *   get:
+ *     tags: [Accelerator / Expert Sessions]
+ *     summary: Список артефактов проекта
+ *     description: Возвращает все артефакты проекта (любого статуса — draft/ready/confirmed/rejected) в порядке создания. Используется для отображения панели готовности результатов по этапам маршрута.
+ *     parameters:
+ *       - in: path
+ *         name: projectId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Артефакты проекта получены
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Артефакты проекта получены" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     items:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/ExpertArtifact'
+ *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       403: { description: Нет доступа к проекту, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: Проект не найден, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ */
+router.get('/:projectId/artifacts', authMiddleware, validate(projectSchemas.projectIdSchema), checkAccessProject, listProjectArtifacts);
 
 export default router;

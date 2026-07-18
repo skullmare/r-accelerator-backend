@@ -1,7 +1,7 @@
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { s3Client } from '../../../../config/s3.config.js';
 
-const bucket = process.env.YANDEX_BUCKET;
+const bucket = process.env.S3_BUCKET;
 
 // Only used by formats whose parser libraries require the full buffer
 // (PDF/DOCX). maxBytes bounds worst-case memory/CPU cost for these

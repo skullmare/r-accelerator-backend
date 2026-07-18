@@ -9,8 +9,12 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import crypto from 'crypto';
 import { s3Client } from '../../config/s3.config.js';
 
-const bucket = process.env.YANDEX_BUCKET;
-const baseUrl = 'https://storage.yandexcloud.net';
+const bucket = process.env.S3_BUCKET;
+// Публичная ссылка на объект. По умолчанию совпадает с API-эндпоинтом
+// (верно для Timeweb/большинства S3-совместимых хранилищ при
+// forcePathStyle=true), но можно задать отдельно (например, если объекты
+// раздаются через CDN-домен, отличный от эндпоинта API).
+const baseUrl = process.env.S3_PUBLIC_URL || process.env.S3_ENDPOINT;
 
 export async function uploadFile({ buffer, mimetype, originalname }) {
     const ext = originalname.split('.').pop();

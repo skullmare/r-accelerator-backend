@@ -100,14 +100,18 @@ export async function sendMessage(project, session, agent, content, { onUserMess
     });
     onUserMessage?.(userMessage);
 
-    const { systemPrompt, contextSnapshot } = await assembleContext({ project, agent, userMessageText: content });
+    const { systemPrompt, retrievedContextMessage, contextSnapshot } = await assembleContext({ project, agent, userMessageText: content });
     const history = await getSessionHistory(session._id);
+
+    const messages = [{ role: 'system', content: systemPrompt }];
+    if (retrievedContextMessage) messages.push(retrievedContextMessage);
+    messages.push(...history);
 
     const { content: replyText, tokenUsage } = await chatCompleteStream({
         model: agent.modelConfig.model,
         temperature: agent.modelConfig.temperature,
         maxTokens: agent.modelConfig.maxTokens,
-        messages: [{ role: 'system', content: systemPrompt }, ...history],
+        messages,
         onDelta
     });
 
@@ -150,11 +154,11 @@ export async function completeSession(project, session, agent, confirmArtifact) 
 
     if (!artifact) {
         const history = await getSessionHistory(session._id);
-        const { systemPrompt } = await assembleContext({ project, agent, userMessageText: agent.completionCriteria });
+        const { systemPrompt, retrievedContextMessage } = await assembleContext({ project, agent, userMessageText: agent.completionCriteria });
 
         let generated;
         try {
-            generated = await generateArtifactJson({ agent, systemPrompt, conversationMessages: history });
+            generated = await generateArtifactJson({ agent, systemPrompt, retrievedContextMessage, conversationMessages: history });
         } catch (error) {
             throw new ExpertSessionError(error.message, 422, error.code || 'ARTIFACT_VALIDATION_FAILED');
         }

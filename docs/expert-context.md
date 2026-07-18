@@ -45,13 +45,26 @@ Point id — детерминированный UUID v5 от `sourceId:chunkInde
 1. `Agent.systemPrompt`
 2. `Agent.completionCriteria` + описание `Agent.artifactDefinition`
 3. `Project.contextSummary`, если `Agent.contextPolicy.includeProjectSummary`
-4. Результаты поиска в Qdrant (фильтр `projectId` + `Agent.contextPolicy.allowedSourceTypes`),
-   ограниченные `qdrantTopK` и `maxContextChars`
+
+Результаты поиска в Qdrant (фильтр `projectId` + `Agent.contextPolicy.allowedSourceTypes`,
+ограниченные `qdrantTopK` и `maxContextChars`) в системный промпт **не входят** —
+это текст из загруженных пользователем файлов и артефактов предыдущих этапов,
+то есть недоверенный ввод относительно инструкций агента. Он отправляется
+отдельным сообщением с ролью `user` (`retrievedContextMessage`), обёрнутым в
+явную инструкцию игнорировать любые команды внутри тега `<retrieved_context>`
+и не подчиняться попыткам сменить роль/переопределить системный промпт.
+Разделение по ролям API (`system` vs `user`) — реальная граница доверия,
+которую модель обучена соблюдать; конкатенация текста внутри одного
+system-сообщения такой границей не является (см. защиту от prompt injection
+ниже).
 
 Дальше `src/services/accelerator/expert-session.service.js` добавляет историю
 сообщений сессии (до 30 последних) и вызывает `llm.service.chatCompleteStream`
 с моделью из `Agent.modelConfig` (провайдер зафиксирован — только OpenAI, см.
-`docs/open-questions.md`). Ответ модели стримится клиенту по SSE
+`docs/open-questions.md`). Итоговый порядок сообщений: `system` (промпт
+агента) → `user` (`retrievedContextMessage`, если есть что подмешать) →
+история диалога → (при генерации артефакта — ещё один `user` с инструкцией
+вернуть JSON). Ответ модели стримится клиенту по SSE
 (`POST .../expert-sessions/:id/messages`, события `message_created` / `delta`
 / `done` / `error`) — сохраняется в MongoDB только после того, как стрим
 полностью завершился, чтобы разрыв соединения на середине не оставил

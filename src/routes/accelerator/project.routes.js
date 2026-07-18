@@ -448,7 +448,7 @@ router.get('/:projectId/expert-route', authMiddleware, validate(projectSchemas.p
  *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       403: { description: Нет доступа к проекту, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       404: { description: Проект или агент не найден, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
- *       409: { description: Агент сейчас недоступен в маршруте проекта (AGENT_NOT_CURRENT), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       409: { description: "Агент найден, но недоступен: AGENT_INACTIVE (отключён администратором) или AGENT_NOT_CURRENT (не совпадает с текущим агентом маршрута)", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 router.post('/:projectId/expert-sessions', authMiddleware, validate(expertSessionSchemas.createSessionSchema), checkAccessProject, createExpertSession);
 
@@ -473,7 +473,7 @@ router.post('/:projectId/expert-sessions', authMiddleware, validate(expertSessio
  *       - `message_created` — сохранённое сообщение пользователя: `{ userMessage }`
  *       - `delta` — фрагмент ответа агента по мере генерации: `{ text: "..." }`
  *       - `done` — финальное сохранённое сообщение агента: `{ assistantMessage }`
- *       - `error` — ошибка в процессе стриминга (например, сбой LLM-провайдера): `{ message, code }`
+ *       - `error` — ошибка в процессе стриминга: `{ message, code }`. `code` гарантированно нормализован до `LLM_PROVIDER_FAILED`, если у исходной ошибки не было своего кода (например, сбой самого вызова LLM) — не сырой код провайдера.
  *     parameters:
  *       - in: path
  *         name: projectId
@@ -609,6 +609,7 @@ router.get('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, va
  *       404: { description: Проект или сессия не найдена, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       409: { description: Сессия уже завершена, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       422: { description: Артефакт не прошёл валидацию (ARTIFACT_VALIDATION_FAILED), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       502: { description: "Сбой внешней зависимости: LLM_PROVIDER_FAILED (генерация артефакта) или QDRANT_INDEX_FAILED (индексация подтверждённого артефакта)", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 router.post('/:projectId/expert-sessions/:sessionId/complete', authMiddleware, validate(expertSessionSchemas.completeSessionSchema), checkAccessProject, completeExpertSession);
 

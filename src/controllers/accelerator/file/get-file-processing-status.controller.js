@@ -15,6 +15,7 @@ export async function getFileProcessingStatus(req, res) {
             qdrantStatus: file.qdrantStatus,
             qdrantPointsCount: file.qdrantPointIds.length,
             processingError: file.processingError,
+            processingErrorCode: file.processingErrorCode,
             indexedAt: file.indexedAt
         }, 'Статус обработки файла получен', 200);
     } catch (error) {

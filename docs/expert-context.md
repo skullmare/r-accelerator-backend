@@ -109,3 +109,26 @@ JSON-ответ для валидации, а не текст, который м
   индексируется в Qdrant (`sourceType=artifact`), `Project.contextSummary`
   дополняется его summary, `Project.currentAgentId` переключается на
   `Agent.nextAgentId`.
+
+## Коды ошибок экспертного контура
+
+| Код | Откуда | Значит |
+|---|---|---|
+| `AGENT_NOT_FOUND` | `POST .../expert-sessions`, admin CRUD агентов | Агента с таким `_id` не существует. |
+| `AGENT_INACTIVE` | `POST .../expert-sessions` | Агент существует, но `isActive=false` (временно отключён администратором) — не путать с `AGENT_NOT_FOUND`. |
+| `AGENT_NOT_CURRENT` | `POST .../expert-sessions` | Агент существует и активен, но не совпадает с `Project.currentAgentId` — нельзя перепрыгнуть маршрут. |
+| `SESSION_NOT_FOUND` | `loadSessionAndAgent`, `GET .../messages` | Сессии с таким `_id` в этом проекте нет. |
+| `SESSION_ALREADY_COMPLETED` | `sendMessage`, `completeSession` | Сессия уже завершена (`status=completed`), новые сообщения/`complete` для неё недопустимы. |
+| `ARTIFACT_VALIDATION_FAILED` | `artifact-generation.service.js`, только для настоящих ошибок структуры JSON/`requiredFields`/`outputSchema` | Модель вернула невалидный или неполный артефакт. |
+| `QDRANT_INDEX_FAILED` | `completeSession` (запись подтверждённого артефакта), `process-file.job.js` (`File.processingErrorCode`) | Текст/артефакт успешно готовы, упала именно запись в Qdrant. |
+| `LLM_PROVIDER_FAILED` | `sendMessage` (SSE `error`-событие), `completeSession` (генерация артефакта) | Сбой самого вызова LLM (сеть, rate limit, авторизация и т.п.), не связанный со структурой ответа. |
+
+Принцип: **fallback-код никогда не выбирается "по умолчанию" из кода другого
+слоя**. Раньше `completeSession`/`complete-session.controller.js` подставляли
+`ARTIFACT_VALIDATION_FAILED` для *любой* непойманной ошибки на `/complete`
+(включая сбой `upsertChunks` в Qdrant) — фронт получал неверный код и не мог
+отличить "модель ошиблась" от "упала инфраструктура". Теперь каждый внешний
+вызов (LLM, Qdrant) обёрнут отдельно и нормализует код именно к тому значению,
+которое соответствует реальной причине сбоя; непойманные/неизвестные ошибки
+проходят с `error.code` как есть (обычно `undefined`), а не подменяются
+случайно похожим кодом.

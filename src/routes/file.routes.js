@@ -93,6 +93,10 @@ const router = express.Router();
  *           type: string
  *           nullable: true
  *           description: Короткое безопасное описание последней ошибки обработки (без технических деталей/стектрейса) — то, что можно показать пользователю.
+ *         processingErrorCode:
+ *           type: string
+ *           nullable: true
+ *           description: Машиночитаемый код последней ошибки обработки (в отличие от processingError — стабильное значение, на него можно свитчиться). Сейчас единственное реальное значение — QDRANT_INDEX_FAILED (текст извлёкся успешно, упала именно запись в Qdrant); для ошибок извлечения текста остаётся null.
  *         indexedAt:
  *           type: string
  *           format: date-time
@@ -129,6 +133,10 @@ const router = express.Router();
  *           type: string
  *           nullable: true
  *           description: Короткое безопасное описание последней ошибки обработки, если она была.
+ *         processingErrorCode:
+ *           type: string
+ *           nullable: true
+ *           description: Машиночитаемый код последней ошибки обработки. Сейчас единственное реальное значение — QDRANT_INDEX_FAILED (текст извлёкся успешно, упала именно запись в Qdrant); для ошибок извлечения текста остаётся null.
  *         indexedAt:
  *           type: string
  *           format: date-time

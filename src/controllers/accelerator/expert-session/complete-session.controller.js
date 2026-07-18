@@ -13,6 +13,6 @@ export async function completeExpertSession(req, res) {
         if (error instanceof ExpertSessionError) {
             return res.error({ code: error.code }, error.status, error.message);
         }
-        return res.error({ description: error.message, code: error.code || 'ARTIFACT_VALIDATION_FAILED' }, 500, 'Ошибка при завершении экспертной сессии');
+        return res.error({ description: error.message, code: error.code }, 500, 'Ошибка при завершении экспертной сессии');
     }
 }

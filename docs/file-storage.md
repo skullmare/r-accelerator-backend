@@ -70,12 +70,23 @@ CORS (разрешение `PUT` с домена фронтенда), это д�
 | `processingStatus` | uploaded, extracting, extracted, indexing, indexed, failed, unsupported |
 | `extractedTextStatus` | not_started, success, empty, failed, unsupported |
 | `qdrantStatus` | not_indexed, indexed, failed, stale |
+| `processingErrorCode` | null, `QDRANT_INDEX_FAILED` |
 
 Ошибка извлечения/эмбеддинга/Qdrant помечает файл `failed` немедленно (для
 UI) и одновременно пробрасывается наверх — job-очередь делает retry с
 задержкой согласно `maxAttempts`/backoff. Единственное исключение —
 `FILE_TOO_LARGE_FOR_FORMAT`: это детерминированная (не временная) ошибка,
 поэтому файл сразу помечается `unsupported` без бесполезных ретраев.
+
+`processingError` — произвольный текст ошибки для UI, `processingErrorCode` —
+стабильное машиночитаемое значение для логики фронта (свитчи/условный
+рендеринг). Сейчас код выставляется только для сбоя записи в Qdrant
+(`QDRANT_INDEX_FAILED`, `process-file.job.js` — `upsertBatch` намеренно
+отделён от извлечения текста): в этом случае `extractedTextStatus` остаётся
+`success`, потому что текст действительно извлёкся — упала только
+индексация, и UI не должен винить содержимое файла. Для ошибок извлечения
+текста `processingErrorCode` остаётся `null` — там есть только
+`extractedTextStatus=failed` и текст в `processingError`.
 
 ## Привязка файла к проекту
 

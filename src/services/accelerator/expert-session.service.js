@@ -53,9 +53,12 @@ export async function loadSessionAndAgent(project, sessionId) {
 }
 
 export async function createSession(project, agentId) {
-    const agent = await Agent.findOne({ _id: agentId, isActive: true });
+    const agent = await Agent.findById(agentId);
     if (!agent) {
-        throw new ExpertSessionError('Агент не найден или отключён', 404, 'AGENT_NOT_FOUND');
+        throw new ExpertSessionError('Агент не найден', 404, 'AGENT_NOT_FOUND');
+    }
+    if (!agent.isActive) {
+        throw new ExpertSessionError('Агент временно отключён администратором', 409, 'AGENT_INACTIVE');
     }
 
     const currentAgent = await resolveCurrentAgent(project);
@@ -107,13 +110,22 @@ export async function sendMessage(project, session, agent, content, { onUserMess
     if (retrievedContextMessage) messages.push(retrievedContextMessage);
     messages.push(...history);
 
-    const { content: replyText, tokenUsage } = await chatCompleteStream({
-        model: agent.modelConfig.model,
-        temperature: agent.modelConfig.temperature,
-        maxTokens: agent.modelConfig.maxTokens,
-        messages,
-        onDelta
-    });
+    let replyText, tokenUsage;
+    try {
+        ({ content: replyText, tokenUsage } = await chatCompleteStream({
+            model: agent.modelConfig.model,
+            temperature: agent.modelConfig.temperature,
+            maxTokens: agent.modelConfig.maxTokens,
+            messages,
+            onDelta
+        }));
+    } catch (error) {
+        // Whatever code the OpenAI SDK attaches (or none) gets normalized to
+        // a stable, documented code — the SSE `error` event must not leak an
+        // unpredictable provider-specific value to the frontend.
+        error.code = error.code || 'LLM_PROVIDER_FAILED';
+        throw error;
+    }
 
     const assistantMessage = await Message.create({
         sessionId: session._id,
@@ -160,7 +172,15 @@ export async function completeSession(project, session, agent, confirmArtifact) 
         try {
             generated = await generateArtifactJson({ agent, systemPrompt, retrievedContextMessage, conversationMessages: history });
         } catch (error) {
-            throw new ExpertSessionError(error.message, 422, error.code || 'ARTIFACT_VALIDATION_FAILED');
+            // Only a real structural/JSON validation failure (tagged by
+            // artifact-generation.service.js) is actually ARTIFACT_VALIDATION_FAILED.
+            // Anything else here (network error, rate limit, auth failure —
+            // generateArtifactJson's own LLM call throwing) is a provider
+            // failure and must not be mislabeled as "your artifact is invalid".
+            if (error.code === 'ARTIFACT_VALIDATION_FAILED') {
+                throw new ExpertSessionError(error.message, 422, error.code);
+            }
+            throw new ExpertSessionError(error.message, 502, error.code || 'LLM_PROVIDER_FAILED');
         }
 
         artifact = await Artifact.create({
@@ -191,13 +211,17 @@ export async function completeSession(project, session, agent, confirmArtifact) 
     artifact.status = 'confirmed';
     await artifact.save();
 
-    await upsertChunks({
-        projectId: project._id,
-        agentId: String(agent._id),
-        sourceType: 'artifact',
-        sourceId: String(artifact._id),
-        chunks: chunkText(JSON.stringify(artifact.content))
-    });
+    try {
+        await upsertChunks({
+            projectId: project._id,
+            agentId: String(agent._id),
+            sourceType: 'artifact',
+            sourceId: String(artifact._id),
+            chunks: chunkText(JSON.stringify(artifact.content))
+        });
+    } catch (error) {
+        throw new ExpertSessionError('Не удалось проиндексировать артефакт в Qdrant', 502, 'QDRANT_INDEX_FAILED');
+    }
 
     appendContextSummary(project, agent.name, artifact.summary);
     if (!project.completedAgentIds.some((id) => id.equals(agent._id))) {

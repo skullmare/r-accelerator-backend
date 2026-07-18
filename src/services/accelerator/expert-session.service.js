@@ -194,7 +194,13 @@ export async function completeSession(project, session, agent, confirmArtifact) 
             status: 'draft'
         });
 
+        // Persisted immediately, before the confirmArtifact:true branch below
+        // can fail on the Qdrant write. Without this, a failed upsertChunks
+        // left session.artifactId set only in memory — a retry would find no
+        // linked artifact, regenerate a brand new one via a fresh LLM call,
+        // and orphan the first (already-created, already-confirmed) one.
         session.artifactId = artifact._id;
+        await session.save();
     }
 
     if (!confirmArtifact) {

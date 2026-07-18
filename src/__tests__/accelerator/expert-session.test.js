@@ -410,6 +410,41 @@ describe('Коды ошибок фронта: AGENT_INACTIVE / QDRANT_INDEX_FAIL
         expect(res.body.error.code).toBe('QDRANT_INDEX_FAILED');
     });
 
+    it('повторный вызов .../complete после QDRANT_INDEX_FAILED переиспользует уже созданный артефакт из MongoDB, а не генерирует новый через LLM', async () => {
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+
+        const sessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', cookie)
+            .send({ agentId: String(r1._id) });
+        const sessionId = sessionRes.body.data.session._id;
+
+        upsertChunks.mockRejectedValueOnce(new Error('Qdrant недоступен'));
+
+        const firstRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({ confirmArtifact: true });
+        expect(firstRes.status).toBe(502);
+        expect(chatComplete).toHaveBeenCalledTimes(1);
+
+        const retryRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({ confirmArtifact: true });
+
+        expect(retryRes.status).toBe(200);
+        expect(retryRes.body.data.confirmed).toBe(true);
+        // Reused, not regenerated: still only the one LLM call from the first attempt.
+        expect(chatComplete).toHaveBeenCalledTimes(1);
+
+        const artifacts = await Artifact.find({ projectId: project._id });
+        expect(artifacts).toHaveLength(1);
+        expect(artifacts[0].status).toBe('confirmed');
+    });
+
     it('POST .../complete возвращает 502 LLM_PROVIDER_FAILED (не 422/ARTIFACT_VALIDATION_FAILED), если падает сам вызов LLM при генерации артефакта', async () => {
         const { r1 } = await seedAgents();
         const { owner, project } = await setupProject();

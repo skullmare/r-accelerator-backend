@@ -33,7 +33,7 @@ export async function processFile({ fileId }) {
     file.processingStatus = 'extracting';
     await file.save();
 
-    await deleteBySource(String(file._id));
+    await deleteBySource(String(file._id), file.projectId);
 
     const runningHash = crypto.createHash('sha256');
     const pointIds = [];

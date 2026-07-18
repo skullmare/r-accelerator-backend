@@ -57,7 +57,7 @@ describe('processFile', () => {
             sourceType: 'file_chunk',
             sourceId: String(file._id)
         }));
-        expect(deleteBySource).toHaveBeenCalledWith(String(file._id));
+        expect(deleteBySource).toHaveBeenCalledWith(String(file._id), file.projectId);
     });
 
     it('помечает файл unsupported, если для mimetype нет экстрактора', async () => {

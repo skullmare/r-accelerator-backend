@@ -77,11 +77,16 @@ export async function upsertChunks({ projectId, agentId = null, sourceType, sour
     return points.map((p) => p.id);
 }
 
-export async function deleteBySource(sourceId) {
+export async function deleteBySource(sourceId, projectId) {
+    if (!projectId) throw new Error('projectId обязателен для удаления точек в Qdrant');
+
     await ensureCollection();
     await qdrantClient.delete(QDRANT_COLLECTION, {
         wait: true,
-        filter: { must: [{ key: 'sourceId', match: { value: String(sourceId) } }] }
+        filter: { must: [
+            { key: 'sourceId', match: { value: String(sourceId) } },
+            { key: 'projectId', match: { value: String(projectId) } }
+        ] }
     });
 }
 

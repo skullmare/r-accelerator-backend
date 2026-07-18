@@ -558,7 +558,9 @@ router.get('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, va
  *       (status=ready) и сессия переходит в waiting_user_confirmation, но проект
  *       не переключается на следующего агента. С confirmArtifact=true артефакт
  *       подтверждается (status=confirmed), индексируется в Qdrant, summary проекта
- *       обновляется и currentAgentId переключается на nextAgentId агента.
+ *       обновляется и currentAgentId переключается на nextAgentId агента. Если у
+ *       агента нет nextAgentId (последний в маршруте) — это был финальный этап,
+ *       и Project.status автоматически становится "completed".
  *       Повторный вызов уже завершённой сессии — 409.
  *     parameters:
  *       - in: path

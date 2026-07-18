@@ -228,6 +228,13 @@ export async function completeSession(project, session, agent, confirmArtifact) 
         project.completedAgentIds.push(agent._id);
     }
     project.currentAgentId = agent.nextAgentId || null;
+    // This was the last agent in the route (no nextAgentId) — the whole
+    // expert route is done, not just this stage. Only the route reaching
+    // its end sets this; nothing else in the system ever flips
+    // Project.status automatically (see Project.status field comment).
+    if (!agent.nextAgentId) {
+        project.status = 'completed';
+    }
     project.lastActivityAt = new Date();
     await project.save();
 

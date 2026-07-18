@@ -742,7 +742,7 @@
               "completed",
               "archived"
             ],
-            "description": "Статус проекта. Не влияет на доступ к экспертному маршруту — только для организации списка проектов."
+            "description": "Статус проекта. Меняется вручную через PATCH, кроме одного автоматического перехода — сервер сам ставит \"completed\", когда подтверждён артефакт последнего агента маршрута (nextAgentId отсутствует). Не влияет на доступ к экспертному маршруту — это отражение состояния, а не гейт."
           },
           "progress": {
             "type": "number",
@@ -6773,7 +6773,7 @@
           "Accelerator / Expert Sessions"
         ],
         "summary": "Завершить этап и создать/подтвердить артефакт",
-        "description": "Двухфазное завершение: без confirmArtifact создаётся черновик артефакта\n(status=ready) и сессия переходит в waiting_user_confirmation, но проект\nне переключается на следующего агента. С confirmArtifact=true артефакт\nподтверждается (status=confirmed), индексируется в Qdrant, summary проекта\nобновляется и currentAgentId переключается на nextAgentId агента.\nПовторный вызов уже завершённой сессии — 409.\n",
+        "description": "Двухфазное завершение: без confirmArtifact создаётся черновик артефакта\n(status=ready) и сессия переходит в waiting_user_confirmation, но проект\nне переключается на следующего агента. С confirmArtifact=true артефакт\nподтверждается (status=confirmed), индексируется в Qdrant, summary проекта\nобновляется и currentAgentId переключается на nextAgentId агента. Если у\nагента нет nextAgentId (последний в маршруте) — это был финальный этап,\nи Project.status автоматически становится \"completed\".\nПовторный вызов уже завершённой сессии — 409.\n",
         "parameters": [
           {
             "in": "path",

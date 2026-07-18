@@ -458,3 +458,61 @@ describe('Коды ошибок фронта: AGENT_INACTIVE / QDRANT_INDEX_FAIL
         expect(errorEvent.data.code).toBe('LLM_PROVIDER_FAILED');
     });
 });
+
+describe('Автозавершение Project.status', () => {
+    async function completeAgent(cookie, project, agentId, sessionId) {
+        await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({});
+        return request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({ confirmArtifact: true });
+    }
+
+    it('подтверждение артефакта НЕ последнего агента (R1) не меняет Project.status', async () => {
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+
+        const sessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', cookie)
+            .send({ agentId: String(r1._id) });
+        const sessionId = sessionRes.body.data.session._id;
+
+        const completeRes = await completeAgent(cookie, project, r1._id, sessionId);
+        expect(completeRes.status).toBe(200);
+
+        const updatedProject = await Project.findById(project._id);
+        expect(updatedProject.status).toBe('active');
+    });
+
+    it('подтверждение артефакта ПОСЛЕДНЕГО агента маршрута (nextAgentId=null) переводит Project.status в completed', async () => {
+        const { r1, r2 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+
+        const r1SessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', cookie)
+            .send({ agentId: String(r1._id) });
+        await completeAgent(cookie, project, r1._id, r1SessionRes.body.data.session._id);
+
+        const projectAfterR1 = await Project.findById(project._id);
+        expect(String(projectAfterR1.currentAgentId)).toBe(String(r2._id));
+        expect(projectAfterR1.status).toBe('active');
+
+        const r2SessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', cookie)
+            .send({ agentId: String(r2._id) });
+        const r2CompleteRes = await completeAgent(cookie, project, r2._id, r2SessionRes.body.data.session._id);
+        expect(r2CompleteRes.status).toBe(200);
+        expect(r2CompleteRes.body.data.nextAgentId).toBeNull();
+
+        const projectAfterR2 = await Project.findById(project._id);
+        expect(projectAfterR2.status).toBe('completed');
+    });
+});

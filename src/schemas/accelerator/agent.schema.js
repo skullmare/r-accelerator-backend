@@ -15,7 +15,9 @@ const contextPolicySchema = z.object({
     includePreviousArtifacts: z.boolean().default(true),
     qdrantTopK: z.number().int().min(1).max(20).default(6),
     maxContextChars: z.number().int().min(500).max(40000).default(6000),
-    allowedSourceTypes: z.array(z.enum(['project_summary', 'agent_summary', 'artifact', 'file_chunk', 'user_note'])).default(['project_summary', 'artifact', 'file_chunk'])
+    allowedSourceTypes: z.array(z.enum(['project_summary', 'agent_summary', 'artifact', 'file_chunk', 'user_note'])).default(['project_summary', 'artifact', 'file_chunk']),
+    knowledgeTopK: z.number().int().min(1).max(20).default(6),
+    knowledgeMaxContextChars: z.number().int().min(500).max(40000).default(6000)
 }).strict();
 
 const modelConfigSchema = z.object({
@@ -29,6 +31,8 @@ const createAgentSchema = z.object({
     body: z.object({
         name: z.string().trim().min(1).max(150),
         roleTitle: z.string().trim().min(1).max(150),
+        description: z.string().trim().max(2000).nullable().optional(),
+        avatarUrl: z.string().trim().url('avatarUrl должен быть корректным URL').max(2000).nullable().optional(),
         order: z.number().int(),
         isActive: z.boolean().default(true),
         systemPrompt: z.string().trim().min(1).max(20000),
@@ -36,7 +40,8 @@ const createAgentSchema = z.object({
         artifactDefinition: artifactDefinitionSchema,
         nextAgentId: objectId.nullable().optional(),
         contextPolicy: contextPolicySchema.default({}),
-        modelConfig: modelConfigSchema.default({})
+        modelConfig: modelConfigSchema.default({}),
+        knowledgeIds: z.array(objectId).default([])
     }).strict()
 });
 
@@ -46,6 +51,8 @@ const updateAgentSchema = z.object({
     body: z.object({
         name: z.string().trim().min(1).max(150).optional(),
         roleTitle: z.string().trim().min(1).max(150).optional(),
+        description: z.string().trim().max(2000).nullable().optional(),
+        avatarUrl: z.string().trim().url('avatarUrl должен быть корректным URL').max(2000).nullable().optional(),
         order: z.number().int().optional(),
         isActive: z.boolean().optional(),
         systemPrompt: z.string().trim().min(1).max(20000).optional(),
@@ -53,7 +60,8 @@ const updateAgentSchema = z.object({
         artifactDefinition: artifactDefinitionSchema.optional(),
         nextAgentId: objectId.nullable().optional(),
         contextPolicy: contextPolicySchema.optional(),
-        modelConfig: modelConfigSchema.optional()
+        modelConfig: modelConfigSchema.optional(),
+        knowledgeIds: z.array(objectId).optional()
     }).strict()
 });
 

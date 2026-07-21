@@ -1,8 +1,8 @@
 import { uploadFile } from '../../services/s3.service.js';
 import File from '../../models/file.model.js';
 import { findOwnedProject } from '../../services/accelerator/project-ownership.service.js';
-import { enqueue } from '../../services/queue/job-queue.service.js';
-import { FILE_PROCESS_JOB_TYPE } from '../../services/file-processing/process-file.job.js';
+import { processFile } from '../../services/file-processing/process-file.job.js';
+import logger from '../../../config/logger.config.js';
 
 export async function uploadFileController(req, res) {
     try {
@@ -32,8 +32,18 @@ export async function uploadFileController(req, res) {
             projectId
         });
 
+        // Обработка/индексация теперь синхронная (очереди больше нет). Сбой
+        // индексации не должен ронять сам upload — файл уже загружен в S3 и
+        // сохранён; processFile сам проставит file.processingStatus='failed'.
+        // Возвращаем свежую версию документа с актуальным статусом обработки.
         if (projectId) {
-            await enqueue(FILE_PROCESS_JOB_TYPE, { fileId: String(file._id) });
+            try {
+                await processFile({ fileId: String(file._id) });
+            } catch (error) {
+                logger.error(`Ошибка обработки файла ${file._id}: ${error.message}`);
+            }
+            const processed = await File.findById(file._id);
+            return res.success(processed, 'Файл загружен', 200);
         }
 
         return res.success(file, 'Файл загружен', 200);

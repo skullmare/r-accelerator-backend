@@ -33,6 +33,7 @@ import Project from '../../models/accelerator/project.model.js';
 import Agent from '../../models/accelerator/agent.model.js';
 import Artifact from '../../models/accelerator/artifact.model.js';
 import { upsertChunks } from '../../services/qdrant.service.js';
+import { chatComplete, chatCompleteStream } from '../../services/llm.service.js';
 
 beforeAll(() => connect());
 afterAll(() => closeDatabase());
@@ -362,5 +363,249 @@ describe('GET /accelerator/projects/:projectId/artifacts', () => {
             .get(`/api/v1/accelerator/projects/${project._id}/artifacts`);
 
         expect(res.status).toBe(401);
+    });
+});
+
+describe('Коды ошибок фронта: AGENT_INACTIVE / QDRANT_INDEX_FAILED / LLM_PROVIDER_FAILED', () => {
+    it('POST expert-sessions возвращает 409 AGENT_INACTIVE, если агент существует, но isActive=false (не путать с AGENT_NOT_FOUND)', async () => {
+        const { owner, project } = await setupProject();
+        const r1 = await Agent.create({
+            name: 'Роман',
+            roleTitle: 'Эксперт по рынку',
+            order: 1,
+            isActive: false,
+            systemPrompt: 'Ты эксперт по рынку.',
+            completionCriteria: 'Собран рыночный бриф.',
+            artifactDefinition: { artifactType: 'market_brief', requiredFields: ['summary'] }
+        });
+
+        const res = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', authCookie(owner._id, owner.email))
+            .send({ agentId: String(r1._id) });
+
+        expect(res.status).toBe(409);
+        expect(res.body.error.code).toBe('AGENT_INACTIVE');
+    });
+
+    it('POST .../complete возвращает 502 QDRANT_INDEX_FAILED (не 500/ARTIFACT_VALIDATION_FAILED), если падает запись подтверждённого артефакта в Qdrant', async () => {
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+
+        const sessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', cookie)
+            .send({ agentId: String(r1._id) });
+        const sessionId = sessionRes.body.data.session._id;
+
+        upsertChunks.mockRejectedValueOnce(new Error('Qdrant недоступен'));
+
+        const res = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({ confirmArtifact: true });
+
+        expect(res.status).toBe(502);
+        expect(res.body.error.code).toBe('QDRANT_INDEX_FAILED');
+    });
+
+    it('повторный вызов .../complete после QDRANT_INDEX_FAILED переиспользует уже созданный артефакт из MongoDB, а не генерирует новый через LLM', async () => {
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+
+        const sessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', cookie)
+            .send({ agentId: String(r1._id) });
+        const sessionId = sessionRes.body.data.session._id;
+
+        upsertChunks.mockRejectedValueOnce(new Error('Qdrant недоступен'));
+
+        const firstRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({ confirmArtifact: true });
+        expect(firstRes.status).toBe(502);
+        expect(chatComplete).toHaveBeenCalledTimes(1);
+
+        const retryRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({ confirmArtifact: true });
+
+        expect(retryRes.status).toBe(200);
+        expect(retryRes.body.data.confirmed).toBe(true);
+        // Reused, not regenerated: still only the one LLM call from the first attempt.
+        expect(chatComplete).toHaveBeenCalledTimes(1);
+
+        const artifacts = await Artifact.find({ projectId: project._id });
+        expect(artifacts).toHaveLength(1);
+        expect(artifacts[0].status).toBe('confirmed');
+    });
+
+    it('POST .../complete возвращает 502 LLM_PROVIDER_FAILED (не 422/ARTIFACT_VALIDATION_FAILED), если падает сам вызов LLM при генерации артефакта', async () => {
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+
+        const sessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', cookie)
+            .send({ agentId: String(r1._id) });
+        const sessionId = sessionRes.body.data.session._id;
+
+        // Ошибка без .code — как обычно бросает сам OpenAI SDK при сетевом сбое/rate limit,
+        // а не наша собственная ARTIFACT_VALIDATION_FAILED-логика парсинга JSON.
+        chatComplete.mockRejectedValueOnce(new Error('OpenAI API недоступен'));
+
+        const res = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({});
+
+        expect(res.status).toBe(502);
+        expect(res.body.error.code).toBe('LLM_PROVIDER_FAILED');
+    });
+
+    it('SSE-событие error нормализует код до LLM_PROVIDER_FAILED, если падает сам стриминговый вызов LLM', async () => {
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+
+        const sessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', cookie)
+            .send({ agentId: String(r1._id) });
+        const sessionId = sessionRes.body.data.session._id;
+
+        chatCompleteStream.mockRejectedValueOnce(new Error('Соединение с OpenAI оборвалось'));
+
+        const res = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
+            .set('Cookie', cookie)
+            .send({ content: 'Привет' });
+
+        expect(res.status).toBe(200);
+        const events = parseSSE(res.text);
+        const errorEvent = events.find((e) => e.event === 'error');
+        expect(errorEvent.data.code).toBe('LLM_PROVIDER_FAILED');
+    });
+});
+
+describe('Автозавершение Project.status', () => {
+    async function completeAgent(cookie, project, agentId, sessionId) {
+        await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({});
+        return request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({ confirmArtifact: true });
+    }
+
+    it('подтверждение артефакта НЕ последнего агента (R1) не меняет Project.status', async () => {
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+
+        const sessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', cookie)
+            .send({ agentId: String(r1._id) });
+        const sessionId = sessionRes.body.data.session._id;
+
+        const completeRes = await completeAgent(cookie, project, r1._id, sessionId);
+        expect(completeRes.status).toBe(200);
+
+        const updatedProject = await Project.findById(project._id);
+        expect(updatedProject.status).toBe('active');
+    });
+
+    it('подтверждение артефакта ПОСЛЕДНЕГО агента маршрута (nextAgentId=null) переводит Project.status в completed', async () => {
+        const { r1, r2 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+
+        const r1SessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', cookie)
+            .send({ agentId: String(r1._id) });
+        await completeAgent(cookie, project, r1._id, r1SessionRes.body.data.session._id);
+
+        const projectAfterR1 = await Project.findById(project._id);
+        expect(String(projectAfterR1.currentAgentId)).toBe(String(r2._id));
+        expect(projectAfterR1.status).toBe('active');
+
+        const r2SessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', cookie)
+            .send({ agentId: String(r2._id) });
+        const r2CompleteRes = await completeAgent(cookie, project, r2._id, r2SessionRes.body.data.session._id);
+        expect(r2CompleteRes.status).toBe(200);
+        expect(r2CompleteRes.body.data.nextAgentId).toBeNull();
+
+        const projectAfterR2 = await Project.findById(project._id);
+        expect(projectAfterR2.status).toBe('completed');
+    });
+});
+
+describe('Гейт обязательных полей артефакта перед переходом на следующего агента', () => {
+    it('confirmArtifact:true с артефактом без обязательного поля -> 422 ARTIFACT_VALIDATION_FAILED и проект НЕ переходит на R2', async () => {
+        const { r1, r2 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+
+        const sessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', cookie)
+            .send({ agentId: String(r1._id) });
+        const sessionId = sessionRes.body.data.session._id;
+
+        // Модель вернула JSON, где нет обязательного поля 'risks'
+        // (r1.requiredFields = marketDescription, nicheHypothesis, competitors, risks, summary).
+        chatComplete.mockResolvedValueOnce({
+            content: JSON.stringify({
+                marketDescription: 'Описание рынка',
+                nicheHypothesis: 'Гипотеза ниши',
+                competitors: 'Конкуренты',
+                summary: 'Сводка'
+            }),
+            tokenUsage: { totalTokens: 10 }
+        });
+
+        const res = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({ confirmArtifact: true });
+
+        expect(res.status).toBe(422);
+        expect(res.body.error.code).toBe('ARTIFACT_VALIDATION_FAILED');
+
+        // Ключевой инвариант: проект остался на R1, маршрут не продвинулся.
+        const projectAfter = await Project.findById(project._id);
+        expect(String(projectAfter.currentAgentId)).toBe(String(r1._id));
+        expect(projectAfter.completedAgentIds.map(String)).not.toContain(String(r1._id));
+        expect(projectAfter.status).toBe('active');
+
+        // Артефакт с неполными полями не должен был создаться вовсе.
+        const artifacts = await Artifact.find({ projectId: project._id });
+        expect(artifacts).toHaveLength(0);
+
+        // Индексация в Qdrant подтверждённого артефакта тоже не запускалась.
+        expect(upsertChunks).not.toHaveBeenCalled();
+
+        // Убедимся, что после этого валидный артефакт всё-таки переводит на R2
+        // (гейт именно на полях, а не общая блокировка).
+        const okRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({ confirmArtifact: true });
+        expect(okRes.status).toBe(200);
+
+        const projectAdvanced = await Project.findById(project._id);
+        expect(String(projectAdvanced.currentAgentId)).toBe(String(r2._id));
     });
 });

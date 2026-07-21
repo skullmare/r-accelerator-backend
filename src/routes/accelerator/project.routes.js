@@ -299,8 +299,8 @@ router.get('/:projectId/files', authMiddleware, validate(projectSchemas.projectI
  * /accelerator/projects/{projectId}/files/{fileId}/index:
  *   post:
  *     tags: [Accelerator / Files]
- *     summary: Запустить (пере)индексацию файла в Qdrant
- *     description: Ставит файл в очередь на извлечение текста, чанкинг и индексацию в Qdrant. Не блокирует запрос — обработка выполняется асинхронно воркером.
+ *     summary: (Пере)индексировать файл в Qdrant
+ *     description: Синхронно извлекает текст, чанкует и индексирует файл в Qdrant (очереди нет — запрос дожидается завершения). Идемпотентно — старые точки файла удаляются перед записью новых.
  *     parameters:
  *       - in: path
  *         name: projectId
@@ -311,22 +311,24 @@ router.get('/:projectId/files', authMiddleware, validate(projectSchemas.projectI
  *         required: true
  *         schema: { type: string }
  *     responses:
- *       202:
- *         description: Индексация поставлена в очередь
+ *       200:
+ *         description: Файл переиндексирован (с итоговым статусом)
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
  *                 success: { type: boolean, example: true }
- *                 message: { type: string, example: "Индексация запущена" }
+ *                 message: { type: string, example: "Файл переиндексирован" }
  *                 data:
  *                   type: object
  *                   properties:
  *                     processingStatus:
  *                       type: string
- *                       example: indexing
- *                       description: Новый статус файла сразу после постановки в очередь (см. File.processingStatus).
+ *                       example: indexed
+ *                       description: Итоговый статус файла после обработки (см. File.processingStatus).
+ *                     qdrantStatus: { type: string, example: indexed }
+ *                     processingErrorCode: { type: string, nullable: true, example: null }
  *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       403: { description: Нет доступа к проекту, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       404: { description: Проект или файл не найден, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -448,7 +450,7 @@ router.get('/:projectId/expert-route', authMiddleware, validate(projectSchemas.p
  *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       403: { description: Нет доступа к проекту, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       404: { description: Проект или агент не найден, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
- *       409: { description: Агент сейчас недоступен в маршруте проекта (AGENT_NOT_CURRENT), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       409: { description: "Агент найден, но недоступен: AGENT_INACTIVE (отключён администратором) или AGENT_NOT_CURRENT (не совпадает с текущим агентом маршрута)", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 router.post('/:projectId/expert-sessions', authMiddleware, validate(expertSessionSchemas.createSessionSchema), checkAccessProject, createExpertSession);
 
@@ -473,7 +475,7 @@ router.post('/:projectId/expert-sessions', authMiddleware, validate(expertSessio
  *       - `message_created` — сохранённое сообщение пользователя: `{ userMessage }`
  *       - `delta` — фрагмент ответа агента по мере генерации: `{ text: "..." }`
  *       - `done` — финальное сохранённое сообщение агента: `{ assistantMessage }`
- *       - `error` — ошибка в процессе стриминга (например, сбой LLM-провайдера): `{ message, code }`
+ *       - `error` — ошибка в процессе стриминга: `{ message, code }`. `code` гарантированно нормализован до `LLM_PROVIDER_FAILED`, если у исходной ошибки не было своего кода (например, сбой самого вызова LLM) — не сырой код провайдера.
  *     parameters:
  *       - in: path
  *         name: projectId
@@ -558,7 +560,9 @@ router.get('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, va
  *       (status=ready) и сессия переходит в waiting_user_confirmation, но проект
  *       не переключается на следующего агента. С confirmArtifact=true артефакт
  *       подтверждается (status=confirmed), индексируется в Qdrant, summary проекта
- *       обновляется и currentAgentId переключается на nextAgentId агента.
+ *       обновляется и currentAgentId переключается на nextAgentId агента. Если у
+ *       агента нет nextAgentId (последний в маршруте) — это был финальный этап,
+ *       и Project.status автоматически становится "completed".
  *       Повторный вызов уже завершённой сессии — 409.
  *     parameters:
  *       - in: path
@@ -609,6 +613,7 @@ router.get('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, va
  *       404: { description: Проект или сессия не найдена, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       409: { description: Сессия уже завершена, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       422: { description: Артефакт не прошёл валидацию (ARTIFACT_VALIDATION_FAILED), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       502: { description: "Сбой внешней зависимости: LLM_PROVIDER_FAILED (генерация артефакта) или QDRANT_INDEX_FAILED (индексация подтверждённого артефакта)", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 router.post('/:projectId/expert-sessions/:sessionId/complete', authMiddleware, validate(expertSessionSchemas.completeSessionSchema), checkAccessProject, completeExpertSession);
 

@@ -2,7 +2,7 @@ import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { s3Client } from '../../../../config/s3.config.js';
 import { CHUNK_SIZE, CHUNK_OVERLAP, hashText } from '../chunker.js';
 
-const bucket = process.env.YANDEX_BUCKET;
+const bucket = process.env.S3_BUCKET;
 
 // Streams the object body straight from S3 and yields chunks as soon as
 // enough text has accumulated. Memory usage stays bounded by CHUNK_SIZE

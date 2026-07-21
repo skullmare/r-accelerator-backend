@@ -52,8 +52,12 @@ const ProjectSchema = new mongoose.Schema({
         trim: true,
         default: null
     },
-    // Статус проекта (используется для архивации/паузы, не влияет на
-    // доступ к экспертному маршруту).
+    // Статус проекта. Пользователь меняет его вручную (пауза/архив) через
+    // PATCH. Единственный автоматический переход — на 'completed', когда
+    // completeSession подтверждает артефакт последнего агента маршрута
+    // (agent.nextAgentId === null), см. expert-session.service.js. Само
+    // значение status не влияет на доступ к экспертному маршруту — это
+    // просто отражение состояния, а не гейт.
     status: {
         type: String,
         enum: ['active', 'paused', 'completed', 'archived'],

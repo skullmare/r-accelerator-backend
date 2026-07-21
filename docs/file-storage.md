@@ -16,6 +16,35 @@ Claim job — это один атомарный `findOneAndUpdate`, поэто�
 Если нагрузка вырастет — можно заменить транспорт на BullMQ + Redis, не
 трогая обработчики job (см. `docs/open-questions.md`).
 
+## S3-провайдер
+
+`config/s3.config.js`/`src/services/s3.service.js` не завязаны на конкретного
+провайдера — используется обычный `@aws-sdk/client-s3` поверх стандартного
+S3 API, всё провайдер-специфичное вынесено в `.env` (`S3_ENDPOINT`,
+`S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`,
+`S3_FORCE_PATH_STYLE`, `S3_PUBLIC_URL`). Сейчас настроен **Timeweb Cloud**
+(`https://s3.twcstorage.ru`, регион `ru-1`) — до этого был Yandex Cloud
+Storage, переключение свелось к смене значений в `.env`, без правок кода.
+
+`S3_FORCE_PATH_STYLE=true` обязателен для Timeweb (и большинства не-AWS
+S3-совместимых хранилищ) — они не поддерживают virtual-hosted-style
+адресацию бакета (`bucket.endpoint/key`), только path-style
+(`endpoint/bucket/key`). `S3_PUBLIC_URL` можно не задавать — по умолчанию
+публичная ссылка строится на основе `S3_ENDPOINT`; задать отдельно нужно,
+только если объекты раздаются через отдельный CDN-домен.
+
+Мультипарт-загрузка (`CreateMultipartUpload`/`UploadPart`/
+`CompleteMultipartUpload`/`AbortMultipartUpload`) и presigned URL на части —
+стандартные операции S3 API, Timeweb их поддерживает так же, как и Yandex,
+логика в `s3.service.js` не менялась при смене провайдера. Загрузка частей
+идёт напрямую из браузера по presigned URL — на бакете должен быть настроен
+CORS (разрешение `PUT` с домена фронтенда), это делается в панели
+управления провайдера, а не в коде.
+
+Файлы, загруженные до смены провайдера, останутся с URL старого хранилища
+в `File.url` — смена `.env` их не переносит; для полной миграции старые
+объекты нужно скопировать в новый бакет отдельно.
+
 ## Пайплайн одного файла (`src/services/file-processing/process-file.job.js`)
 
 1. По mimetype выбирается экстрактор (`extractors/index.js`). Нет
@@ -41,12 +70,23 @@ Claim job — это один атомарный `findOneAndUpdate`, поэто�
 | `processingStatus` | uploaded, extracting, extracted, indexing, indexed, failed, unsupported |
 | `extractedTextStatus` | not_started, success, empty, failed, unsupported |
 | `qdrantStatus` | not_indexed, indexed, failed, stale |
+| `processingErrorCode` | null, `QDRANT_INDEX_FAILED` |
 
 Ошибка извлечения/эмбеддинга/Qdrant помечает файл `failed` немедленно (для
 UI) и одновременно пробрасывается наверх — job-очередь делает retry с
 задержкой согласно `maxAttempts`/backoff. Единственное исключение —
 `FILE_TOO_LARGE_FOR_FORMAT`: это детерминированная (не временная) ошибка,
 поэтому файл сразу помечается `unsupported` без бесполезных ретраев.
+
+`processingError` — произвольный текст ошибки для UI, `processingErrorCode` —
+стабильное машиночитаемое значение для логики фронта (свитчи/условный
+рендеринг). Сейчас код выставляется только для сбоя записи в Qdrant
+(`QDRANT_INDEX_FAILED`, `process-file.job.js` — `upsertBatch` намеренно
+отделён от извлечения текста): в этом случае `extractedTextStatus` остаётся
+`success`, потому что текст действительно извлёкся — упала только
+индексация, и UI не должен винить содержимое файла. Для ошибок извлечения
+текста `processingErrorCode` остаётся `null` — там есть только
+`extractedTextStatus=failed` и текст в `processingError`.
 
 ## Привязка файла к проекту
 

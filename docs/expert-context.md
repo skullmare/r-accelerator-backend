@@ -5,10 +5,40 @@
 - **MongoDB** — источник истины. Проекты, агенты, экспертные сессии, сообщения,
   артефакты, метаданные файлов (`FileAsset`), краткая сводка проекта
   (`Project.contextSummary`).
-- **Qdrant** (коллекция `expert_context`, см. `QDRANT_COLLECTION`) — только
-  поисковый векторный индекс. Не бизнес-сущность, не источник истины.
-  При расхождении с MongoDB приоритет всегда у MongoDB; Qdrant можно
-  переиндексировать из MongoDB и файлов в S3 в любой момент.
+- **Qdrant** — только поисковый векторный индекс, не бизнес-сущность и не
+  источник истины. При расхождении с MongoDB приоритет всегда у MongoDB;
+  Qdrant можно переиндексировать из MongoDB и файлов в S3 в любой момент.
+  Две независимые коллекции:
+  - `expert_context` (`QDRANT_COLLECTION`) — приватный контекст проекта
+    (файлы проекта + артефакты этапов), фильтруется по `projectId`;
+  - `knowledge_context` (`QDRANT_KNOWLEDGE_COLLECTION`) — глобальная база
+    знаний (сущность `Knowledge`), фильтруется по `knowledgeId`. См. раздел
+    «Knowledge — глобальная база знаний» ниже.
+
+  **Провайдер эмбеддингов — единый для обоих контуров**: OpenRouter,
+  модель `google/gemini-embedding-2`, размерность вектора `EMBEDDING_DIM`
+  (по умолчанию 3072, максимальная точность). Ключ — `OPENAI_API_KEY`
+  (теперь это ключ OpenRouter), клиент — `config/openrouter.config.js`.
+  Чат-модели агентов при этом остаются на прямом OpenAI-клиенте
+  (`config/openai.config.js`). При смене модели/размерности коллекции нужно
+  пересоздать — векторы разной размерности в одной коллекции хранить нельзя.
+
+  **Обработка синхронная**: очереди задач в проекте больше нет. Индексация
+  файлов и knowledge выполняется прямо в HTTP-запросе (загрузка файла,
+  создание/переиндексация knowledge) — ответ возвращается уже с итоговым
+  статусом. Сбой индексации фиксируется в статусе сущности и не откатывает
+  саму загрузку.
+
+  Файлы переиндексируются в любой момент (`POST .../files/:fileId/index`).
+  Артефакты — только пока их `ExpertSession` ещё не в статусе `completed`:
+  `completeSession` (`expert-session.service.js`) сохраняет `Artifact` и
+  привязку `ExpertSession.artifactId` в MongoDB **до** попытки записи в
+  Qdrant, поэтому повторный вызов `/complete` после `QDRANT_INDEX_FAILED`
+  находит уже готовый артефакт и просто повторяет запись в Qdrant — не
+  генерирует новый через LLM и не плодит дубли в MongoDB. Отдельного
+  эндпоинта "переиндексировать артефакт" для уже полностью завершённой
+  сессии нет — если Qdrant потеряет данные после успешного завершения,
+  восстановить конкретно этот артефакт в индексе через API сейчас нечем.
 - **S3** — бинарные файлы. В LLM-контекст файл попадает только через
   извлечённый и проиндексированный текст (`FileAsset.processingStatus`),
   никогда напрямую.
@@ -37,6 +67,20 @@ Point id — детерминированный UUID v5 от `sourceId:chunkInde
 `src/services/qdrant.service.js` **всегда** требует `projectId` и кидает
 ошибку без него — это единственная точка входа в Qdrant и единственное
 место, где обеспечивается изоляция между проектами (SEC-6, QDR-3).
+`upsertChunks` и `deleteBySource` тоже требуют `projectId` (защита от
+случайного удаления чужих точек при коллизии `sourceId`, хотя на практике
+`sourceId` — это Mongo ObjectId файла/артефакта, глобально уникальный).
+
+Изоляция проверена интеграционным тестом
+(`src/__tests__/accelerator/qdrant.service.test.js`) — единственным тестом
+в проекте, где `qdrant.service.js` **не мокается**: реальный `qdrantClient`
+подменён на компактный in-memory движок с настоящей cosine-similarity и
+настоящим применением Qdrant-фильтров (мокается только сам транспорт и
+`embedding.service.js`, чтобы не дёргать OpenAI). Ключевой тест — два
+проекта с **идентичным** текстом чанка (значит, идентичным вектором):
+без фильтра по `projectId` оба фрагмента были бы top-match с одинаковым
+score, поэтому прохождение теста доказывает именно работу фильтра, а не
+случайное несовпадение по релевантности.
 
 ## Сборка LLM-запроса (`src/services/accelerator/context-assembly.service.js`)
 
@@ -45,13 +89,37 @@ Point id — детерминированный UUID v5 от `sourceId:chunkInde
 1. `Agent.systemPrompt`
 2. `Agent.completionCriteria` + описание `Agent.artifactDefinition`
 3. `Project.contextSummary`, если `Agent.contextPolicy.includeProjectSummary`
-4. Результаты поиска в Qdrant (фильтр `projectId` + `Agent.contextPolicy.allowedSourceTypes`),
-   ограниченные `qdrantTopK` и `maxContextChars`
+
+`context-assembly.service.js` делает **два независимых поиска** и складывает
+их в один недоверенный блок:
+
+1. **Проектный** (`searchContext`, коллекция `expert_context`) — фильтр
+   `projectId` + `Agent.contextPolicy.allowedSourceTypes`, ограничен
+   `qdrantTopK` и `maxContextChars`.
+2. **База знаний** (`searchKnowledge`, коллекция `knowledge_context`) — только
+   если у агента непустой `Agent.knowledgeIds`; фильтр `knowledgeId in
+   agent.knowledgeIds`, ограничен `contextPolicy.knowledgeTopK` и
+   `contextPolicy.knowledgeMaxContextChars` (отдельный бюджет от проектного).
+
+Результаты обоих поисков в системный промпт **не входят** — это текст из
+загруженных пользователем файлов, артефактов предыдущих этапов и глобальной
+базы знаний, то есть недоверенный ввод относительно инструкций агента. Он
+отправляется отдельным сообщением с ролью `user` (`retrievedContextMessage`),
+обёрнутым в явную инструкцию игнорировать любые команды внутри тега
+`<retrieved_context>` и не подчиняться попыткам сменить роль/переопределить
+системный промпт.
+Разделение по ролям API (`system` vs `user`) — реальная граница доверия,
+которую модель обучена соблюдать; конкатенация текста внутри одного
+system-сообщения такой границей не является (см. защиту от prompt injection
+ниже).
 
 Дальше `src/services/accelerator/expert-session.service.js` добавляет историю
 сообщений сессии (до 30 последних) и вызывает `llm.service.chatCompleteStream`
 с моделью из `Agent.modelConfig` (провайдер зафиксирован — только OpenAI, см.
-`docs/open-questions.md`). Ответ модели стримится клиенту по SSE
+`docs/open-questions.md`). Итоговый порядок сообщений: `system` (промпт
+агента) → `user` (`retrievedContextMessage`, если есть что подмешать) →
+история диалога → (при генерации артефакта — ещё один `user` с инструкцией
+вернуть JSON). Ответ модели стримится клиенту по SSE
 (`POST .../expert-sessions/:id/messages`, события `message_created` / `delta`
 / `done` / `error`) — сохраняется в MongoDB только после того, как стрим
 полностью завершился, чтобы разрыв соединения на середине не оставил
@@ -82,3 +150,67 @@ JSON-ответ для валидации, а не текст, который м
   индексируется в Qdrant (`sourceType=artifact`), `Project.contextSummary`
   дополняется его summary, `Project.currentAgentId` переключается на
   `Agent.nextAgentId`.
+
+## Knowledge — глобальная база знаний
+
+`Knowledge` (`src/models/accelerator/knowledge.model.js`) — второй RAG-контур,
+параллельный проектному, но с другой моделью данных и доступа:
+
+- **Глобальная**, не привязана к проекту/пользователю. Управляется только из
+  админки, право `accelerator_knowledge.manage`. Эндпоинты —
+  `/accelerator/admin/knowledge` (CRUD + `POST .../:id/reindex`).
+- **Источник** — ровно один из двух: `fileId` (уже загруженный в S3 `File`)
+  ИЛИ `sourceUrl` (произвольная внешняя ссылка, скачивается по HTTP).
+  Поддерживаемые форматы: txt/md, pdf, docx (buffer-экстракторы в
+  `src/services/knowledge-processing/`). Лимитов на размер нет.
+- **Векторизация синхронная** (`processKnowledge`): скачать источник →
+  извлечь текст → чанковать (тот же `chunker.js`) → эмбеддинг
+  (gemini-embedding-2) → запись в коллекцию `knowledge_context`. Идемпотентна:
+  `deleteByKnowledge` чистит старые точки перед записью новых. Point id —
+  детерминированный UUID v5 от `knowledgeId:chunkIndex`.
+- **Payload точки**: `knowledgeId`, `chunkIndex`, `text`, `textHash`,
+  `createdAt`. Без `projectId` — знания глобальные.
+- **Привязка к агенту**: `Agent.knowledgeIds` (массив `_id` knowledge).
+  Поиск в `knowledge_context` идёт **только** по этому списку — пустой список
+  означает, что агент не получает знаний (симметрично `projectId`-гварду
+  проектного контура). Бюджет — `contextPolicy.knowledgeTopK` и
+  `contextPolicy.knowledgeMaxContextChars`.
+- **Статусы обработки** (`Knowledge.status`): `pending` → `processing` →
+  `indexed` / `unsupported` / `failed`. Коды ошибок: `SOURCE_FETCH_FAILED`
+  (не удалось скачать файл/ссылку), `QDRANT_INDEX_FAILED` (текст извлёкся,
+  упала запись в Qdrant).
+
+## Когда меняется `Project.status`
+
+`Project.status` (`active`/`paused`/`completed`/`archived`) — в остальном
+полностью ручное поле, пользователь меняет его через `PATCH
+/accelerator/projects/:projectId`. Единственный автоматический переход:
+`confirmArtifact:true` для агента, у которого `nextAgentId === null`
+(последний в цепочке маршрута), переводит `Project.status` в `completed` —
+это значит, что весь маршрут пройден целиком, а не только текущий этап.
+Пауза/архивация проекта пользователем никак не блокируют работу с
+экспертным маршрутом — `status` это отражение состояния, а не гейт доступа.
+
+## Коды ошибок экспертного контура
+
+| Код | Откуда | Значит |
+|---|---|---|
+| `AGENT_NOT_FOUND` | `POST .../expert-sessions`, admin CRUD агентов | Агента с таким `_id` не существует. |
+| `AGENT_INACTIVE` | `POST .../expert-sessions` | Агент существует, но `isActive=false` (временно отключён администратором) — не путать с `AGENT_NOT_FOUND`. |
+| `AGENT_NOT_CURRENT` | `POST .../expert-sessions` | Агент существует и активен, но не совпадает с `Project.currentAgentId` — нельзя перепрыгнуть маршрут. |
+| `SESSION_NOT_FOUND` | `loadSessionAndAgent`, `GET .../messages` | Сессии с таким `_id` в этом проекте нет. |
+| `SESSION_ALREADY_COMPLETED` | `sendMessage`, `completeSession` | Сессия уже завершена (`status=completed`), новые сообщения/`complete` для неё недопустимы. |
+| `ARTIFACT_VALIDATION_FAILED` | `artifact-generation.service.js`, только для настоящих ошибок структуры JSON/`requiredFields`/`outputSchema` | Модель вернула невалидный или неполный артефакт. |
+| `QDRANT_INDEX_FAILED` | `completeSession` (запись подтверждённого артефакта), `process-file.job.js` (`File.processingErrorCode`), `process-knowledge.job.js` (`Knowledge.processingErrorCode`) | Текст/артефакт/knowledge успешно готовы, упала именно запись в Qdrant. |
+| `SOURCE_FETCH_FAILED` | `process-knowledge.job.js` (`Knowledge.processingErrorCode`) | Не удалось скачать источник knowledge (файл в S3 по `fileId` или внешнюю ссылку `sourceUrl`). |
+| `LLM_PROVIDER_FAILED` | `sendMessage` (SSE `error`-событие), `completeSession` (генерация артефакта) | Сбой самого вызова LLM (сеть, rate limit, авторизация и т.п.), не связанный со структурой ответа. |
+
+Принцип: **fallback-код никогда не выбирается "по умолчанию" из кода другого
+слоя**. Раньше `completeSession`/`complete-session.controller.js` подставляли
+`ARTIFACT_VALIDATION_FAILED` для *любой* непойманной ошибки на `/complete`
+(включая сбой `upsertChunks` в Qdrant) — фронт получал неверный код и не мог
+отличить "модель ошиблась" от "упала инфраструктура". Теперь каждый внешний
+вызов (LLM, Qdrant) обёрнут отдельно и нормализует код именно к тому значению,
+которое соответствует реальной причине сбоя; непойманные/неизвестные ошибки
+проходят с `error.code` как есть (обычно `undefined`), а не подменяются
+случайно похожим кодом.

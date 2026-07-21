@@ -41,7 +41,7 @@ function validateArtifactContent(content, artifactDefinition) {
 // artifactDefinition (DONE-1/DONE-4). Runs as its own LLM call, separate
 // from the chat turns in messages/, so producing the artifact never
 // depends on parsing free-form chat replies.
-export async function generateArtifactJson({ agent, systemPrompt, conversationMessages }) {
+export async function generateArtifactJson({ agent, systemPrompt, retrievedContextMessage, conversationMessages }) {
     const instruction =
         `Сформируй финальный артефакт "${agent.artifactDefinition.artifactType}" по итогам диалога выше.\n` +
         `Ответь СТРОГО валидным JSON-объектом (без markdown, без пояснений) со следующими обязательными полями: ` +
@@ -50,6 +50,7 @@ export async function generateArtifactJson({ agent, systemPrompt, conversationMe
 
     const messages = [
         { role: 'system', content: systemPrompt },
+        ...(retrievedContextMessage ? [retrievedContextMessage] : []),
         ...conversationMessages,
         { role: 'user', content: instruction }
     ];

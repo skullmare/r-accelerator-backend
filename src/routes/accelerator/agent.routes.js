@@ -71,6 +71,8 @@ router.get('/', listAgents);
  *             properties:
  *               name: { type: string, description: "Имя агента для интерфейса." }
  *               roleTitle: { type: string, description: "Короткое описание специализации." }
+ *               description: { type: string, nullable: true, description: "Развёрнутое описание агента для UI (в промпт не подмешивается)." }
+ *               avatarUrl: { type: string, nullable: true, description: "Ссылка на аватарку агента (изображение) для UI." }
  *               order: { type: integer, description: "Порядковое место агента в маршруте." }
  *               isActive: { type: boolean, default: true, description: "Если false — агент не участвует в пользовательском маршруте." }
  *               systemPrompt: { type: string, description: "Базовая системная инструкция роли — уходит в LLM при каждом сообщении." }
@@ -100,6 +102,10 @@ router.get('/', listAgents);
  *                   model: { type: string, description: "Модель OpenAI." }
  *                   temperature: { type: number, description: "Температура генерации." }
  *                   maxTokens: { type: integer, description: "Лимит токенов на ответ модели." }
+ *               knowledgeIds:
+ *                 type: array
+ *                 items: { type: string }
+ *                 description: "_id глобальных баз знаний (Knowledge), привязанных агенту. Поиск в knowledge_context идёт только по ним."
  *     responses:
  *       201:
  *         description: Агент создан
@@ -182,6 +188,8 @@ router.get('/:agentId', validate(agentSchemas.agentIdSchema), getAgent);
  *             properties:
  *               name: { type: string }
  *               roleTitle: { type: string }
+ *               description: { type: string, nullable: true, description: "Развёрнутое описание агента для UI." }
+ *               avatarUrl: { type: string, nullable: true, description: "Ссылка на аватарку агента." }
  *               order: { type: integer }
  *               isActive: { type: boolean, description: "false — временно исключить агента из пользовательского маршрута." }
  *               systemPrompt: { type: string }
@@ -197,6 +205,7 @@ router.get('/:agentId', validate(agentSchemas.agentIdSchema), getAgent);
  *               nextAgentId: { type: string, nullable: true, description: "_id следующего агента; должен существовать." }
  *               contextPolicy: { type: object }
  *               modelConfig: { type: object }
+ *               knowledgeIds: { type: array, items: { type: string }, description: "_id баз знаний (Knowledge), привязанных агенту." }
  *     responses:
  *       200:
  *         description: Агент обновлён

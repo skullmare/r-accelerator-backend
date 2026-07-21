@@ -3,8 +3,6 @@ import File from '../../models/file.model.js';
 import { getExtractor } from './extractors/index.js';
 import { upsertChunks, deleteBySource } from '../qdrant.service.js';
 
-export const FILE_PROCESS_JOB_TYPE = 'file:process';
-
 const EMBED_BATCH_SIZE = 20;
 
 async function markUnsupported(file) {
@@ -12,7 +10,26 @@ async function markUnsupported(file) {
     file.extractedTextStatus = 'unsupported';
     file.qdrantStatus = 'not_indexed';
     file.processingError = null;
+    file.processingErrorCode = null;
     await file.save();
+}
+
+// Tags a failed upsertChunks call with a stable machine-readable code, so
+// the catch block below (and GET .../processing-status) can tell "text
+// extraction failed" apart from "extraction succeeded, Qdrant write
+// failed" instead of collapsing both into the same generic failure.
+async function upsertBatch(file, chunks) {
+    try {
+        return await upsertChunks({
+            projectId: file.projectId,
+            sourceType: 'file_chunk',
+            sourceId: String(file._id),
+            chunks
+        });
+    } catch (error) {
+        error.code = 'QDRANT_INDEX_FAILED';
+        throw error;
+    }
 }
 
 // Runs entirely off the HTTP request path (invoked by the job worker only).
@@ -33,7 +50,7 @@ export async function processFile({ fileId }) {
     file.processingStatus = 'extracting';
     await file.save();
 
-    await deleteBySource(String(file._id));
+    await deleteBySource(String(file._id), file.projectId);
 
     const runningHash = crypto.createHash('sha256');
     const pointIds = [];
@@ -49,23 +66,13 @@ export async function processFile({ fileId }) {
             batch.push(chunk);
 
             if (batch.length >= EMBED_BATCH_SIZE) {
-                pointIds.push(...await upsertChunks({
-                    projectId: file.projectId,
-                    sourceType: 'file_chunk',
-                    sourceId: String(file._id),
-                    chunks: batch
-                }));
+                pointIds.push(...await upsertBatch(file, batch));
                 batch = [];
             }
         }
 
         if (batch.length > 0) {
-            pointIds.push(...await upsertChunks({
-                projectId: file.projectId,
-                sourceType: 'file_chunk',
-                sourceId: String(file._id),
-                chunks: batch
-            }));
+            pointIds.push(...await upsertBatch(file, batch));
         }
 
         if (totalChunks === 0) {
@@ -83,6 +90,7 @@ export async function processFile({ fileId }) {
             file.indexedAt = new Date();
         }
         file.processingError = null;
+        file.processingErrorCode = null;
         await file.save();
     } catch (error) {
         if (error.code === 'FILE_TOO_LARGE_FOR_FORMAT') {
@@ -90,10 +98,17 @@ export async function processFile({ fileId }) {
             return;
         }
 
+        // A QDRANT_INDEX_FAILED error means extraction genuinely succeeded —
+        // only the Qdrant write failed — so extractedTextStatus must say
+        // 'success', not 'failed', or the UI would wrongly blame the file's
+        // content instead of the indexing step.
+        const isQdrantFailure = error.code === 'QDRANT_INDEX_FAILED';
+
         file.processingStatus = 'failed';
-        file.extractedTextStatus = 'failed';
+        file.extractedTextStatus = isQdrantFailure ? 'success' : 'failed';
         file.qdrantStatus = 'failed';
         file.processingError = String(error.message).slice(0, 500);
+        file.processingErrorCode = isQdrantFailure ? 'QDRANT_INDEX_FAILED' : null;
         await file.save();
         throw error;
     }

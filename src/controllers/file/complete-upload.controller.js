@@ -1,8 +1,8 @@
 import { completeMultipartUpload } from '../../services/s3.service.js';
 import File from '../../models/file.model.js';
 import { findOwnedProject } from '../../services/accelerator/project-ownership.service.js';
-import { enqueue } from '../../services/queue/job-queue.service.js';
-import { FILE_PROCESS_JOB_TYPE } from '../../services/file-processing/process-file.job.js';
+import { processFile } from '../../services/file-processing/process-file.job.js';
+import logger from '../../../config/logger.config.js';
 
 export async function completeUploadController(req, res) {
     try {
@@ -27,8 +27,16 @@ export async function completeUploadController(req, res) {
             projectId: projectId || null,
         });
 
+        // Синхронная обработка (очереди больше нет). Сбой индексации не роняет
+        // загрузку — статус фиксируется в самом документе File.
         if (projectId) {
-            await enqueue(FILE_PROCESS_JOB_TYPE, { fileId: String(file._id) });
+            try {
+                await processFile({ fileId: String(file._id) });
+            } catch (error) {
+                logger.error(`Ошибка обработки файла ${file._id}: ${error.message}`);
+            }
+            const processed = await File.findById(file._id);
+            return res.success(processed, 'Файл успешно загружен', 200);
         }
 
         return res.success(file, 'Файл успешно загружен', 200);

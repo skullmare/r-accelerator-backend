@@ -22,6 +22,25 @@ const AgentSchema = new mongoose.Schema({
         trim: true,
         maxlength: 150
     },
+    // Развёрнутое описание агента для UI (карточка агента в админке/на
+    // фронте): чем он занимается, что даёт пользователю. Необязательное и,
+    // как name/roleTitle, в промпт модели НЕ подмешивается — чисто
+    // отображаемое поле.
+    description: {
+        type: String,
+        trim: true,
+        default: null,
+        maxlength: 2000
+    },
+    // Ссылка на аватарку агента (изображение) для UI. Фронт загружает
+    // картинку в хранилище и передаёт сюда её публичный URL. Необязательное,
+    // в промпт модели не подмешивается.
+    avatarUrl: {
+        type: String,
+        trim: true,
+        default: null,
+        maxlength: 2000
+    },
     // Порядковое место агента в маршруте. По нему сортируется список в
     // GET /admin/agents и GET expert-route, и по нему же resolveCurrentAgent
     // выбирает "первого активного агента", если у проекта ещё не выставлен
@@ -111,7 +130,21 @@ const AgentSchema = new mongoose.Schema({
         allowedSourceTypes: {
             type: [String],
             default: ['project_summary', 'artifact', 'file_chunk']
-        }
+        },
+        // Сколько фрагментов забирать из базы знаний (knowledge_context)
+        // при поиске по привязанным этому агенту knowledgeIds.
+        knowledgeTopK: { type: Number, default: 6, min: 1, max: 20 },
+        // Верхний лимит суммарной длины knowledge-контекста в символах —
+        // отдельный бюджет от maxContextChars проектного контекста.
+        knowledgeMaxContextChars: { type: Number, default: 6000, min: 500, max: 40000 }
+    },
+    // Список _id глобальных баз знаний (Knowledge), которые администратор
+    // привязал этому агенту. Только по ним ведётся поиск в knowledge_context
+    // — это точка изоляции: пустой массив = агент не получает знаний. См.
+    // context-assembly.service.js и docs/expert-context.md.
+    knowledgeIds: {
+        type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Knowledge' }],
+        default: []
     },
     // Настройки конкретного LLM-вызова для этого агента. Провайдер сейчас
     // всегда OpenAI (см. src/services/llm.service.js) — отдельного поля

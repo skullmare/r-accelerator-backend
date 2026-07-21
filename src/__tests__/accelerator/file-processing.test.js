@@ -57,7 +57,7 @@ describe('processFile', () => {
             sourceType: 'file_chunk',
             sourceId: String(file._id)
         }));
-        expect(deleteBySource).toHaveBeenCalledWith(String(file._id));
+        expect(deleteBySource).toHaveBeenCalledWith(String(file._id), file.projectId);
     });
 
     it('помечает файл unsupported, если для mimetype нет экстрактора', async () => {
@@ -97,6 +97,36 @@ describe('processFile', () => {
         expect(updated.extractedTextStatus).toBe('failed');
         expect(updated.qdrantStatus).toBe('failed');
         expect(updated.processingError).toContain('S3 недоступен');
+    });
+
+    it('QDRANT_INDEX_FAILED: текст извлёкся успешно, упала только запись в Qdrant — extractedTextStatus остаётся success, а не failed', async () => {
+        getExtractor.mockReturnValue(async function* extract() {
+            yield { chunkIndex: 0, text: 'hello world', textHash: 'h0' };
+        });
+        upsertChunks.mockRejectedValueOnce(new Error('Qdrant недоступен'));
+
+        const file = await createFile();
+        await expect(processFile({ fileId: String(file._id) })).rejects.toThrow('Qdrant недоступен');
+
+        const updated = await File.findById(file._id);
+        expect(updated.processingStatus).toBe('failed');
+        expect(updated.extractedTextStatus).toBe('success');
+        expect(updated.qdrantStatus).toBe('failed');
+        expect(updated.processingErrorCode).toBe('QDRANT_INDEX_FAILED');
+        expect(updated.processingError).toContain('Qdrant недоступен');
+    });
+
+    it('ошибка извлечения текста (не Qdrant) оставляет processingErrorCode пустым', async () => {
+        getExtractor.mockReturnValue(async function* extract() {
+            throw new Error('S3 недоступен');
+        });
+
+        const file = await createFile();
+        await expect(processFile({ fileId: String(file._id) })).rejects.toThrow('S3 недоступен');
+
+        const updated = await File.findById(file._id);
+        expect(updated.extractedTextStatus).toBe('failed');
+        expect(updated.processingErrorCode).toBeNull();
     });
 
     it('помечает unsupported (без ретраев) при превышении лимита размера для формата', async () => {

@@ -742,7 +742,7 @@
               "completed",
               "archived"
             ],
-            "description": "Статус проекта. Не влияет на доступ к экспертному маршруту — только для организации списка проектов."
+            "description": "Статус проекта. Меняется вручную через PATCH, кроме одного автоматического перехода — сервер сам ставит \"completed\", когда подтверждён артефакт последнего агента маршрута (nextAgentId отсутствует). Не влияет на доступ к экспертному маршруту — это отражение состояния, а не гейт."
           },
           "progress": {
             "type": "number",
@@ -788,6 +788,79 @@
             "type": "string",
             "format": "date-time",
             "description": "Момент последнего изменения проекта."
+          }
+        }
+      },
+      "AcceleratorKnowledge": {
+        "type": "object",
+        "description": "Глобальная база знаний для агентов Р-Акселератора. Управляется только из админки (право accelerator_knowledge.manage), не привязана к проекту/пользователю. Векторизуется в отдельную Qdrant-коллекцию knowledge_context.",
+        "properties": {
+          "_id": {
+            "type": "string",
+            "description": "Идентификатор базы знаний. По нему knowledge привязывается к агенту (Agent.knowledgeIds) и фильтруются точки в Qdrant."
+          },
+          "title": {
+            "type": "string",
+            "description": "Название для интерфейса админки."
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "Необязательное описание (для UI)."
+          },
+          "fileId": {
+            "type": "string",
+            "nullable": true,
+            "description": "_id уже загруженного File, если источник — файл из S3. Взаимоисключим с sourceUrl."
+          },
+          "sourceUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Внешняя ссылка на файл, если источник — URL. Взаимоисключима с fileId."
+          },
+          "sourceMimeType": {
+            "type": "string",
+            "nullable": true,
+            "description": "MIME-тип, по которому выбирался экстрактор при последней обработке."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "processing",
+              "indexed",
+              "unsupported",
+              "failed"
+            ],
+            "description": "Статус синхронной векторизации."
+          },
+          "chunksCount": {
+            "type": "integer",
+            "description": "Количество проиндексированных чанков."
+          },
+          "processingError": {
+            "type": "string",
+            "nullable": true,
+            "description": "Короткое описание последней ошибки обработки (для UI)."
+          },
+          "processingErrorCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "Машиночитаемый код ошибки (SOURCE_FETCH_FAILED / QDRANT_INDEX_FAILED)."
+          },
+          "indexedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Момент последней успешной индексации."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -988,6 +1061,16 @@
             "type": "string",
             "description": "Короткое описание специализации (\"Эксперт по рынку и нише\"). Тоже только для UI, в промпт не подмешивается."
           },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "Развёрнутое описание агента для UI (карточка агента) — чем он занимается. Необязательное, в промпт модели не подмешивается."
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Ссылка на аватарку агента (изображение) для UI. Необязательное, в промпт не подмешивается."
+          },
           "order": {
             "type": "integer",
             "description": "Порядковое место агента в маршруте. По нему сортируется список агентов и выбирается \"первый активный агент\", если у проекта ещё не выставлен текущий."
@@ -1074,8 +1157,23 @@
                   ]
                 },
                 "description": "Какие типы источников участвуют в Qdrant-поиске для этого агента."
+              },
+              "knowledgeTopK": {
+                "type": "integer",
+                "description": "Сколько фрагментов забирать из базы знаний (knowledge_context) по привязанным knowledgeIds."
+              },
+              "knowledgeMaxContextChars": {
+                "type": "integer",
+                "description": "Отдельный лимит суммарной длины knowledge-контекста в символах."
               }
             }
+          },
+          "knowledgeIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "_id глобальных баз знаний (Knowledge), привязанных агенту. Поиск в knowledge_context идёт только по этому списку; пустой список — агент не получает знаний."
           },
           "modelConfig": {
             "type": "object",
@@ -1153,7 +1251,7 @@
           "projectId": {
             "type": "string",
             "nullable": true,
-            "description": "Проект Р-Акселератора, к которому привязан файл. Если задан при загрузке — файл автоматически ставится в очередь на извлечение текста и индексацию в Qdrant; если null — обычный файл вне экспертного контекста, не обрабатывается."
+            "description": "Проект Р-Акселератора, к которому привязан файл. Если задан при загрузке — файл синхронно обрабатывается (извлечение текста + индексация в Qdrant) прямо в запросе загрузки; если null — обычный файл вне экспертного контекста, не обрабатывается."
           },
           "processingStatus": {
             "type": "string",
@@ -1166,7 +1264,7 @@
               "failed",
               "unsupported"
             ],
-            "description": "Текущий шаг асинхронного пайплайна обработки файла:\n * uploaded — загружен, ждёт очереди на обработку;\n * extracting — воркер читает и разбивает файл на текстовые фрагменты;\n * extracted — текст извлечён, идёт подготовка к индексации;\n * indexing — идёт запись фрагментов в Qdrant;\n * indexed — обработка полностью завершена успешно;\n * failed — ошибка на любом шаге (см. processingError), можно повторить через /files/{fileId}/index;\n * unsupported — формат не поддерживается или файл превысил лимит размера для формата (сейчас 20 МБ для PDF/DOCX).\n"
+            "description": "Итоговый шаг синхронного пайплайна обработки файла (очереди нет):\n * uploaded — загружен, но обработка ещё не запускалась (файл вне проекта);\n * extracting — идёт чтение и разбиение файла на текстовые фрагменты;\n * indexed — обработка полностью завершена успешно;\n * failed — ошибка на любом шаге (см. processingError), можно повторить через /files/{fileId}/index;\n * unsupported — формат не поддерживается или файл превысил лимит размера для формата (сейчас 20 МБ для PDF/DOCX).\n"
           },
           "extractedTextStatus": {
             "type": "string",
@@ -1210,6 +1308,11 @@
             "type": "string",
             "nullable": true,
             "description": "Короткое безопасное описание последней ошибки обработки (без технических деталей/стектрейса) — то, что можно показать пользователю."
+          },
+          "processingErrorCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "Машиночитаемый код последней ошибки обработки (в отличие от processingError — стабильное значение, на него можно свитчиться). Сейчас единственное реальное значение — QDRANT_INDEX_FAILED (текст извлёкся успешно, упала именно запись в Qdrant); для ошибок извлечения текста остаётся null."
           },
           "indexedAt": {
             "type": "string",
@@ -1275,6 +1378,11 @@
             "type": "string",
             "nullable": true,
             "description": "Короткое безопасное описание последней ошибки обработки, если она была."
+          },
+          "processingErrorCode": {
+            "type": "string",
+            "nullable": true,
+            "description": "Машиночитаемый код последней ошибки обработки. Сейчас единственное реальное значение — QDRANT_INDEX_FAILED (текст извлёкся успешно, упала именно запись в Qdrant); для ошибок извлечения текста остаётся null."
           },
           "indexedAt": {
             "type": "string",
@@ -6209,8 +6317,8 @@
         "tags": [
           "Accelerator / Files"
         ],
-        "summary": "Запустить (пере)индексацию файла в Qdrant",
-        "description": "Ставит файл в очередь на извлечение текста, чанкинг и индексацию в Qdrant. Не блокирует запрос — обработка выполняется асинхронно воркером.",
+        "summary": "(Пере)индексировать файл в Qdrant",
+        "description": "Синхронно извлекает текст, чанкует и индексирует файл в Qdrant (очереди нет — запрос дожидается завершения). Идемпотентно — старые точки файла удаляются перед записью новых.",
         "parameters": [
           {
             "in": "path",
@@ -6230,8 +6338,8 @@
           }
         ],
         "responses": {
-          "202": {
-            "description": "Индексация поставлена в очередь",
+          "200": {
+            "description": "Файл переиндексирован (с итоговым статусом)",
             "content": {
               "application/json": {
                 "schema": {
@@ -6243,15 +6351,24 @@
                     },
                     "message": {
                       "type": "string",
-                      "example": "Индексация запущена"
+                      "example": "Файл переиндексирован"
                     },
                     "data": {
                       "type": "object",
                       "properties": {
                         "processingStatus": {
                           "type": "string",
-                          "example": "indexing",
-                          "description": "Новый статус файла сразу после постановки в очередь (см. File.processingStatus)."
+                          "example": "indexed",
+                          "description": "Итоговый статус файла после обработки (см. File.processingStatus)."
+                        },
+                        "qdrantStatus": {
+                          "type": "string",
+                          "example": "indexed"
+                        },
+                        "processingErrorCode": {
+                          "type": "string",
+                          "nullable": true,
+                          "example": null
                         }
                       }
                     }
@@ -6559,7 +6676,7 @@
             }
           },
           "409": {
-            "description": "Агент сейчас недоступен в маршруте проекта (AGENT_NOT_CURRENT)",
+            "description": "Агент найден, но недоступен: AGENT_INACTIVE (отключён администратором) или AGENT_NOT_CURRENT (не совпадает с текущим агентом маршрута)",
             "content": {
               "application/json": {
                 "schema": {
@@ -6577,7 +6694,7 @@
           "Accelerator / Expert Sessions"
         ],
         "summary": "Отправить сообщение агенту (SSE-стриминг)",
-        "description": "Сервер собирает контекст (summary проекта, системный промпт агента,\nрелевантные фрагменты из Qdrant, отфильтрованные по projectId) и\nстримит ответ модели по протоколу Server-Sent Events. Клиент\nникогда не обращается к LLM/Qdrant напрямую.\n\nОшибки, которые можно определить до начала стриминга (сессия/агент\nне найдены, сессия уже завершена), возвращаются обычным JSON-ответом\nс кодом ошибки — заголовки переключаются на text/event-stream только\nпосле этих проверок.\n\n**Формат событий SSE:**\n- `message_created` — сохранённое сообщение пользователя: `{ userMessage }`\n- `delta` — фрагмент ответа агента по мере генерации: `{ text: \"...\" }`\n- `done` — финальное сохранённое сообщение агента: `{ assistantMessage }`\n- `error` — ошибка в процессе стриминга (например, сбой LLM-провайдера): `{ message, code }`\n",
+        "description": "Сервер собирает контекст (summary проекта, системный промпт агента,\nрелевантные фрагменты из Qdrant, отфильтрованные по projectId) и\nстримит ответ модели по протоколу Server-Sent Events. Клиент\nникогда не обращается к LLM/Qdrant напрямую.\n\nОшибки, которые можно определить до начала стриминга (сессия/агент\nне найдены, сессия уже завершена), возвращаются обычным JSON-ответом\nс кодом ошибки — заголовки переключаются на text/event-stream только\nпосле этих проверок.\n\n**Формат событий SSE:**\n- `message_created` — сохранённое сообщение пользователя: `{ userMessage }`\n- `delta` — фрагмент ответа агента по мере генерации: `{ text: \"...\" }`\n- `done` — финальное сохранённое сообщение агента: `{ assistantMessage }`\n- `error` — ошибка в процессе стриминга: `{ message, code }`. `code` гарантированно нормализован до `LLM_PROVIDER_FAILED`, если у исходной ошибки не было своего кода (например, сбой самого вызова LLM) — не сырой код провайдера.\n",
         "parameters": [
           {
             "in": "path",
@@ -6763,7 +6880,7 @@
           "Accelerator / Expert Sessions"
         ],
         "summary": "Завершить этап и создать/подтвердить артефакт",
-        "description": "Двухфазное завершение: без confirmArtifact создаётся черновик артефакта\n(status=ready) и сессия переходит в waiting_user_confirmation, но проект\nне переключается на следующего агента. С confirmArtifact=true артефакт\nподтверждается (status=confirmed), индексируется в Qdrant, summary проекта\nобновляется и currentAgentId переключается на nextAgentId агента.\nПовторный вызов уже завершённой сессии — 409.\n",
+        "description": "Двухфазное завершение: без confirmArtifact создаётся черновик артефакта\n(status=ready) и сессия переходит в waiting_user_confirmation, но проект\nне переключается на следующего агента. С confirmArtifact=true артефакт\nподтверждается (status=confirmed), индексируется в Qdrant, summary проекта\nобновляется и currentAgentId переключается на nextAgentId агента. Если у\nагента нет nextAgentId (последний в маршруте) — это был финальный этап,\nи Project.status автоматически становится \"completed\".\nПовторный вызов уже завершённой сессии — 409.\n",
         "parameters": [
           {
             "in": "path",
@@ -6889,6 +7006,16 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "Сбой внешней зависимости: LLM_PROVIDER_FAILED (генерация артефакта) или QDRANT_INDEX_FAILED (индексация подтверждённого артефакта)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6971,6 +7098,222 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/accelerator/admin/knowledge": {
+      "get": {
+        "tags": [
+          "Accelerator / Admin Knowledge"
+        ],
+        "summary": "Список баз знаний",
+        "description": "Только для пользователей с правом accelerator_knowledge.manage. Возвращает все knowledge, отсортированные по дате создания (новые первыми).",
+        "responses": {
+          "200": {
+            "description": "Список баз знаний"
+          },
+          "401": {
+            "description": "Требуется авторизация"
+          },
+          "403": {
+            "description": "Недостаточно прав"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Accelerator / Admin Knowledge"
+        ],
+        "summary": "Создать базу знаний",
+        "description": "Создаёт knowledge и СИНХРОННО векторизует её (очереди нет — ответ\nвозвращается уже с итоговым status). Источник — ровно один из двух:\nfileId (уже загруженный в S3 файл) ИЛИ sourceUrl (внешняя ссылка).\nПоддерживаемые форматы: txt/md, pdf, docx. Векторы пишутся в отдельную\nQdrant-коллекцию knowledge_context.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "description": "Название базы знаний."
+                  },
+                  "description": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Описание (для UI)."
+                  },
+                  "fileId": {
+                    "type": "string",
+                    "description": "_id уже загруженного File. Взаимоисключим с sourceUrl."
+                  },
+                  "sourceUrl": {
+                    "type": "string",
+                    "description": "Внешняя ссылка на файл. Взаимоисключима с fileId."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "База знаний создана (с итоговым статусом обработки)"
+          },
+          "400": {
+            "description": "Ошибка валидации / источник не найден / указаны оба источника"
+          },
+          "401": {
+            "description": "Требуется авторизация"
+          },
+          "403": {
+            "description": "Недостаточно прав"
+          }
+        }
+      }
+    },
+    "/accelerator/admin/knowledge/{knowledgeId}": {
+      "get": {
+        "tags": [
+          "Accelerator / Admin Knowledge"
+        ],
+        "summary": "Получить базу знаний по ID",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "knowledgeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "База знаний получена"
+          },
+          "404": {
+            "description": "База знаний не найдена"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Accelerator / Admin Knowledge"
+        ],
+        "summary": "Обновить метаданные базы знаний",
+        "description": "Меняет только title/description. Источник и векторы не трогаются — для переиндексации используйте POST .../reindex.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "knowledgeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "База знаний обновлена"
+          },
+          "404": {
+            "description": "База знаний не найдена"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Accelerator / Admin Knowledge"
+        ],
+        "summary": "Удалить базу знаний",
+        "description": "Удаляет документ, чистит её точки в Qdrant и убирает ссылку из knowledgeIds всех агентов.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "knowledgeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "База знаний удалена"
+          },
+          "404": {
+            "description": "База знаний не найдена"
+          }
+        }
+      }
+    },
+    "/accelerator/admin/knowledge/{knowledgeId}/reindex": {
+      "post": {
+        "tags": [
+          "Accelerator / Admin Knowledge"
+        ],
+        "summary": "Переиндексировать базу знаний",
+        "description": "Синхронно перевекторизует knowledge (чистит старые точки и пишет\nновые). Опционально можно переопределить источник, передав новый\nfileId ИЛИ sourceUrl.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "knowledgeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fileId": {
+                    "type": "string",
+                    "description": "Новый источник-файл (взаимоисключим с sourceUrl)."
+                  },
+                  "sourceUrl": {
+                    "type": "string",
+                    "description": "Новый источник-ссылка (взаимоисключима с fileId)."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "База знаний переиндексирована"
+          },
+          "400": {
+            "description": "Указаны оба источника / файл не найден"
+          },
+          "404": {
+            "description": "База знаний не найдена"
           }
         }
       }
@@ -7059,6 +7402,16 @@
                   "roleTitle": {
                     "type": "string",
                     "description": "Короткое описание специализации."
+                  },
+                  "description": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Развёрнутое описание агента для UI (в промпт не подмешивается)."
+                  },
+                  "avatarUrl": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Ссылка на аватарку агента (изображение) для UI."
                   },
                   "order": {
                     "type": "integer",
@@ -7161,6 +7514,13 @@
                         "description": "Лимит токенов на ответ модели."
                       }
                     }
+                  },
+                  "knowledgeIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "_id глобальных баз знаний (Knowledge), привязанных агенту. Поиск в knowledge_context идёт только по ним."
                   }
                 }
               }
@@ -7324,6 +7684,16 @@
                   "roleTitle": {
                     "type": "string"
                   },
+                  "description": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Развёрнутое описание агента для UI."
+                  },
+                  "avatarUrl": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Ссылка на аватарку агента."
+                  },
                   "order": {
                     "type": "integer"
                   },
@@ -7372,6 +7742,13 @@
                   },
                   "modelConfig": {
                     "type": "object"
+                  },
+                  "knowledgeIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "_id баз знаний (Knowledge), привязанных агенту."
                   }
                 }
               }

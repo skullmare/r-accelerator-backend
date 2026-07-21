@@ -110,6 +110,15 @@ const FileSchema = new mongoose.Schema({
         type: String,
         default: null
     },
+    // Машиночитаемый код последней ошибки обработки — то, на что фронт
+    // может свитчиться (в отличие от processingError, это стабильное
+    // значение, не произвольный текст). Сейчас единственное реальное
+    // значение — QDRANT_INDEX_FAILED (текст извлёкся успешно, упала именно
+    // запись в Qdrant); для ошибок извлечения текста остаётся null.
+    processingErrorCode: {
+        type: String,
+        default: null
+    },
     // Момент последней успешной индексации в Qdrant.
     indexedAt: {
         type: Date,

@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { qdrantClient, QDRANT_COLLECTION } from '../../config/qdrant.config.js';
+import { qdrantClient, QDRANT_COLLECTION, QDRANT_KNOWLEDGE_COLLECTION } from '../../config/qdrant.config.js';
 import { EMBEDDING_DIM } from '../../config/embedding.config.js';
 import { embedTexts, embedText } from './embedding.service.js';
 
@@ -29,21 +29,31 @@ function pointId(sourceId, chunkIndex) {
     return uuidV5(`${sourceId}:${chunkIndex}`);
 }
 
-let collectionEnsured = false;
+// Per-collection "already ensured" cache — both the project (expert_context)
+// and knowledge (knowledge_context) collections lazily create themselves on
+// first use, but only once per process.
+const ensuredCollections = new Set();
 
-export async function ensureCollection() {
-    if (collectionEnsured) return;
+async function ensureCollectionByName(collection) {
+    if (ensuredCollections.has(collection)) return;
 
     const { collections } = await qdrantClient.getCollections();
-    const exists = collections.some((c) => c.name === QDRANT_COLLECTION);
+    const exists = collections.some((c) => c.name === collection);
 
     if (!exists) {
-        await qdrantClient.createCollection(QDRANT_COLLECTION, {
+        await qdrantClient.createCollection(collection, {
             vectors: { size: EMBEDDING_DIM, distance: 'Cosine' }
         });
     }
 
-    collectionEnsured = true;
+    ensuredCollections.add(collection);
+}
+
+// --- Проектный контур (expert_context) ---------------------------------
+// Фильтруется по projectId — единственный ключ изоляции между проектами.
+
+export async function ensureCollection() {
+    await ensureCollectionByName(QDRANT_COLLECTION);
 }
 
 // chunks: [{ chunkIndex, text, textHash }]
@@ -115,6 +125,74 @@ export async function searchContext({ projectId, sourceTypes, queryText, topK = 
         vector,
         limit: topK,
         filter: { must },
+        with_payload: true
+    });
+
+    return results.map((r) => ({ score: r.score, payload: r.payload }));
+}
+
+// --- Knowledge-контур (knowledge_context) ------------------------------
+// Глобальная база знаний. Фильтруется по knowledgeId — агент видит только
+// те knowledge, что администратор явно ему привязал (agent.knowledgeIds).
+// Отдельная коллекция от проектного контекста: другие источники и другая
+// модель доступа (глобальные знания, без projectId).
+
+export async function ensureKnowledgeCollection() {
+    await ensureCollectionByName(QDRANT_KNOWLEDGE_COLLECTION);
+}
+
+// chunks: [{ chunkIndex, text, textHash }]
+export async function upsertKnowledgeChunks({ knowledgeId, chunks }) {
+    if (!knowledgeId) throw new Error('knowledgeId обязателен для индексации знаний в Qdrant');
+    if (chunks.length === 0) return [];
+
+    await ensureKnowledgeCollection();
+
+    const vectors = await embedTexts(chunks.map((chunk) => chunk.text));
+    const createdAt = new Date().toISOString();
+
+    const points = chunks.map((chunk, i) => ({
+        id: pointId(knowledgeId, chunk.chunkIndex),
+        vector: vectors[i],
+        payload: {
+            knowledgeId: String(knowledgeId),
+            chunkIndex: chunk.chunkIndex,
+            text: chunk.text,
+            textHash: chunk.textHash,
+            createdAt
+        }
+    }));
+
+    await qdrantClient.upsert(QDRANT_KNOWLEDGE_COLLECTION, { wait: true, points });
+
+    return points.map((p) => p.id);
+}
+
+export async function deleteByKnowledge(knowledgeId) {
+    if (!knowledgeId) throw new Error('knowledgeId обязателен для удаления знаний в Qdrant');
+
+    await ensureKnowledgeCollection();
+    await qdrantClient.delete(QDRANT_KNOWLEDGE_COLLECTION, {
+        wait: true,
+        filter: { must: [{ key: 'knowledgeId', match: { value: String(knowledgeId) } }] }
+    });
+}
+
+// Поиск по базе знаний. knowledgeIds обязателен и непуст — это точка
+// изоляции: без явного списка привязанных знаний агент не должен получать
+// ничего (симметрично projectId-гварду в searchContext).
+export async function searchKnowledge({ knowledgeIds, queryText, topK = 6 }) {
+    const ids = (knowledgeIds || []).map(String).filter(Boolean);
+    if (ids.length === 0) return [];
+
+    await ensureKnowledgeCollection();
+
+    const vector = await embedText(queryText);
+
+    const results = await qdrantClient.search(QDRANT_KNOWLEDGE_COLLECTION, {
+        vector,
+        limit: topK,
+        filter: { must: [{ key: 'knowledgeId', match: { any: ids } }] },
         with_payload: true
     });
 

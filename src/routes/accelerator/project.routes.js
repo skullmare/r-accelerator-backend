@@ -299,8 +299,8 @@ router.get('/:projectId/files', authMiddleware, validate(projectSchemas.projectI
  * /accelerator/projects/{projectId}/files/{fileId}/index:
  *   post:
  *     tags: [Accelerator / Files]
- *     summary: Запустить (пере)индексацию файла в Qdrant
- *     description: Ставит файл в очередь на извлечение текста, чанкинг и индексацию в Qdrant. Не блокирует запрос — обработка выполняется асинхронно воркером.
+ *     summary: (Пере)индексировать файл в Qdrant
+ *     description: Синхронно извлекает текст, чанкует и индексирует файл в Qdrant (очереди нет — запрос дожидается завершения). Идемпотентно — старые точки файла удаляются перед записью новых.
  *     parameters:
  *       - in: path
  *         name: projectId
@@ -311,22 +311,24 @@ router.get('/:projectId/files', authMiddleware, validate(projectSchemas.projectI
  *         required: true
  *         schema: { type: string }
  *     responses:
- *       202:
- *         description: Индексация поставлена в очередь
+ *       200:
+ *         description: Файл переиндексирован (с итоговым статусом)
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
  *                 success: { type: boolean, example: true }
- *                 message: { type: string, example: "Индексация запущена" }
+ *                 message: { type: string, example: "Файл переиндексирован" }
  *                 data:
  *                   type: object
  *                   properties:
  *                     processingStatus:
  *                       type: string
- *                       example: indexing
- *                       description: Новый статус файла сразу после постановки в очередь (см. File.processingStatus).
+ *                       example: indexed
+ *                       description: Итоговый статус файла после обработки (см. File.processingStatus).
+ *                     qdrantStatus: { type: string, example: indexed }
+ *                     processingErrorCode: { type: string, nullable: true, example: null }
  *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       403: { description: Нет доступа к проекту, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       404: { description: Проект или файл не найден, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

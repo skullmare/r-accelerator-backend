@@ -15,7 +15,9 @@ const contextPolicySchema = z.object({
     includePreviousArtifacts: z.boolean().default(true),
     qdrantTopK: z.number().int().min(1).max(20).default(6),
     maxContextChars: z.number().int().min(500).max(40000).default(6000),
-    allowedSourceTypes: z.array(z.enum(['project_summary', 'agent_summary', 'artifact', 'file_chunk', 'user_note'])).default(['project_summary', 'artifact', 'file_chunk'])
+    allowedSourceTypes: z.array(z.enum(['project_summary', 'agent_summary', 'artifact', 'file_chunk', 'user_note'])).default(['project_summary', 'artifact', 'file_chunk']),
+    knowledgeTopK: z.number().int().min(1).max(20).default(6),
+    knowledgeMaxContextChars: z.number().int().min(500).max(40000).default(6000)
 }).strict();
 
 const modelConfigSchema = z.object({
@@ -36,7 +38,8 @@ const createAgentSchema = z.object({
         artifactDefinition: artifactDefinitionSchema,
         nextAgentId: objectId.nullable().optional(),
         contextPolicy: contextPolicySchema.default({}),
-        modelConfig: modelConfigSchema.default({})
+        modelConfig: modelConfigSchema.default({}),
+        knowledgeIds: z.array(objectId).default([])
     }).strict()
 });
 
@@ -53,7 +56,8 @@ const updateAgentSchema = z.object({
         artifactDefinition: artifactDefinitionSchema.optional(),
         nextAgentId: objectId.nullable().optional(),
         contextPolicy: contextPolicySchema.optional(),
-        modelConfig: modelConfigSchema.optional()
+        modelConfig: modelConfigSchema.optional(),
+        knowledgeIds: z.array(objectId).optional()
     }).strict()
 });
 

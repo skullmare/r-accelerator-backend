@@ -1,11 +1,12 @@
-import { searchContext } from '../qdrant.service.js';
+import { searchContext, searchKnowledge } from '../qdrant.service.js';
 
 const SOURCE_TYPE_LABELS = {
     project_summary: 'Сводка проекта',
     agent_summary: 'Сводка предыдущего агента',
     artifact: 'Артефакт предыдущего этапа',
     file_chunk: 'Фрагмент файла проекта',
-    user_note: 'Заметка пользователя'
+    user_note: 'Заметка пользователя',
+    knowledge: 'База знаний'
 };
 
 // Retrieved content originates from user-uploaded files and prior artifacts —
@@ -46,6 +47,8 @@ export async function assembleContext({ project, agent, userMessageText }) {
         ? agent.contextPolicy.allowedSourceTypes
         : agent.contextPolicy.allowedSourceTypes.filter((t) => t !== 'artifact');
 
+    // Поиск №1 — приватный контекст проекта (expert_context), всегда с
+    // фильтром по projectId (граница изоляции проектов).
     const retrieved = await searchContext({
         projectId: project._id,
         sourceTypes,
@@ -63,6 +66,31 @@ export async function assembleContext({ project, agent, userMessageText }) {
         usedChunks.push({ sourceType: hit.payload.sourceType, sourceId: hit.payload.sourceId, chunkIndex: hit.payload.chunkIndex, score: hit.score });
     }
 
+    // Поиск №2 — глобальная база знаний (knowledge_context), только по
+    // knowledgeId, привязанным этому агенту (agent.knowledgeIds). Отдельная
+    // коллекция и отдельный бюджет символов (knowledgeMaxContextChars). Если
+    // агенту знания не привязаны — searchKnowledge вернёт [] без обращения к
+    // Qdrant. Результаты дописываются в тот же недоверенный блок контекста.
+    const usedKnowledgeChunks = [];
+    if (agent.knowledgeIds?.length) {
+        const knowledgeHits = await searchKnowledge({
+            knowledgeIds: agent.knowledgeIds,
+            queryText: userMessageText,
+            topK: agent.contextPolicy.knowledgeTopK
+        });
+
+        let knowledgeText = '';
+        const label = SOURCE_TYPE_LABELS.knowledge;
+        for (const hit of knowledgeHits) {
+            const piece = `[${label}] ${hit.payload.text}`;
+            if (knowledgeText.length + piece.length > agent.contextPolicy.knowledgeMaxContextChars) break;
+            knowledgeText += `${piece}\n\n`;
+            usedKnowledgeChunks.push({ knowledgeId: hit.payload.knowledgeId, chunkIndex: hit.payload.chunkIndex, score: hit.score });
+        }
+
+        if (knowledgeText) retrievedText += knowledgeText;
+    }
+
     const retrievedContextMessage = retrievedText
         ? { role: 'user', content: `${UNTRUSTED_CONTEXT_PREFIX}${retrievedText.trim()}${UNTRUSTED_CONTEXT_SUFFIX}` }
         : null;
@@ -73,6 +101,7 @@ export async function assembleContext({ project, agent, userMessageText }) {
         contextSnapshot: {
             projectSummaryIncluded: Boolean(agent.contextPolicy.includeProjectSummary && project.contextSummary),
             retrievedChunks: usedChunks,
+            retrievedKnowledgeChunks: usedKnowledgeChunks,
             assembledAt: new Date().toISOString()
         }
     };

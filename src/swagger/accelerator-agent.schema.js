@@ -74,6 +74,16 @@
  *               type: array
  *               items: { type: string, enum: [project_summary, agent_summary, artifact, file_chunk, user_note] }
  *               description: Какие типы источников участвуют в Qdrant-поиске для этого агента.
+ *             knowledgeTopK:
+ *               type: integer
+ *               description: Сколько фрагментов забирать из базы знаний (knowledge_context) по привязанным knowledgeIds.
+ *             knowledgeMaxContextChars:
+ *               type: integer
+ *               description: Отдельный лимит суммарной длины knowledge-контекста в символах.
+ *         knowledgeIds:
+ *           type: array
+ *           items: { type: string }
+ *           description: _id глобальных баз знаний (Knowledge), привязанных агенту. Поиск в knowledge_context идёт только по этому списку; пустой список — агент не получает знаний.
  *         modelConfig:
  *           type: object
  *           description: Настройки конкретного LLM-вызова для этого агента. Провайдер сейчас всегда OpenAI.

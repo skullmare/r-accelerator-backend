@@ -3,8 +3,6 @@ import File from '../../models/file.model.js';
 import { getExtractor } from './extractors/index.js';
 import { upsertChunks, deleteBySource } from '../qdrant.service.js';
 
-export const FILE_PROCESS_JOB_TYPE = 'file:process';
-
 const EMBED_BATCH_SIZE = 20;
 
 async function markUnsupported(file) {

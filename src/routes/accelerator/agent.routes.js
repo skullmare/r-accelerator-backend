@@ -100,6 +100,10 @@ router.get('/', listAgents);
  *                   model: { type: string, description: "Модель OpenAI." }
  *                   temperature: { type: number, description: "Температура генерации." }
  *                   maxTokens: { type: integer, description: "Лимит токенов на ответ модели." }
+ *               knowledgeIds:
+ *                 type: array
+ *                 items: { type: string }
+ *                 description: "_id глобальных баз знаний (Knowledge), привязанных агенту. Поиск в knowledge_context идёт только по ним."
  *     responses:
  *       201:
  *         description: Агент создан
@@ -197,6 +201,7 @@ router.get('/:agentId', validate(agentSchemas.agentIdSchema), getAgent);
  *               nextAgentId: { type: string, nullable: true, description: "_id следующего агента; должен существовать." }
  *               contextPolicy: { type: object }
  *               modelConfig: { type: object }
+ *               knowledgeIds: { type: array, items: { type: string }, description: "_id баз знаний (Knowledge), привязанных агенту." }
  *     responses:
  *       200:
  *         description: Агент обновлён

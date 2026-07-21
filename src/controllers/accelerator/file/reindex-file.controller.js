@@ -1,6 +1,5 @@
 import File from '../../../models/file.model.js';
-import { enqueue } from '../../../services/queue/job-queue.service.js';
-import { FILE_PROCESS_JOB_TYPE } from '../../../services/file-processing/process-file.job.js';
+import { processFile } from '../../../services/file-processing/process-file.job.js';
 
 export async function reindexFile(req, res) {
     try {
@@ -11,15 +10,18 @@ export async function reindexFile(req, res) {
             return res.error({ code: 'FILE_NOT_FOUND' }, 404, 'Файл не найден в этом проекте');
         }
 
-        file.processingStatus = 'indexing';
-        file.qdrantStatus = 'not_indexed';
-        file.processingError = null;
-        await file.save();
+        // Синхронная переиндексация (очереди больше нет): processFile сам
+        // чистит старые точки в Qdrant (deleteBySource) и записывает новые.
+        // При сбое проставляет processingStatus='failed' и пробрасывает ошибку.
+        await processFile({ fileId: String(file._id) });
 
-        await enqueue(FILE_PROCESS_JOB_TYPE, { fileId: String(file._id) });
-
-        return res.success({ processingStatus: file.processingStatus }, 'Индексация запущена', 202);
+        const processed = await File.findById(file._id);
+        return res.success({
+            processingStatus: processed.processingStatus,
+            qdrantStatus: processed.qdrantStatus,
+            processingErrorCode: processed.processingErrorCode
+        }, 'Файл переиндексирован', 200);
     } catch (error) {
-        return res.error({ description: error.message, code: error.code }, 500, 'Ошибка при запуске индексации файла');
+        return res.error({ description: error.message, code: error.code }, 500, 'Ошибка при переиндексации файла');
     }
 }

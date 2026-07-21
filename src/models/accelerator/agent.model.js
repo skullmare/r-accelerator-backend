@@ -32,6 +32,15 @@ const AgentSchema = new mongoose.Schema({
         default: null,
         maxlength: 2000
     },
+    // Ссылка на аватарку агента (изображение) для UI. Фронт загружает
+    // картинку в хранилище и передаёт сюда её публичный URL. Необязательное,
+    // в промпт модели не подмешивается.
+    avatarUrl: {
+        type: String,
+        trim: true,
+        default: null,
+        maxlength: 2000
+    },
     // Порядковое место агента в маршруте. По нему сортируется список в
     // GET /admin/agents и GET expert-route, и по нему же resolveCurrentAgent
     // выбирает "первого активного агента", если у проекта ещё не выставлен

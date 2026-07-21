@@ -31,6 +31,7 @@ const createAgentSchema = z.object({
     body: z.object({
         name: z.string().trim().min(1).max(150),
         roleTitle: z.string().trim().min(1).max(150),
+        description: z.string().trim().max(2000).nullable().optional(),
         order: z.number().int(),
         isActive: z.boolean().default(true),
         systemPrompt: z.string().trim().min(1).max(20000),
@@ -49,6 +50,7 @@ const updateAgentSchema = z.object({
     body: z.object({
         name: z.string().trim().min(1).max(150).optional(),
         roleTitle: z.string().trim().min(1).max(150).optional(),
+        description: z.string().trim().max(2000).nullable().optional(),
         order: z.number().int().optional(),
         isActive: z.boolean().optional(),
         systemPrompt: z.string().trim().min(1).max(20000).optional(),

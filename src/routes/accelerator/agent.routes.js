@@ -71,6 +71,7 @@ router.get('/', listAgents);
  *             properties:
  *               name: { type: string, description: "Имя агента для интерфейса." }
  *               roleTitle: { type: string, description: "Короткое описание специализации." }
+ *               description: { type: string, nullable: true, description: "Развёрнутое описание агента для UI (в промпт не подмешивается)." }
  *               order: { type: integer, description: "Порядковое место агента в маршруте." }
  *               isActive: { type: boolean, default: true, description: "Если false — агент не участвует в пользовательском маршруте." }
  *               systemPrompt: { type: string, description: "Базовая системная инструкция роли — уходит в LLM при каждом сообщении." }
@@ -186,6 +187,7 @@ router.get('/:agentId', validate(agentSchemas.agentIdSchema), getAgent);
  *             properties:
  *               name: { type: string }
  *               roleTitle: { type: string }
+ *               description: { type: string, nullable: true, description: "Развёрнутое описание агента для UI." }
  *               order: { type: integer }
  *               isActive: { type: boolean, description: "false — временно исключить агента из пользовательского маршрута." }
  *               systemPrompt: { type: string }

@@ -22,6 +22,16 @@ const AgentSchema = new mongoose.Schema({
         trim: true,
         maxlength: 150
     },
+    // Развёрнутое описание агента для UI (карточка агента в админке/на
+    // фронте): чем он занимается, что даёт пользователю. Необязательное и,
+    // как name/roleTitle, в промпт модели НЕ подмешивается — чисто
+    // отображаемое поле.
+    description: {
+        type: String,
+        trim: true,
+        default: null,
+        maxlength: 2000
+    },
     // Порядковое место агента в маршруте. По нему сортируется список в
     // GET /admin/agents и GET expert-route, и по нему же resolveCurrentAgent
     // выбирает "первого активного агента", если у проекта ещё не выставлен

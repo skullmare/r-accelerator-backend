@@ -551,3 +551,61 @@ describe('Автозавершение Project.status', () => {
         expect(projectAfterR2.status).toBe('completed');
     });
 });
+
+describe('Гейт обязательных полей артефакта перед переходом на следующего агента', () => {
+    it('confirmArtifact:true с артефактом без обязательного поля -> 422 ARTIFACT_VALIDATION_FAILED и проект НЕ переходит на R2', async () => {
+        const { r1, r2 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+
+        const sessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', cookie)
+            .send({ agentId: String(r1._id) });
+        const sessionId = sessionRes.body.data.session._id;
+
+        // Модель вернула JSON, где нет обязательного поля 'risks'
+        // (r1.requiredFields = marketDescription, nicheHypothesis, competitors, risks, summary).
+        chatComplete.mockResolvedValueOnce({
+            content: JSON.stringify({
+                marketDescription: 'Описание рынка',
+                nicheHypothesis: 'Гипотеза ниши',
+                competitors: 'Конкуренты',
+                summary: 'Сводка'
+            }),
+            tokenUsage: { totalTokens: 10 }
+        });
+
+        const res = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({ confirmArtifact: true });
+
+        expect(res.status).toBe(422);
+        expect(res.body.error.code).toBe('ARTIFACT_VALIDATION_FAILED');
+
+        // Ключевой инвариант: проект остался на R1, маршрут не продвинулся.
+        const projectAfter = await Project.findById(project._id);
+        expect(String(projectAfter.currentAgentId)).toBe(String(r1._id));
+        expect(projectAfter.completedAgentIds.map(String)).not.toContain(String(r1._id));
+        expect(projectAfter.status).toBe('active');
+
+        // Артефакт с неполными полями не должен был создаться вовсе.
+        const artifacts = await Artifact.find({ projectId: project._id });
+        expect(artifacts).toHaveLength(0);
+
+        // Индексация в Qdrant подтверждённого артефакта тоже не запускалась.
+        expect(upsertChunks).not.toHaveBeenCalled();
+
+        // Убедимся, что после этого валидный артефакт всё-таки переводит на R2
+        // (гейт именно на полях, а не общая блокировка).
+        const okRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({ confirmArtifact: true });
+        expect(okRes.status).toBe(200);
+
+        const projectAdvanced = await Project.findById(project._id);
+        expect(String(projectAdvanced.currentAgentId)).toBe(String(r2._id));
+    });
+});

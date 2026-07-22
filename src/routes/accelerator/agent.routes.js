@@ -71,12 +71,16 @@ router.get('/', listAgents);
  *             properties:
  *               name: { type: string, description: "Имя агента для интерфейса." }
  *               roleTitle: { type: string, description: "Короткое описание специализации." }
- *               description: { type: string, nullable: true, description: "Развёрнутое описание агента для UI (в промпт не подмешивается)." }
- *               avatarUrl: { type: string, nullable: true, description: "Ссылка на аватарку агента (изображение) для UI." }
+ *               description: { type: string, maxLength: 1000, nullable: true, description: "Развёрнутое описание агента для UI (в промпт не подмешивается)." }
+ *               avatarUrl: { type: string, format: uri, nullable: true, description: "Ссылка на аватарку агента (изображение) для UI." }
+ *               thinkingAvatarUrl: { type: string, format: uri, nullable: true, description: "Ссылка на «думающую» аватарку агента для UI." }
+ *               greeting: { type: string, maxLength: 2000, nullable: true, description: "Приветственное сообщение агента в начале диалога (UI)." }
  *               order: { type: integer, description: "Порядковое место агента в маршруте." }
  *               isActive: { type: boolean, default: true, description: "Если false — агент не участвует в пользовательском маршруте." }
  *               systemPrompt: { type: string, description: "Базовая системная инструкция роли — уходит в LLM при каждом сообщении." }
  *               completionCriteria: { type: string, description: "Когда этап считается завершённым (инструкция для модели, не хард-гейт на сервере)." }
+ *               completionEvaluatorPrompt: { type: string, nullable: true, description: "Промпт для оценки завершённости этапа моделью-оценщиком (опционально)." }
+ *               allowPartialCompletion: { type: boolean, default: false, description: "Разрешать завершение с частично заполненным артефактом." }
  *               artifactDefinition:
  *                 type: object
  *                 required: [artifactType]
@@ -188,12 +192,16 @@ router.get('/:agentId', validate(agentSchemas.agentIdSchema), getAgent);
  *             properties:
  *               name: { type: string }
  *               roleTitle: { type: string }
- *               description: { type: string, nullable: true, description: "Развёрнутое описание агента для UI." }
- *               avatarUrl: { type: string, nullable: true, description: "Ссылка на аватарку агента." }
+ *               description: { type: string, maxLength: 1000, nullable: true, description: "Развёрнутое описание агента для UI." }
+ *               avatarUrl: { type: string, format: uri, nullable: true, description: "Ссылка на аватарку агента." }
+ *               thinkingAvatarUrl: { type: string, format: uri, nullable: true, description: "Ссылка на «думающую» аватарку агента." }
+ *               greeting: { type: string, maxLength: 2000, nullable: true, description: "Приветственное сообщение агента (UI)." }
  *               order: { type: integer }
  *               isActive: { type: boolean, description: "false — временно исключить агента из пользовательского маршрута." }
  *               systemPrompt: { type: string }
  *               completionCriteria: { type: string }
+ *               completionEvaluatorPrompt: { type: string, nullable: true, description: "Промпт для оценки завершённости этапа (опционально)." }
+ *               allowPartialCompletion: { type: boolean, description: "Разрешать завершение с частично заполненным артефактом." }
  *               artifactDefinition:
  *                 type: object
  *                 properties:

@@ -6,7 +6,7 @@ import { authCookie } from '../__fixtures__/auth.fixture.js';
 import File from '../models/file.model.js';
 
 // Реальные вызовы S3 — требуются переменные окружения:
-// YANDEX_ACCESS_KEY_ID, YANDEX_SECRET_ACCESS_KEY, YANDEX_BUCKET
+// S3_ENDPOINT, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET
 
 beforeAll(() => connect());
 afterAll(() => closeDatabase());

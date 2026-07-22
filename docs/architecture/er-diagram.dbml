@@ -134,13 +134,112 @@ Table study_progress {
 // ─── Files ────────────────────────────────────────────────────────────────────
 
 Table files {
-  _id        ObjectId [pk]
-  name       string   [not null]
-  url        string   [not null, note: "Yandex Cloud S3 URL"]
-  type       string   [not null, note: "MIME type"]
-  size       int      [not null, note: "bytes"]
-  uploadedBy ObjectId [ref: > users._id, not null]
-  source     string   [default: "system", note: "enum: user | system"]
-  createdAt  datetime
-  updatedAt  datetime
+  _id                   ObjectId [pk]
+  name                  string   [not null]
+  url                   string   [not null, note: "Yandex Cloud S3 URL"]
+  key                   string   [note: "S3 object key, used by the file-processing worker"]
+  type                  string   [not null, note: "MIME type"]
+  size                  int      [not null, note: "bytes"]
+  uploadedBy            ObjectId [ref: > users._id, not null]
+  source                string   [default: "system", note: "enum: user | system"]
+  projectId             ObjectId [ref: > accelerator_projects._id, note: "nullable — set when uploaded within a project"]
+  processingStatus      string   [default: "uploaded", note: "enum: uploaded|extracting|extracted|indexing|indexed|failed|unsupported"]
+  extractedTextStatus   string   [default: "not_started", note: "enum: not_started|success|empty|failed|unsupported"]
+  qdrantStatus          string   [default: "not_indexed", note: "enum: not_indexed|indexed|failed|stale"]
+  qdrantPointIds        string[]
+  textHash              string
+  extractedTextPreview  string
+  processingError       string
+  indexedAt             datetime
+  createdAt             datetime
+  updatedAt             datetime
+}
+
+// ─── Р-Акселератор: экспертный контур (Sprint 3) ──────────────────────────────
+
+Table accelerator_projects {
+  _id                  ObjectId [pk]
+  ownerId              ObjectId [ref: > users._id, not null]
+  name                 string   [not null]
+  description          string
+  stage                string   [note: "enum: idea|mvp|launched|growth|scale"]
+  status               string   [note: "enum: active|paused|completed|archived"]
+  currentAgentId       ObjectId [ref: > accelerator_agents._id, note: "nullable — self-heals to first active agent by order"]
+  completedAgentIds    ObjectId[]
+  contextSummary       string   [note: "always included in the LLM prompt (CTX-2)"]
+  contextVersion       int      [default: 0]
+  qdrantCollection     string   [note: "nullable — overrides the default expert_context collection"]
+  lastActivityAt       datetime
+  createdAt            datetime
+  updatedAt            datetime
+}
+
+Table accelerator_agents {
+  _id                 ObjectId [pk, note: "the only identifier — no separate human-readable code (see open-questions.md)"]
+  name                string   [not null]
+  roleTitle           string   [not null]
+  order               int      [not null]
+  isActive            boolean  [default: true]
+  systemPrompt        string   [not null]
+  completionCriteria  string   [not null]
+  artifactDefinition  json     [not null, note: "{ artifactType, titleTemplate, requiredFields[], outputSchema, summaryField }"]
+  nextAgentId         ObjectId [ref: > accelerator_agents._id, note: "nullable — must reference an existing agent"]
+  contextPolicy       json     [note: "{ includeProjectSummary, includePreviousArtifacts, qdrantTopK, maxContextChars, allowedSourceTypes[] }"]
+  modelConfig         json     [note: "{ provider: openai|openrouter, model, temperature, maxTokens }"]
+  createdAt           datetime
+  updatedAt           datetime
+}
+
+Table expert_sessions {
+  _id                     ObjectId [pk]
+  projectId               ObjectId [ref: > accelerator_projects._id, not null]
+  agentId                 ObjectId [ref: > accelerator_agents._id, not null]
+  status                  string   [note: "enum: draft|active|waiting_user_confirmation|completed|failed"]
+  inputContextSnapshot    json     [note: "audit trail of what was actually sent to the LLM"]
+  outputSummary           string
+  artifactId              ObjectId [ref: > accelerator_artifacts._id, note: "nullable"]
+  createdAt               datetime
+  updatedAt               datetime
+}
+
+Table accelerator_messages {
+  _id         ObjectId [pk]
+  sessionId   ObjectId [ref: > expert_sessions._id, not null]
+  projectId   ObjectId [ref: > accelerator_projects._id, not null]
+  senderType  string   [not null, note: "enum: user|assistant|system"]
+  content     string   [not null]
+  tokenUsage  json
+  createdAt   datetime
+
+  Note: "Index: { sessionId, createdAt ASC }"
+}
+
+Table accelerator_artifacts {
+  _id              ObjectId [pk]
+  projectId        ObjectId [ref: > accelerator_projects._id, not null]
+  expertSessionId  ObjectId [ref: > expert_sessions._id, not null]
+  agentId          ObjectId [ref: > accelerator_agents._id, not null]
+  type             string   [not null]
+  title            string   [not null]
+  content          json     [not null]
+  summary          string   [not null]
+  status           string   [note: "enum: draft|ready|confirmed|rejected"]
+  createdAt        datetime
+  updatedAt        datetime
+}
+
+Table jobs {
+  _id          ObjectId [pk]
+  type         string   [not null, note: "e.g. file:process"]
+  payload      json     [default: "{}"]
+  status       string   [note: "enum: pending|processing|completed|failed"]
+  attempts     int      [default: 0]
+  maxAttempts  int      [default: 5]
+  runAt        datetime
+  lockedAt     datetime
+  lastError    string
+  createdAt    datetime
+  updatedAt    datetime
+
+  Note: "Mongo-backed durable queue. Claiming a job is a single atomic findOneAndUpdate, so it's safe across multiple server replicas without extra coordination."
 }

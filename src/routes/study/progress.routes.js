@@ -37,6 +37,10 @@ const router = express.Router();
  *             properties:
  *               qrCode:
  *                 type: string
+ *                 description: >
+ *                   Код приглашения программы (StudyProgram.qrCode — по факту
+ *                   SHA-256-хэш). join-program.controller.js ищет программу по этому
+ *                   полю среди active:true.
  *     responses:
  *       200:
  *         description: Пользователь добавлен в программу
@@ -45,10 +49,20 @@ const router = express.Router();
  *             schema:
  *               type: object
  *               properties:
- *                 programId:
- *                   type: string
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Вы добавлены в программу" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     programId:
+ *                       type: string
+ *                       description: Идентификатор программы, в которую добавлен пользователь.
  *       404:
  *         description: Программа не найдена или неактивна
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/join', authMiddleware, validate(programSchemas.joinProgramSchema), joinProgram);
 
@@ -74,11 +88,24 @@ router.post('/join', authMiddleware, validate(programSchemas.joinProgramSchema),
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/StudyProgress'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Прогресс получен" }
+ *                 data:
+ *                   $ref: '#/components/schemas/StudyProgress'
  *       403:
  *         description: Нет доступа к программе или программа неактивна
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         description: Программа не найдена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/:programId/progress',
     authMiddleware,
@@ -93,7 +120,11 @@ router.get('/:programId/progress',
  *   get:
  *     tags: [Study / Progress]
  *     summary: Получить урок с ответами пользователя
- *     description: Возвращает полный урок.
+ *     description: >
+ *       Возвращает полный урок. Несмотря на расположение в домене progress,
+ *       get-lesson.controller.js (getProgressLesson) делает обычный
+ *       StudyLesson.findById(lessonId) без populate — тот же формат, что и
+ *       admin-эндпоинт GET /study/lessons/{lessonId} (см. схему StudyLesson).
  *     parameters:
  *       - in: path
  *         name: programId
@@ -111,11 +142,24 @@ router.get('/:programId/progress',
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/StudyLessonWithProgress'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Урок получен" }
+ *                 data:
+ *                   $ref: '#/components/schemas/StudyLesson'
  *       403:
  *         description: Нет доступа к уроку или предыдущий элемент не пройден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         description: Урок не найден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/:programId/lessons/:lessonId',
     authMiddleware,
@@ -147,8 +191,20 @@ router.get('/:programId/lessons/:lessonId',
  *     responses:
  *       200:
  *         description: Урок отмечен как пройденный
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Урок отмечен как пройденный" }
+ *                 data: { type: object, example: {} }
  *       403:
  *         description: Нет доступа к уроку или предыдущий элемент не пройден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/:programId/lessons/:lessonId/complete',
     authMiddleware,
@@ -183,11 +239,24 @@ router.post('/:programId/lessons/:lessonId/complete',
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/StudyAgent'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Агент получен" }
+ *                 data:
+ *                   $ref: '#/components/schemas/StudyAgent'
  *       403:
  *         description: Нет доступа к агенту или предыдущий элемент не пройден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         description: Агент не найден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/:programId/agents/:agentId',
     authMiddleware,
@@ -219,10 +288,26 @@ router.get('/:programId/agents/:agentId',
  *     responses:
  *       200:
  *         description: Агент отмечен как пройденный
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Агент отмечен как пройденный" }
+ *                 data: { type: object, example: {} }
  *       403:
  *         description: Нет доступа к агенту или предыдущий элемент не пройден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         description: Программа не найдена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/:programId/agents/:agentId/complete',
     authMiddleware,

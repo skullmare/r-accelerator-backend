@@ -26,16 +26,25 @@ const router = express.Router();
  *             schema:
  *               type: object
  *               properties:
- *                 lessons:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/StudyLessonMeta'
- *                 groups:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/LessonGroup'
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Список уроков и групп получен" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     lessons:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/StudyLessonMeta'
+ *                     groups:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/LessonGroup'
  *       403:
  *         description: Недостаточно прав
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/', authMiddleware, checkPermission('study_lessons.read'), listLessons);
 
@@ -57,41 +66,57 @@ router.get('/', authMiddleware, checkPermission('study_lessons.read'), listLesso
  *               name:
  *                 type: string
  *                 maxLength: 200
+ *                 description: Название урока, отображается в списках/модулях программы.
  *               cover:
  *                 type: string
  *                 nullable: true
  *                 format: uri
- *                 description: URL фото-обложки урока
+ *                 description: URL фото-обложки урока.
  *               group:
  *                 type: string
  *                 nullable: true
- *                 description: ID группы уроков
+ *                 description: ID группы уроков (LessonGroup), к которой относится урок — только для группировки в UI.
  *               content:
  *                 type: object
- *                 description: Контент в формате TipTap/ProseMirror JSON
+ *                 description: >
+ *                   Контент урока в формате TipTap/ProseMirror JSON. Сохраняется как есть —
+ *                   сервер не парсит и не валидирует структуру документа.
  *               video:
  *                 type: object
  *                 nullable: true
+ *                 description: Ссылка на видео урока.
  *                 properties:
  *                   url:
  *                     type: string
  *                     format: uri
+ *                     description: URL видео урока.
  *               presentation:
  *                 type: object
  *                 nullable: true
+ *                 description: Ссылка на презентацию урока.
  *                 properties:
  *                   url:
  *                     type: string
  *                     format: uri
+ *                     description: URL презентации урока.
  *     responses:
  *       201:
  *         description: Урок создан
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/StudyLesson'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Урок создан" }
+ *                 data:
+ *                   $ref: '#/components/schemas/StudyLesson'
  *       400:
  *         description: Ошибка валидации
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/', authMiddleware, checkPermission('study_lessons.create'), validate(lessonSchemas.createLessonSchema), createLesson);
 
@@ -114,9 +139,18 @@ router.post('/', authMiddleware, checkPermission('study_lessons.create'), valida
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/StudyLesson'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Урок получен" }
+ *                 data:
+ *                   $ref: '#/components/schemas/StudyLesson'
  *       404:
  *         description: Урок не найден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/:lessonId', authMiddleware, checkPermission('study_lessons.read'), validate(lessonSchemas.lessonIdSchema), getLesson);
 
@@ -143,40 +177,57 @@ router.get('/:lessonId', authMiddleware, checkPermission('study_lessons.read'), 
  *               name:
  *                 type: string
  *                 maxLength: 200
+ *                 description: Название урока, отображается в списках/модулях программы.
  *               cover:
  *                 type: string
  *                 nullable: true
  *                 format: uri
- *                 description: URL фото-обложки урока
+ *                 description: URL фото-обложки урока.
  *               group:
  *                 type: string
  *                 nullable: true
- *                 description: ID группы уроков
+ *                 description: ID группы уроков (LessonGroup), к которой относится урок — только для группировки в UI.
  *               content:
  *                 type: object
+ *                 description: >
+ *                   Контент урока в формате TipTap/ProseMirror JSON. Сохраняется как есть —
+ *                   сервер не парсит и не валидирует структуру документа.
  *               video:
  *                 type: object
  *                 nullable: true
+ *                 description: Ссылка на видео урока.
  *                 properties:
  *                   url:
  *                     type: string
  *                     format: uri
+ *                     description: URL видео урока.
  *               presentation:
  *                 type: object
  *                 nullable: true
+ *                 description: Ссылка на презентацию урока.
  *                 properties:
  *                   url:
  *                     type: string
  *                     format: uri
+ *                     description: URL презентации урока.
  *     responses:
  *       200:
  *         description: Урок обновлён
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/StudyLesson'
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Урок обновлён" }
+ *                 data:
+ *                   $ref: '#/components/schemas/StudyLesson'
  *       404:
  *         description: Урок не найден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.patch('/:lessonId', authMiddleware, checkPermission('study_lessons.update'), validate(lessonSchemas.updateLessonSchema), updateLesson);
 
@@ -196,8 +247,20 @@ router.patch('/:lessonId', authMiddleware, checkPermission('study_lessons.update
  *     responses:
  *       200:
  *         description: Урок удалён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Урок удалён" }
+ *                 data: { type: object, example: {} }
  *       404:
  *         description: Урок не найден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.delete('/:lessonId', authMiddleware, checkPermission('study_lessons.delete'), validate(lessonSchemas.lessonIdSchema), deleteLesson);
 

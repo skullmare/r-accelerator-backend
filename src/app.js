@@ -18,6 +18,8 @@ import studyLessonGroupRouter from './routes/study/lesson-group.routes.js';
 import studyProgressRouter from './routes/study/progress.routes.js';
 import fileRouter from './routes/file.routes.js';
 import projectRouter from './routes/accelerator/project.routes.js';
+import acceleratorAgentRouter from './routes/accelerator/agent.routes.js';
+import acceleratorKnowledgeRouter from './routes/accelerator/knowledge.routes.js';
 
 const app = express();
 
@@ -55,6 +57,8 @@ app.use('/api/v1/study/lesson-groups', studyLessonGroupRouter);
 app.use('/api/v1/study/programs', studyProgressRouter);
 app.use('/api/v1/file', fileRouter);
 app.use('/api/v1/accelerator/projects', projectRouter);
+app.use('/api/v1/accelerator/admin/agents', acceleratorAgentRouter);
+app.use('/api/v1/accelerator/admin/knowledge', acceleratorKnowledgeRouter);
 
 app.use((req, res) => {
     return res.error({}, 404, `Маршрут ${req.method} ${req.url} не найден`);

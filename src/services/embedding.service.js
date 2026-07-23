@@ -27,7 +27,12 @@ export async function embedTexts(texts) {
         response = await openrouter.embeddings.create({
             model: EMBEDDING_MODEL,
             input: texts,
-            dimensions: EMBEDDING_DIM
+            dimensions: EMBEDDING_DIM,
+            // Явно float: свежие версии OpenAI SDK по умолчанию шлют
+            // encoding_format: 'base64', а Google-эмбеддинги (Gemini) через
+            // OpenRouter это не поддерживают и отдают ошибку. См. также, что
+            // .map ниже ждёт массив чисел (float), а не base64-строку.
+            encoding_format: 'float'
         });
     } catch (error) {
         // Сетевые/HTTP-ошибки SDK (4xx/5xx) — нормализуем код, сохраняя текст.

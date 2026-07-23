@@ -15,14 +15,20 @@ export async function uploadFileController(req, res) {
             if (status === 403) return res.error({}, 403, 'Нет доступа к проекту');
         }
 
+        // multer (busboy) декодирует имя файла из multipart как latin1, из-за
+        // чего UTF-8 кириллица приходит «крякозябрами» (Ð Ð Ð½Ð°...). Возвращаем
+        // исходное имя, перекодировав байты latin1 -> utf8. Для ASCII-имён это
+        // no-op, поэтому безопасно.
+        const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+
         const { url, key } = await uploadFile({
             buffer: req.file.buffer,
             mimetype: req.file.mimetype,
-            originalname: req.file.originalname
+            originalname: originalName
         });
 
         const file = await File.create({
-            name: req.file.originalname,
+            name: originalName,
             url,
             key,
             type: req.file.mimetype,

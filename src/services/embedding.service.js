@@ -5,16 +5,47 @@ import { EMBEDDING_MODEL, EMBEDDING_DIM } from '../../config/embedding.config.js
 // knowledge_context). Провайдер — OpenRouter (config/openrouter.config.js),
 // модель — google/gemini-embedding-2. Размерность вектора запрашивается явно
 // через `dimensions`, чтобы совпадать с размерностью коллекции в Qdrant.
+
+// Формирует понятную ошибку с кодом EMBEDDING_PROVIDER_FAILED вместо
+// «Cannot read properties of undefined (reading 'sort')», когда OpenRouter
+// вернул ответ не в OpenAI-форме `{ data: [...] }` (обычно это тело ошибки:
+// неверный slug модели, неподдерживаемый `dimensions`, эмбеддинги не
+// включены для аккаунта). Прокидывает реальное сообщение провайдера, чтобы
+// сбой был диагностируемым и в логах, и в SSE-событии error.
+function extractProviderError(response) {
+    return response?.error?.message
+        || response?.error?.metadata?.raw
+        || (typeof response?.error === 'string' ? response.error : null)
+        || (() => { try { return JSON.stringify(response)?.slice(0, 300); } catch { return null; } })();
+}
+
 export async function embedTexts(texts) {
     if (texts.length === 0) return [];
 
-    const response = await openrouter.embeddings.create({
-        model: EMBEDDING_MODEL,
-        input: texts,
-        dimensions: EMBEDDING_DIM
-    });
+    let response;
+    try {
+        response = await openrouter.embeddings.create({
+            model: EMBEDDING_MODEL,
+            input: texts,
+            dimensions: EMBEDDING_DIM
+        });
+    } catch (error) {
+        // Сетевые/HTTP-ошибки SDK (4xx/5xx) — нормализуем код, сохраняя текст.
+        error.code = error.code || 'EMBEDDING_PROVIDER_FAILED';
+        throw error;
+    }
+
+    if (!response || !Array.isArray(response.data)) {
+        const error = new Error(
+            `Провайдер эмбеддингов (${EMBEDDING_MODEL}) вернул ответ без массива data. ` +
+            `Ответ: ${extractProviderError(response) ?? 'неизвестный формат'}`
+        );
+        error.code = 'EMBEDDING_PROVIDER_FAILED';
+        throw error;
+    }
 
     return response.data
+        .slice()
         .sort((a, b) => a.index - b.index)
         .map((item) => item.embedding);
 }

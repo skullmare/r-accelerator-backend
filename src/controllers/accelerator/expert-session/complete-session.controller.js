@@ -12,8 +12,15 @@ export async function completeExpertSession(req, res) {
     } catch (error) {
         if (error instanceof ExpertSessionError) {
             // details несёт missingFields/reason для STAGE_NOT_READY — фронту
-            // нужно показать пользователю, чего именно не хватает.
-            return res.error({ code: error.code, ...(error.details ?? {}) }, error.status, error.message);
+            // нужно показать пользователю, чего именно не хватает. resify-express
+            // деструктурирует из первого аргумента только { code, description,
+            // error }, поэтому детали передаются через ключ error (он целиком
+            // становится телом res.body.error) — спред "лишних" полей рядом с
+            // code был бы молча отброшен.
+            return res.error({
+                code: error.code,
+                error: error.details ? { code: error.code, ...error.details } : null
+            }, error.status, error.message);
         }
         return res.error({ description: error.message, code: error.code }, 500, 'Ошибка при завершении экспертной сессии');
     }

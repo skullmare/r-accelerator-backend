@@ -43,6 +43,28 @@ const ExpertSessionSchema = new mongoose.Schema({
         trim: true,
         default: null
     },
+    // Результат серверной оценки готовности этапа (ТЗ спринта 3, DONE-4).
+    // Пересчитывается после каждого ответа агента и отдаётся фронту в
+    // SSE-событии done и в истории сообщений — по нему фронт решает, показывать
+    // ли кнопку «сформировать артефакт». Он же служит гейтом в completeSession:
+    // при ready=false этап не завершить (если у агента не включён
+    // allowPartialCompletion).
+    //
+    // evaluatedAfterMessageId — последнее сообщение, учтённое при оценке.
+    // Если оно разошлось с фактически последним сообщением сессии, состояние
+    // считается устаревшим и completeSession пересчитывает его заново, чтобы
+    // гейт не опирался на оценку до появления новых реплик.
+    completionState: {
+        ready: { type: Boolean, default: false },
+        missingFields: { type: [String], default: [] },
+        reason: { type: String, default: null },
+        evaluatedAt: { type: Date, default: null },
+        evaluatedAfterMessageId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Message',
+            default: null
+        }
+    },
     // Ссылка на созданный артефакт этапа. Появляется уже на первом (черновом)
     // вызове /complete и переиспользуется при повторном вызове с
     // confirmArtifact:true — второй вызов НЕ генерирует артефакт заново,

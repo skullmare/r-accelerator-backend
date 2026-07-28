@@ -4,7 +4,8 @@ import Message from '../../models/accelerator/message.model.js';
 import Artifact from '../../models/accelerator/artifact.model.js';
 import { assembleContext } from './context-assembly.service.js';
 import { chatCompleteStream } from '../llm.service.js';
-import { generateArtifactJson } from './artifact-generation.service.js';
+import { generateArtifact } from './artifact-generation.service.js';
+import { evaluateCompletion, CompletionEvaluationError } from './completion-evaluation.service.js';
 import { upsertChunks } from '../qdrant.service.js';
 import { chunkText } from '../file-processing/chunker.js';
 
@@ -12,10 +13,11 @@ const MAX_CONTEXT_SUMMARY_CHARS = 4000;
 const HISTORY_LIMIT = 30;
 
 export class ExpertSessionError extends Error {
-    constructor(message, status, code) {
+    constructor(message, status, code, details = null) {
         super(message);
         this.status = status;
         this.code = code;
+        this.details = details;
     }
 }
 
@@ -79,9 +81,40 @@ export async function createSession(project, agentId) {
     return { session, agent };
 }
 
+// Последние HISTORY_LIMIT сообщений в хронологическом порядке. Сортировка идёт
+// по убыванию именно для того, чтобы limit отсекал СТАРЫЕ сообщения, а не
+// новые: при сортировке по возрастанию (как было раньше) в длинном диалоге
+// модель получала первые 30 реплик и не видела ничего из недавних — из-за чего
+// поздно собранные данные не попадали ни в ответ агента, ни в артефакт.
 async function getSessionHistory(sessionId) {
-    const messages = await Message.find({ sessionId }).sort({ createdAt: 1 }).limit(HISTORY_LIMIT);
-    return messages.map((m) => ({ role: m.senderType === 'assistant' ? 'assistant' : 'user', content: m.content }));
+    const messages = await Message.find({ sessionId }).sort({ createdAt: -1 }).limit(HISTORY_LIMIT);
+    return messages
+        .reverse()
+        .map((m) => ({ role: m.senderType === 'assistant' ? 'assistant' : 'user', content: m.content }));
+}
+
+// Оценка готовности этапа + запись её на сессию. Вызывается после каждого
+// ответа агента (живое состояние кнопки на фронте) и перед генерацией
+// артефакта (гейт).
+async function refreshCompletionState(session, agent, { history, lastMessageId }) {
+    const evaluation = await evaluateCompletion({ agent, conversationMessages: history });
+
+    session.completionState = {
+        ...evaluation,
+        evaluatedAt: new Date(),
+        evaluatedAfterMessageId: lastMessageId ?? null
+    };
+    await session.save();
+
+    return session.completionState;
+}
+
+function isCompletionStateStale(session, lastMessageId) {
+    if (!session.completionState?.evaluatedAt) return true;
+    if (!lastMessageId) return false;
+
+    const evaluatedAfter = session.completionState.evaluatedAfterMessageId;
+    return !evaluatedAfter || String(evaluatedAfter) !== String(lastMessageId);
 }
 
 // Delivers the agent's reply over SSE: onUserMessage fires as soon as the
@@ -90,7 +123,7 @@ async function getSessionHistory(sessionId) {
 // model streams its answer. The full assistant message is only persisted
 // once the stream ends, so a dropped connection mid-stream can't leave a
 // half-written message in the database.
-export async function sendMessage(project, session, agent, content, { onUserMessage, onDelta } = {}) {
+export async function sendMessage(project, session, agent, content, { onUserMessage, onDelta, onEvaluationError } = {}) {
     if (session.status === 'completed') {
         throw new ExpertSessionError('Сессия уже завершена', 409, 'SESSION_ALREADY_COMPLETED');
     }
@@ -139,7 +172,59 @@ export async function sendMessage(project, session, agent, content, { onUserMess
     session.status = 'active';
     await session.save();
 
-    return { userMessage, assistantMessage };
+    // Готовность пересчитывается на каждый ход: фронт получает её в событии
+    // done и по ней решает, показывать ли кнопку завершения этапа. Сбой
+    // оценщика здесь намеренно не роняет диалог — сообщение агента уже
+    // доставлено и сохранено, а гейт всё равно перепроверит состояние в
+    // completeSession (там сбой оценки уже будет явной ошибкой).
+    let completionState = session.completionState;
+    try {
+        completionState = await refreshCompletionState(session, agent, {
+            history: [...history, { role: 'assistant', content: replyText }],
+            lastMessageId: assistantMessage._id
+        });
+    } catch (error) {
+        onEvaluationError?.(error);
+    }
+
+    return { userMessage, assistantMessage, completionState };
+}
+
+// Гейт завершения этапа. Пропускает дальше, только если оценщик считает
+// собранными все обязательные данные — либо если администратор явно разрешил
+// агенту завершаться с частичным результатом (allowPartialCompletion).
+//
+// Состояние берётся из session.completionState, но пересчитывается, если оно
+// устарело (после оценки успели появиться новые сообщения) или его нет вовсе:
+// гейт не должен опираться на снимок, снятый до половины диалога.
+async function assertStageReady(session, agent, history) {
+    if (agent.allowPartialCompletion) return;
+
+    const lastMessage = await Message.findOne({ sessionId: session._id }).sort({ createdAt: -1 }).select('_id');
+
+    let state = session.completionState;
+    if (isCompletionStateStale(session, lastMessage?._id)) {
+        try {
+            state = await refreshCompletionState(session, agent, { history, lastMessageId: lastMessage?._id });
+        } catch (error) {
+            // В отличие от чата, здесь сбой оценщика — это явная ошибка:
+            // молча пропустить незавершённый этап хуже, чем попросить повтор.
+            const code = error instanceof CompletionEvaluationError ? error.code : 'COMPLETION_EVALUATION_FAILED';
+            throw new ExpertSessionError(error.message, 502, code);
+        }
+    }
+
+    if (!state?.ready) {
+        throw new ExpertSessionError(
+            'Этап ещё не готов к формированию артефакта: собраны не все необходимые данные',
+            409,
+            'STAGE_NOT_READY',
+            {
+                missingFields: state?.missingFields ?? agent.artifactDefinition.requiredFields,
+                reason: state?.reason ?? 'Готовность этапа не оценена'
+            }
+        );
+    }
 }
 
 function appendContextSummary(project, agentName, artifactSummary) {
@@ -157,26 +242,49 @@ function appendContextSummary(project, agentName, artifactSummary) {
 // confirmArtifact:true call flips the artifact to 'confirmed', advances
 // Project.currentAgentId via Agent.nextAgentId, folds the artifact
 // summary into Project.contextSummary, and indexes it into Qdrant.
-export async function completeSession(project, session, agent, confirmArtifact) {
+export async function completeSession(project, session, agent, { confirmArtifact = false, regenerate = false } = {}) {
     if (session.status === 'completed') {
         throw new ExpertSessionError('Сессия уже завершена', 409, 'SESSION_ALREADY_COMPLETED');
     }
 
     let artifact = session.artifactId ? await Artifact.findById(session.artifactId) : null;
 
+    // Перегенерация черновика: прежний артефакт помечается rejected и
+    // отвязывается от сессии, дальше по коду создаётся новый. Подтверждённый
+    // артефакт пересоздать нельзя — он уже ушёл в контекст следующего агента
+    // и в Qdrant.
+    if (regenerate && artifact) {
+        if (artifact.status === 'confirmed') {
+            throw new ExpertSessionError('Подтверждённый артефакт нельзя сгенерировать заново', 409, 'ARTIFACT_ALREADY_CONFIRMED');
+        }
+        artifact.status = 'rejected';
+        await artifact.save();
+
+        session.artifactId = null;
+        await session.save();
+        artifact = null;
+    }
+
     if (!artifact) {
         const history = await getSessionHistory(session._id);
+
+        // Гейт готовности (ТЗ спринта 3, DONE-4). Стоит ДО генерации: смысл в
+        // том, чтобы не дать сформировать артефакт раньше времени, а заодно не
+        // тратить вызовы модели на заведомо неполный этап.
+        await assertStageReady(session, agent, history);
+
         const { systemPrompt, retrievedContextMessage } = await assembleContext({ project, agent, userMessageText: agent.completionCriteria });
 
         let generated;
         try {
-            generated = await generateArtifactJson({ agent, systemPrompt, retrievedContextMessage, conversationMessages: history });
+            generated = await generateArtifact({ agent, project, systemPrompt, retrievedContextMessage, conversationMessages: history });
         } catch (error) {
             // Only a real structural/JSON validation failure (tagged by
             // artifact-generation.service.js) is actually ARTIFACT_VALIDATION_FAILED.
             // Anything else here (network error, rate limit, auth failure —
-            // generateArtifactJson's own LLM call throwing) is a provider
-            // failure and must not be mislabeled as "your artifact is invalid".
+            // the LLM call itself throwing) is a provider failure and must not
+            // be mislabeled as "your artifact is invalid". Rendering and upload
+            // failures carry their own codes and are equally distinct.
             if (error.code === 'ARTIFACT_VALIDATION_FAILED') {
                 throw new ExpertSessionError(error.message, 422, error.code);
             }
@@ -190,6 +298,8 @@ export async function completeSession(project, session, agent, confirmArtifact) 
             type: agent.artifactDefinition.artifactType,
             title: generated.title,
             content: generated.content,
+            documentMarkdown: generated.documentMarkdown,
+            file: generated.file,
             summary: generated.summary,
             status: 'draft'
         });

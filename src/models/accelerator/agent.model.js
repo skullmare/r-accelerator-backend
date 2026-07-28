@@ -186,6 +186,11 @@ const AgentSchema = new mongoose.Schema({
     modelConfig: {
         // Имя модели OpenAI ("gpt-4o-mini").
         model: { type: String, trim: true, default: 'gpt-4o-mini' },
+        // Модель для оценщика готовности этапа
+        // (completion-evaluation.service.js). Он вызывается на каждый ход
+        // диалога, поэтому его можно посадить на модель дешевле основной.
+        // Если не задана — используется model выше.
+        evaluatorModel: { type: String, trim: true, default: null },
         // Температура генерации — выше значение, разнообразнее (и менее
         // предсказуемее) ответы модели.
         temperature: { type: Number, default: 0.4, min: 0, max: 2 },

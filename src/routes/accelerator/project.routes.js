@@ -474,8 +474,21 @@ router.post('/:projectId/expert-sessions', authMiddleware, validate(expertSessio
  *       **Формат событий SSE:**
  *       - `message_created` — сохранённое сообщение пользователя: `{ userMessage }`
  *       - `delta` — фрагмент ответа агента по мере генерации: `{ text: "..." }`
- *       - `done` — финальное сохранённое сообщение агента: `{ assistantMessage }`
+ *       - `done` — финальное сохранённое сообщение агента и оценка готовности этапа: `{ assistantMessage, completionState }`
  *       - `error` — ошибка в процессе стриминга: `{ message, code }`. `code` гарантированно нормализован до `LLM_PROVIDER_FAILED`, если у исходной ошибки не было своего кода (например, сбой самого вызова LLM) — не сырой код провайдера.
+ *       - `evaluation_error` — не удалось оценить готовность этапа: `{ message, code }`. Диалог при этом не ломается: сообщение агента уже доставлено, но `completionState` в событии `done` может остаться от предыдущего хода.
+ *
+ *       **completionState — когда показывать кнопку завершения этапа.**
+ *       После каждого ответа агента сервер отдельным вызовом модели проверяет,
+ *       собраны ли данные по `Agent.completionCriteria` и обязательным полям
+ *       артефакта (ТЗ спринта 3, DONE-4):
+ *       ```
+ *       { ready: boolean, missingFields: string[], reason: string, evaluatedAt: string }
+ *       ```
+ *       Кнопку «сформировать артефакт» следует показывать только при
+ *       `ready: true`. При `ready: false` в `missingFields` перечислено, каких
+ *       именно данных не хватает, а в `reason` — человекочитаемое пояснение.
+ *       Попытка вызвать `/complete` при `ready: false` вернёт `409 STAGE_NOT_READY`.
  *     parameters:
  *       - in: path
  *         name: projectId
@@ -564,6 +577,18 @@ router.get('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, va
  *       агента нет nextAgentId (последний в маршруте) — это был финальный этап,
  *       и Project.status автоматически становится "completed".
  *       Повторный вызов уже завершённой сессии — 409.
+ *
+ *       **Гейт готовности (DONE-4).** Перед генерацией сервер проверяет, что
+ *       этап действительно собран (см. `completionState` в SSE-событии `done`).
+ *       Если нет — `409 STAGE_NOT_READY`, в теле ошибки `missingFields` и
+ *       `reason`; артефакт не создаётся и маршрут не двигается. Обойти гейт
+ *       можно только настройкой агента `allowPartialCompletion: true`.
+ *
+ *       **Артефакт — PDF.** Модель пишет текст документа, сервер верстает его
+ *       в PDF и кладёт в S3 уже на стадии черновика: пользователь видит готовый
+ *       файл (`artifact.file.url`) до подтверждения. Поле `artifact.content`
+ *       (структурированный JSON) сохраняется как служебный слой — из него
+ *       берётся summary для следующего агента и текст для индексации в Qdrant.
  *     parameters:
  *       - in: path
  *         name: projectId
@@ -583,6 +608,10 @@ router.get('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, va
  *                 type: boolean
  *                 default: false
  *                 description: true — подтвердить артефакт и продвинуть маршрут; false/не передано — только создать черновик на проверку.
+ *               regenerate:
+ *                 type: boolean
+ *                 default: false
+ *                 description: Сгенерировать черновик заново (кнопка «переделать»). Прежний артефакт помечается rejected, создаётся новый с новым PDF. Для уже подтверждённого артефакта — 409 ARTIFACT_ALREADY_CONFIRMED.
  *     responses:
  *       200:
  *         description: Артефакт создан/подтверждён

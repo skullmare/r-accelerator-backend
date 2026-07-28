@@ -1,17 +1,49 @@
 import request from 'supertest';
 
+// Управляемый из тестов вердикт оценщика готовности. Имя обязано начинаться
+// с `mock`, иначе jest не пустит переменную внутрь hoisted-фабрики ниже.
+let mockReadiness = { ready: true, missingFields: [], reason: 'Все данные собраны.' };
+
+// chatComplete теперь обслуживает три разных вызова, поэтому мок различает их
+// по инструкции в последнем сообщении — ровно как это делает реальный поток:
+// оценка готовности -> структурированные поля -> текст документа.
 jest.mock('../../services/llm.service.js', () => ({
-    // Only used by artifact generation now (messages use chatCompleteStream).
-    chatComplete: jest.fn(async () => ({
-        content: JSON.stringify({
-            marketDescription: 'Описание рынка',
-            nicheHypothesis: 'Гипотеза ниши',
-            competitors: 'Конкуренты',
-            risks: 'Риски',
-            summary: 'Итоговая сводка по рынку'
-        }),
-        tokenUsage: { totalTokens: 42 }
-    })),
+    chatComplete: jest.fn(async ({ messages }) => {
+        const instruction = messages[messages.length - 1].content;
+
+        if (instruction.includes('Оцени, готов ли этап')) {
+            return { content: JSON.stringify(mockReadiness), tokenUsage: null };
+        }
+
+        if (instruction.includes('Напиши финальный документ')) {
+            return {
+                content: [
+                    '## Рынок',
+                    '',
+                    'Рынок растёт, основной спрос — у малого бизнеса.',
+                    '',
+                    '- Конкурент «Альфа»',
+                    '- Конкурент «Бета»',
+                    '',
+                    '| Конкурент | Доля |',
+                    '|---|---|',
+                    '| Альфа | 35% |'
+                ].join('\n'),
+                tokenUsage: { totalTokens: 120 }
+            };
+        }
+
+        return {
+            content: JSON.stringify({
+                marketDescription: 'Описание рынка',
+                nicheHypothesis: 'Гипотеза ниши',
+                competitors: 'Конкуренты',
+                risks: 'Риски',
+                summary: 'Итоговая сводка по рынку'
+            }),
+            tokenUsage: { totalTokens: 42 }
+        };
+    }),
     chatCompleteStream: jest.fn(async ({ onDelta }) => {
         const text = 'Ответ агента пользователю';
         onDelta?.(text);
@@ -25,6 +57,16 @@ jest.mock('../../services/qdrant.service.js', () => ({
     deleteBySource: jest.fn().mockResolvedValue(undefined)
 }));
 
+// S3 мокается, а вот рендер PDF — нет: pdfmake работает офлайн на локальных
+// шрифтах, поэтому сквозной тест проверяет реальную генерацию файла.
+jest.mock('../../services/s3.service.js', () => ({
+    uploadFile: jest.fn(async ({ buffer }) => ({
+        key: 'artifact-test.pdf',
+        url: 'https://s3.test/artifact-test.pdf',
+        size: buffer.length
+    }))
+}));
+
 import app from '../../app.js';
 import { connect, closeDatabase, clearDatabase } from '../setup.js';
 import { createUser } from '../../__fixtures__/user.fixture.js';
@@ -34,12 +76,14 @@ import Agent from '../../models/accelerator/agent.model.js';
 import Artifact from '../../models/accelerator/artifact.model.js';
 import { upsertChunks } from '../../services/qdrant.service.js';
 import { chatComplete, chatCompleteStream } from '../../services/llm.service.js';
+import { uploadFile } from '../../services/s3.service.js';
 
 beforeAll(() => connect());
 afterAll(() => closeDatabase());
 afterEach(async () => {
     await clearDatabase();
     jest.clearAllMocks();
+    mockReadiness = { ready: true, missingFields: [], reason: 'Все данные собраны.' };
 });
 
 // SSE responses come back as raw "event: X\ndata: {...}\n\n" blocks.
@@ -117,6 +161,9 @@ describe('Экспертный маршрут R1 -> R2 (сквозной сце�
         expect(deltaEvents.length).toBeGreaterThan(0);
         expect(deltaEvents.map((e) => e.data.text).join('')).toBe('Ответ агента пользователю');
         expect(doneEvent.data.assistantMessage.content).toBe('Ответ агента пользователю');
+        // Готовность этапа приходит вместе с ответом — по ней фронт решает,
+        // показывать ли кнопку формирования артефакта.
+        expect(doneEvent.data.completionState.ready).toBe(true);
 
         const draftRes = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
@@ -125,6 +172,16 @@ describe('Экспертный маршрут R1 -> R2 (сквозной сце�
         expect(draftRes.status).toBe(200);
         expect(draftRes.body.data.artifact.status).toBe('ready');
         expect(draftRes.body.data.nextAgentId).toBeNull();
+
+        // Артефакт этапа — сгенерированный PDF: он отрендерен по-настоящему и
+        // выложен в хранилище уже на стадии черновика, до подтверждения.
+        expect(draftRes.body.data.artifact.file.url).toBe('https://s3.test/artifact-test.pdf');
+        expect(draftRes.body.data.artifact.file.mimeType).toBe('application/pdf');
+        expect(draftRes.body.data.artifact.documentMarkdown).toContain('## Рынок');
+
+        const [[uploadArg]] = uploadFile.mock.calls;
+        expect(uploadArg.mimetype).toBe('application/pdf');
+        expect(uploadArg.buffer.subarray(0, 5).toString()).toBe('%PDF-');
 
         const projectAfterDraft = await Project.findById(project._id);
         expect(String(projectAfterDraft.currentAgentId)).toBe(String(r1._id));
@@ -201,6 +258,12 @@ describe('Экспертный маршрут R1 -> R2 (сквозной сце�
             .send({ agentId: String(r1._id) });
         const sessionId = sessionRes.body.data.session._id;
 
+        // Диалог нужен: без него гейт готовности не пустит этап к завершению.
+        await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
+            .set('Cookie', cookie)
+            .send({ content: 'Рынок — малый бизнес' });
+
         await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
             .set('Cookie', cookie)
@@ -213,6 +276,134 @@ describe('Экспертный маршрут R1 -> R2 (сквозной сце�
 
         expect(res.status).toBe(409);
         expect(res.headers['content-type']).toMatch(/application\/json/);
+        expect(res.body.error.code).toBe('SESSION_ALREADY_COMPLETED');
+    });
+});
+
+describe('Гейт готовности этапа (DONE-4)', () => {
+    async function startDialogue(project, cookie, agentId, { withMessage = true } = {}) {
+        const sessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', cookie)
+            .send({ agentId: String(agentId) });
+        const sessionId = sessionRes.body.data.session._id;
+
+        if (withMessage) {
+            await request(app)
+                .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
+                .set('Cookie', cookie)
+                .send({ content: 'Рынок — малый бизнес' });
+        }
+
+        return sessionId;
+    }
+
+    it('не даёт сформировать артефакт, пока оценщик считает этап неготовым', async () => {
+        mockReadiness = {
+            ready: false,
+            missingFields: ['competitors', 'risks'],
+            reason: 'Не собраны конкуренты и риски.'
+        };
+
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+        const sessionId = await startDialogue(project, cookie, r1._id);
+
+        const res = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({});
+
+        expect(res.status).toBe(409);
+        expect(res.body.error.code).toBe('STAGE_NOT_READY');
+        expect(res.body.error.missingFields).toEqual(['competitors', 'risks']);
+        expect(res.body.error.reason).toBe('Не собраны конкуренты и риски.');
+
+        // Ни артефакта, ни файла: до генерации дело не дошло.
+        expect(await Artifact.countDocuments({ projectId: project._id })).toBe(0);
+        expect(uploadFile).not.toHaveBeenCalled();
+
+        // Маршрут не сдвинулся.
+        const after = await Project.findById(project._id);
+        expect(String(after.currentAgentId)).toBe(String(r1._id));
+    });
+
+    it('этап без единого сообщения считается неготовым без вызова модели', async () => {
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+        const sessionId = await startDialogue(project, cookie, r1._id, { withMessage: false });
+
+        const res = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({});
+
+        expect(res.status).toBe(409);
+        expect(res.body.error.code).toBe('STAGE_NOT_READY');
+        expect(chatComplete).not.toHaveBeenCalled();
+    });
+
+    it('allowPartialCompletion=true пропускает этап мимо гейта', async () => {
+        mockReadiness = { ready: false, missingFields: ['risks'], reason: 'Риски не собраны.' };
+
+        const { r1 } = await seedAgents();
+        await Agent.findByIdAndUpdate(r1._id, { allowPartialCompletion: true });
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+        const sessionId = await startDialogue(project, cookie, r1._id);
+
+        const res = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({});
+
+        expect(res.status).toBe(200);
+        expect(res.body.data.artifact.status).toBe('ready');
+    });
+
+    it('перегенерация создаёт новый черновик, а прежний помечает rejected', async () => {
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+        const sessionId = await startDialogue(project, cookie, r1._id);
+
+        const first = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({});
+        expect(first.status).toBe(200);
+
+        const second = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({ regenerate: true });
+        expect(second.status).toBe(200);
+        expect(second.body.data.artifact._id).not.toBe(first.body.data.artifact._id);
+
+        const previous = await Artifact.findById(first.body.data.artifact._id);
+        expect(previous.status).toBe('rejected');
+    });
+
+    it('подтверждённый артефакт нельзя сгенерировать заново', async () => {
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+        const sessionId = await startDialogue(project, cookie, r1._id);
+
+        await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({ confirmArtifact: true });
+
+        const res = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({ regenerate: true });
+
+        // Сессия уже completed — до проверки самого артефакта дело не доходит.
+        expect(res.status).toBe(409);
         expect(res.body.error.code).toBe('SESSION_ALREADY_COMPLETED');
     });
 });
@@ -563,6 +754,13 @@ describe('Гейт обязательных полей артефакта пер
             .set('Cookie', cookie)
             .send({ agentId: String(r1._id) });
         const sessionId = sessionRes.body.data.session._id;
+
+        // Диалог нужен, чтобы этап прошёл гейт готовности: проверяем именно
+        // валидацию полей артефакта, а не отсутствие собранных данных.
+        await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
+            .set('Cookie', cookie)
+            .send({ content: 'Рынок — малый бизнес' });
 
         // Модель вернула JSON, где нет обязательного поля 'risks'
         // (r1.requiredFields = marketDescription, nicheHypothesis, competitors, risks, summary).

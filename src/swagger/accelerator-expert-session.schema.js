@@ -23,6 +23,33 @@
  *              * active — обычный диалог идёт;
  *              * waiting_user_confirmation — черновик артефакта сгенерирован (status=ready), но ещё не подтверждён;
  *              * completed — артефакт подтверждён, маршрут проекта уже переключён на следующего агента.
+ *         completionState:
+ *           type: object
+ *           description: |
+ *             Серверная оценка готовности этапа (DONE-4). Пересчитывается после каждого
+ *             ответа агента; фронт показывает кнопку «сформировать артефакт» только при
+ *             ready=true. Попытка complete при ready=false вернёт 409 STAGE_NOT_READY.
+ *           properties:
+ *             ready:
+ *               type: boolean
+ *               description: Собраны ли все данные, необходимые для завершения этапа.
+ *             missingFields:
+ *               type: array
+ *               items: { type: string }
+ *               description: Обязательные поля артефакта, данные для которых ещё не собраны в диалоге.
+ *             reason:
+ *               type: string
+ *               nullable: true
+ *               description: Человекочитаемое пояснение оценщика (чего не хватает или почему готово).
+ *             evaluatedAt:
+ *               type: string
+ *               format: date-time
+ *               nullable: true
+ *               description: Когда оценка была рассчитана. null — оценка ещё ни разу не выполнялась.
+ *             evaluatedAfterMessageId:
+ *               type: string
+ *               nullable: true
+ *               description: Последнее сообщение, учтённое при оценке. Если после него появились новые реплики, сервер пересчитает готовность перед завершением этапа.
  *         inputContextSnapshot:
  *           type: object
  *           nullable: true
@@ -73,7 +100,7 @@
  *           description: Момент отправки сообщения.
  *     ExpertArtifact:
  *       type: object
- *       description: Структурированный результат экспертного этапа — то, что агент должен произвести для перехода к следующему.
+ *       description: Результат экспертного этапа. Для пользователя это PDF-документ (file.url); структурированный content — служебный слой для передачи контекста следующим агентам и индексации в Qdrant.
  *       properties:
  *         _id:
  *           type: string
@@ -95,7 +122,35 @@
  *           description: Заголовок артефакта.
  *         content:
  *           type: object
- *           description: Сам артефакт — JSON-объект, сгенерированный моделью, прошедший проверку обязательных полей (и опционально JSON Schema). Проверяется только структура, не правдивость содержимого.
+ *           description: Структурированные данные артефакта — JSON-объект, сгенерированный моделью, прошедший проверку обязательных полей (и опционально JSON Schema). Проверяется только структура, не правдивость содержимого.
+ *         documentMarkdown:
+ *           type: string
+ *           nullable: true
+ *           description: Текст документа в Markdown — исходник, из которого сервер сверстал PDF. Хранится для возможности перерендера без повторного обращения к LLM.
+ *         file:
+ *           type: object
+ *           description: Сгенерированный PDF в S3 — основной результат этапа для пользователя. Заполняется уже на стадии черновика, до подтверждения.
+ *           properties:
+ *             key:
+ *               type: string
+ *               nullable: true
+ *               description: Ключ объекта в S3.
+ *             url:
+ *               type: string
+ *               nullable: true
+ *               description: Публичная ссылка на PDF — её фронт показывает пользователю для просмотра/скачивания.
+ *             mimeType:
+ *               type: string
+ *               description: MIME-тип файла (application/pdf).
+ *             size:
+ *               type: integer
+ *               nullable: true
+ *               description: Размер файла в байтах.
+ *             generatedAt:
+ *               type: string
+ *               format: date-time
+ *               nullable: true
+ *               description: Когда файл был сгенерирован.
  *         summary:
  *           type: string
  *           description: Краткая сводка артефакта — именно она уходит в Project.contextSummary следующим агентам и индексируется в Qdrant.

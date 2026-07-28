@@ -12,6 +12,11 @@ export async function updateAgent(req, res) {
         }
 
         if (updates.nextAgentId) {
+            // Самоссылка = вечный цикл: confirmArtifact переключал бы проект
+            // на этого же агента, и маршрут никогда бы не завершился.
+            if (String(updates.nextAgentId) === String(agentId)) {
+                return res.error({ code: 'NEXT_AGENT_SELF_REFERENCE' }, 400, 'Агент не может ссылаться сам на себя как на следующего');
+            }
             const nextExists = await Agent.exists({ _id: updates.nextAgentId });
             if (!nextExists) {
                 return res.error({ code: 'AGENT_NOT_FOUND', description: `nextAgentId "${updates.nextAgentId}" не найден` }, 400, 'nextAgentId должен ссылаться на существующего агента');

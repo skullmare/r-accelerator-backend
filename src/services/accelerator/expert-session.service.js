@@ -24,12 +24,22 @@ export class ExpertSessionError extends Error {
 // Self-healing fallback for EXP-2: an old/new project with no
 // currentAgentId falls back to the first active agent by `order`,
 // and that resolution is persisted so it only happens once.
+//
+// Самолечение применяется ТОЛЬКО к свежим проектам (ни одного пройденного
+// этапа). У проекта, который уже двигался по маршруту, currentAgentId=null —
+// это осмысленное состояние «маршрут завершён» (DONE-5), а не пробел в данных:
+// без этой проверки первый же GET expert-route после финального агента
+// подставлял первого агента обратно и молча перезапускал пройденный маршрут.
+// Сюда же попадает случай «текущий агент удалён администратором посреди
+// маршрута» — прыгать на первого агента (уже пройденного) было бы ещё хуже,
+// чем честно вернуть null и дать админке починить конфигурацию.
 export async function resolveCurrentAgent(project) {
     let agent = project.currentAgentId
         ? await Agent.findById(project.currentAgentId)
         : null;
 
-    if (!agent) {
+    const isFreshProject = project.completedAgentIds.length === 0 && project.status !== 'completed';
+    if (!agent && isFreshProject) {
         agent = await Agent.findOne({ isActive: true }).sort({ order: 1 });
         if (agent) {
             project.currentAgentId = agent._id;
@@ -324,16 +334,39 @@ export async function completeSession(project, session, agent, { confirmArtifact
         return { artifact, nextAgentId: null, projectContextVersion: project.contextVersion, confirmed: false };
     }
 
+    // Проверка ДО любых мутаций подтверждения: если nextAgentId указывает на
+    // удалённого агента, подтверждать нельзя — иначе проект получит «висячий»
+    // currentAgentId и пользователь упрётся в тупик без объяснений. Артефакт
+    // при этом не теряется (остаётся ready, сессия — waiting_user_confirmation):
+    // администратор чинит маршрут, пользователь подтверждает повторно.
+    // Неактивный (isActive=false) агент существованием считается — это
+    // временное отключение по замыслу, а не разрыв маршрута.
+    if (agent.nextAgentId) {
+        const nextAgentExists = await Agent.exists({ _id: agent.nextAgentId });
+        if (!nextAgentExists) {
+            throw new ExpertSessionError(
+                'Следующий агент маршрута не найден — маршрут повреждён, обратитесь к администратору',
+                409,
+                'NEXT_AGENT_UNAVAILABLE'
+            );
+        }
+    }
+
     artifact.status = 'confirmed';
     await artifact.save();
 
     try {
+        // В индекс уходит documentMarkdown — связная проза документа, по
+        // которой векторный поиск для следующих агентов работает заметно
+        // лучше, чем по JSON.stringify со всеми его кавычками и скобками.
+        // JSON-контент остаётся fallback'ом для артефактов без документа
+        // (созданных до перехода на PDF).
         await upsertChunks({
             projectId: project._id,
             agentId: String(agent._id),
             sourceType: 'artifact',
             sourceId: String(artifact._id),
-            chunks: chunkText(JSON.stringify(artifact.content))
+            chunks: chunkText(artifact.documentMarkdown || JSON.stringify(artifact.content))
         });
     } catch (error) {
         throw new ExpertSessionError('Не удалось проиндексировать артефакт в Qdrant', 502, 'QDRANT_INDEX_FAILED');

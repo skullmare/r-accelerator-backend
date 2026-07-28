@@ -203,9 +203,12 @@ JSON-ответ для валидации, а не текст, который м
 
 **Почему JSON остался.** Структурированный слой — не дубль PDF, а то, на чём
 держится передача контекста дальше по маршруту: из `content[summaryField]`
-берётся `Artifact.summary` для `Project.contextSummary`, а сам `content`
-индексируется в Qdrant. PDF для следующего агента непрозрачен, парсить
-собственный же файл обратно в текст незачем.
+берётся `Artifact.summary` для `Project.contextSummary`. В Qdrant при
+подтверждении индексируется `documentMarkdown` — связная проза документа, по
+которой векторный поиск работает заметно лучше, чем по `JSON.stringify` с его
+кавычками и скобками (JSON остаётся fallback'ом для артефактов, созданных до
+перехода на PDF). PDF для следующего агента непрозрачен, парсить собственный
+же файл обратно в текст незачем.
 
 Artifact хранит `content` (структура), `documentMarkdown` (исходник вёрстки —
 позволяет перерендерить файл после смены шаблона без обращения к LLM) и `file`
@@ -230,6 +233,22 @@ Artifact хранит `content` (структура), `documentMarkdown` (исх
   индексируется в Qdrant (`sourceType=artifact`), `Project.contextSummary`
   дополняется его summary, `Project.currentAgentId` переключается на
   `Agent.nextAgentId`.
+
+**Целостность маршрута.** Перед подтверждением сервер проверяет, что
+`Agent.nextAgentId` (если задан) указывает на существующего агента — иначе
+`409 NEXT_AGENT_UNAVAILABLE`, и ничего не мутируется: артефакт остаётся
+`ready`, сессия — `waiting_user_confirmation`, администратор чинит маршрут,
+пользователь подтверждает повторно. Неактивный агент проверку проходит
+(`isActive=false` — временное отключение по замыслу, не разрыв маршрута).
+Со стороны админки самоссылка `nextAgentId` на самого агента отклоняется
+(`400 NEXT_AGENT_SELF_REFERENCE`) — она означала бы вечный цикл этапа.
+
+**Завершённый маршрут не воскресает.** `currentAgentId=null` у проекта,
+который уже проходил этапы, — это осмысленное состояние «маршрут завершён»
+(DONE-5). Самолечение `resolveCurrentAgent` (подстановка первого активного
+агента) применяется только к свежим проектам без единого пройденного этапа —
+раньше первый же `GET expert-route` после финального агента молча
+перезапускал весь маршрут с начала.
 
 **Перегенерация.** `/complete` с `regenerate:true` помечает прежний черновик
 `rejected`, отвязывает его от сессии и создаёт новый артефакт с новым PDF.
@@ -292,6 +311,8 @@ Qdrant.
 | `ARTIFACT_RENDER_FAILED` | `pdf-renderer.service.js` | Текст документа получен, но вёрстка PDF не удалась. Артефакт не создаётся — повтор `/complete` сгенерирует заново. |
 | `ARTIFACT_UPLOAD_FAILED` | `artifact-generation.service.js` | PDF отрендерен, но не удалось выгрузить его в S3. |
 | `ARTIFACT_ALREADY_CONFIRMED` | `completeSession` (`regenerate:true`) | Попытка пересоздать уже подтверждённый артефакт — запрещено, он ушёл в контекст следующего агента и в Qdrant. |
+| `NEXT_AGENT_UNAVAILABLE` | `completeSession` (`confirmArtifact:true`) | `Agent.nextAgentId` указывает на удалённого агента. Подтверждение отклонено до любых мутаций: артефакт остаётся `ready`, маршрут чинит администратор. |
+| `NEXT_AGENT_SELF_REFERENCE` | `PATCH /accelerator/admin/agents/:id` | Попытка указать агента следующим за самим собой — вечный цикл этапа. |
 | `QDRANT_INDEX_FAILED` | `completeSession` (запись подтверждённого артефакта), `process-file.job.js` (`File.processingErrorCode`), `process-knowledge.job.js` (`Knowledge.processingErrorCode`) | Текст/артефакт/knowledge успешно готовы, упала именно запись в Qdrant. |
 | `SOURCE_FETCH_FAILED` | `process-knowledge.job.js` (`Knowledge.processingErrorCode`) | Не удалось скачать источник knowledge (файл в S3 по `fileId` или внешнюю ссылку `sourceUrl`). |
 | `LLM_PROVIDER_FAILED` | `sendMessage` (SSE `error`-событие), `completeSession` (генерация артефакта) | Сбой самого вызова LLM (сеть, rate limit, авторизация и т.п.), не связанный со структурой ответа. |

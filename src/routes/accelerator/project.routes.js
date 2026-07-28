@@ -584,6 +584,11 @@ router.get('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, va
  *       `reason`; артефакт не создаётся и маршрут не двигается. Обойти гейт
  *       можно только настройкой агента `allowPartialCompletion: true`.
  *
+ *       **Целостность маршрута.** Если `nextAgentId` текущего агента указывает
+ *       на удалённого агента, подтверждение отклоняется —
+ *       `409 NEXT_AGENT_UNAVAILABLE` — до любых изменений: артефакт остаётся
+ *       `ready`, сессия — `waiting_user_confirmation`.
+ *
  *       **Артефакт — PDF.** Модель пишет текст документа, сервер верстает его
  *       в PDF и кладёт в S3 уже на стадии черновика: пользователь видит готовый
  *       файл (`artifact.file.url`) до подтверждения. Поле `artifact.content`

@@ -205,6 +205,12 @@ describe('Экспертный маршрут R1 -> R2 (сквозной сце�
             sourceType: 'artifact'
         }));
 
+        // В индекс уходит связный текст документа (documentMarkdown), а не
+        // JSON.stringify структурированных полей.
+        const [[indexArg]] = upsertChunks.mock.calls;
+        expect(indexArg.chunks[0].text).toContain('Рынок растёт');
+        expect(indexArg.chunks[0].text).not.toContain('"marketDescription"');
+
         const routeRes = await request(app)
             .get(`/api/v1/accelerator/projects/${project._id}/expert-route`)
             .set('Cookie', cookie);
@@ -384,6 +390,81 @@ describe('Гейт готовности этапа (DONE-4)', () => {
 
         const previous = await Artifact.findById(first.body.data.artifact._id);
         expect(previous.status).toBe('rejected');
+    });
+
+    it('завершённый маршрут не воскресает: после финального агента currentAgentId остаётся null', async () => {
+        const { r1, r2 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+
+        // Проходим весь маршрут R1 -> R2 (у R2 nextAgentId=null).
+        for (const agent of [r1, r2]) {
+            const sessionId = await startDialogue(project, cookie, agent._id);
+            const res = await request(app)
+                .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+                .set('Cookie', cookie)
+                .send({ confirmArtifact: true });
+            expect(res.status).toBe(200);
+        }
+
+        const completed = await Project.findById(project._id);
+        expect(completed.status).toBe('completed');
+        expect(completed.currentAgentId).toBeNull();
+
+        // Просмотр маршрута раньше «самолечил» currentAgentId обратно на R1 и
+        // молча перезапускал пройденный маршрут.
+        const routeRes = await request(app)
+            .get(`/api/v1/accelerator/projects/${project._id}/expert-route`)
+            .set('Cookie', cookie);
+        expect(routeRes.status).toBe(200);
+        expect(routeRes.body.data.currentAgentId).toBeNull();
+        expect(routeRes.body.data.items.map((i) => i.status)).toEqual(['completed', 'completed']);
+
+        const afterRoute = await Project.findById(project._id);
+        expect(afterRoute.currentAgentId).toBeNull();
+
+        // И новую сессию по пройденному маршруту создать нельзя.
+        const sessionRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+            .set('Cookie', cookie)
+            .send({ agentId: String(r1._id) });
+        expect(sessionRes.status).toBe(409);
+        expect(sessionRes.body.error.code).toBe('AGENT_NOT_CURRENT');
+    });
+
+    it('подтверждение с «висячим» nextAgentId отклоняется без потери артефакта', async () => {
+        const { r1, r2 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+        const sessionId = await startDialogue(project, cookie, r1._id);
+
+        // Черновик создаётся штатно...
+        const draftRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({});
+        expect(draftRes.status).toBe(200);
+
+        // ...а затем администратор удаляет следующего агента маршрута.
+        await Agent.deleteOne({ _id: r2._id });
+
+        const confirmRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie)
+            .send({ confirmArtifact: true });
+
+        expect(confirmRes.status).toBe(409);
+        expect(confirmRes.body.error.code).toBe('NEXT_AGENT_UNAVAILABLE');
+
+        // Ничего не потеряно и не мутировано: артефакт остался черновиком,
+        // сессия ждёт подтверждения, проект стоит на R1, индексации не было.
+        const artifact = await Artifact.findById(draftRes.body.data.artifact._id);
+        expect(artifact.status).toBe('ready');
+
+        const after = await Project.findById(project._id);
+        expect(String(after.currentAgentId)).toBe(String(r1._id));
+        expect(after.completedAgentIds).toHaveLength(0);
+        expect(upsertChunks).not.toHaveBeenCalled();
     });
 
     it('подтверждённый артефакт нельзя сгенерировать заново', async () => {

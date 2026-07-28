@@ -118,6 +118,10 @@
  *             model:
  *               type: string
  *               description: Имя модели OpenAI ("gpt-4o-mini").
+ *             evaluatorModel:
+ *               type: string
+ *               nullable: true
+ *               description: Модель для оценщика готовности этапа (вызывается на каждый ход диалога — можно посадить на модель дешевле основной). Если не задана — используется model.
  *             temperature:
  *               type: number
  *               description: Температура генерации — выше значение, разнообразнее и менее предсказуемее ответы.

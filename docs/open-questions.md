@@ -5,12 +5,13 @@
 
 ## Embedding-модель и размерность векторов
 
-**Решено:** `text-embedding-3-small` (OpenAI), 1536 измерений
-(`config/embedding.config.js`, `EMBEDDING_MODEL`/`EMBEDDING_DIM`). Дёшево,
-`OPENAI_API_KEY` уже сконфигурирован в проекте. Смена модели требует
-пересоздания коллекции Qdrant (размерность зафиксирована при создании) —
-если модель поменяется, нужен `docs/expert-context.md` апдейт + reindex всего
-проектного контекста.
+**Решено (пересмотрено):** `google/gemini-embedding-2` через OpenRouter,
+3072 измерения (`config/embedding.config.js`, `EMBEDDING_MODEL`/`EMBEDDING_DIM`;
+клиент — `config/openrouter.config.js`, ключ `OPENROUTER_API_KEY` с fallback
+на `OPENAI_API_KEY`). Первоначальный выбор был `text-embedding-3-small`
+(OpenAI, 1536) — заменён в пользу максимальной точности. Смена модели требует
+пересоздания коллекций Qdrant (размерность зафиксирована при создании) +
+reindex всего проектного контекста и knowledge.
 
 ## Транспорт очереди обработки файлов
 
@@ -99,22 +100,23 @@ MongoDB и Qdrant (например, право на удаление/забве
 (YAML/JSON-файлы в репозитории, применяемые sync-скриптом) — там
 человекочитаемые ссылки снова станут заметно удобнее ObjectId.
 
-## LLM-провайдер: только OpenAI
+## LLM-провайдер: чат — OpenAI, эмбеддинги — OpenRouter
 
-**Решено (пересмотрено):** изначально `Agent.modelConfig` поддерживал выбор
-между `openai` и `openrouter` (`llm.service.js` ветвился по `provider`,
-`@openrouter/sdk` подключался лениво через `import()`, чтобы не тащить его
-ESM-only сборку в каждый тестовый прогон). Проект использует только OpenAI
-API — поддержку OpenRouter убрали полностью: `config/openrouter.config.js`
-удалён, зависимость `@openrouter/sdk` выпилена из `package.json`, поле
-`modelConfig.provider` убрано из модели `Agent`, Zod-схемы и Swagger (не
-просто сужено до одного значения enum — раз выбирать больше не из чего,
-само поле не несёт смысла, см. похожее рассуждение про `code` vs `_id` выше).
-`llm.service.js` теперь всегда бьёт в OpenAI, без ветвления.
+**Решено (пересмотрено дважды):** изначально `Agent.modelConfig` поддерживал
+выбор `provider` между `openai` и `openrouter`; затем поле убрали и весь
+`llm.service.js` перевели на прямой OpenAI. Позже OpenRouter вернулся, но в
+другой роли: `config/openrouter.config.js` — клиент **только для
+эмбеддингов** (`embedding.service.js`, модель `google/gemini-embedding-2`).
+Чат агентов, генерация артефактов и оценщик готовности этапа по-прежнему
+ходят в прямой OpenAI (`config/openai.config.js`), без поля `provider`.
 
-**Пересмотреть, если:** появится реальная потребность в альтернативном
-провайдере — тогда `provider` возвращается, уже с ясным вторым значением,
-а не "на всякий случай".
+**ВНИМАНИЕ при деплое:** это два разных провайдера и, как правило, два
+разных ключа. Ключ OpenRouter в `OPENAI_API_KEY` уронит весь чат с 401
+(`LLM_PROVIDER_FAILED`); ключ OpenAI в `OPENROUTER_API_KEY` уронит
+индексацию и поиск (`EMBEDDING_PROVIDER_FAILED`). См. `.env.example`.
+
+**Пересмотреть, если:** появится потребность гонять и чат через OpenRouter —
+тогда `provider` возвращается в `modelConfig`, уже с ясным вторым значением.
 
 ## Изоляция недоверенного контекста от системного промпта (prompt injection)
 

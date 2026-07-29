@@ -6,7 +6,7 @@ export async function listAssistants() {
         const assistants = await openai.beta.assistants.list();
         return assistants;
     } catch (error) {
-        logger.error('Ошибка получения списка ассистентов openAI');
+        logger.error('Ошибка получения списка ассистентов openAI', error);
         throw error;
     }
 }

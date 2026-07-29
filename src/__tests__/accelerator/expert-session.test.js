@@ -165,6 +165,16 @@ describe('Экспертный маршрут R1 -> R2 (сквозной сце�
         // показывать ли кнопку формирования артефакта.
         expect(doneEvent.data.completionState.ready).toBe(true);
 
+        // Агент получает вердикт оценщика прямо в системный промпт — без этого
+        // он не знает состояния этапа и прощается «удачи на следующем этапе!»,
+        // пока оценщик держит этап неготовым. На первом ходу оценки ещё не
+        // было -> в промпте статус «не готов» со списком всех требуемых полей.
+        const [streamCall] = chatCompleteStream.mock.calls[0];
+        expect(streamCall.messages[0].role).toBe('system');
+        expect(streamCall.messages[0].content).toContain('Статус этапа');
+        expect(streamCall.messages[0].content).toContain('ЕЩЁ НЕ готов');
+        expect(streamCall.messages[0].content).toContain('marketDescription');
+
         const draftRes = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
             .set('Cookie', cookie)
@@ -333,6 +343,18 @@ describe('Гейт готовности этапа (DONE-4)', () => {
         // Маршрут не сдвинулся.
         const after = await Project.findById(project._id);
         expect(String(after.currentAgentId)).toBe(String(r1._id));
+
+        // На следующем ходу агент получает конкретный вердикт оценщика в
+        // системный промпт — и инструкцию не объявлять этап завершённым.
+        await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
+            .set('Cookie', cookie)
+            .send({ content: 'Что ещё нужно обсудить?' });
+
+        const lastStreamCall = chatCompleteStream.mock.calls.at(-1)[0];
+        expect(lastStreamCall.messages[0].content).toContain('competitors, risks');
+        expect(lastStreamCall.messages[0].content).toContain('Не собраны конкуренты и риски.');
+        expect(lastStreamCall.messages[0].content).toContain('не желай удачи на следующем этапе');
     });
 
     it('этап без единого сообщения считается неготовым без вызова модели', async () => {

@@ -127,6 +127,40 @@ function isCompletionStateStale(session, lastMessageId) {
     return !evaluatedAfter || String(evaluatedAfter) !== String(lastMessageId);
 }
 
+// Блок статуса этапа для системного промпта агента. Замыкает петлю между
+// двумя независимыми LLM-вызовами: без него агент не знает вердикта оценщика
+// и вольно интерпретирует completionCriteria — прощается «удачи на следующем
+// этапе!», пока оценщик держит этап неготовым, и пользователь видит два
+// противоречащих друг другу сообщения на одном экране. Статус берётся с
+// прошлого хода (оценка выполняется ПОСЛЕ ответа агента) — лаг в одно
+// сообщение осознанный и безвредный: свежие реплики пользователя агент и
+// так видит в истории диалога.
+function buildStageStatusPrompt(session, agent) {
+    const header =
+        'Статус этапа (серверная оценка — единственный источник истины о завершённости, ' +
+        'не противоречь ему):';
+
+    if (session.completionState?.ready) {
+        return `${header}\n` +
+            'Все необходимые данные собраны. Можешь кратко подытожить и предложить пользователю ' +
+            'нажать кнопку «Завершить этап», чтобы сформировать итоговый документ. ' +
+            'Сам этап ты не завершаешь и на следующий этап не переводишь.';
+    }
+
+    const state = session.completionState;
+    const missing = (state?.missingFields?.length
+        ? state.missingFields
+        : agent.artifactDefinition.requiredFields || []).join(', ');
+
+    return `${header}\n` +
+        'Этап ЕЩЁ НЕ готов к завершению.' +
+        (missing ? ` Не собраны данные: ${missing}.` : '') +
+        (state?.reason ? ` Пояснение оценщика: ${state.reason}` : '') +
+        '\nНе сообщай пользователю, что этап завершён или что можно переходить к следующему этапу, ' +
+        'не прощайся и не желай удачи на следующем этапе. Продолжай диалог и целенаправленно ' +
+        'собирай недостающие данные, задавая вопросы по одному.';
+}
+
 // Delivers the agent's reply over SSE: onUserMessage fires as soon as the
 // user's own message is persisted (so the UI can render it optimistically,
 // before the LLM call even starts), onDelta fires per text fragment as the
@@ -149,7 +183,7 @@ export async function sendMessage(project, session, agent, content, { onUserMess
     const { systemPrompt, retrievedContextMessage, contextSnapshot } = await assembleContext({ project, agent, userMessageText: content });
     const history = await getSessionHistory(session._id);
 
-    const messages = [{ role: 'system', content: systemPrompt }];
+    const messages = [{ role: 'system', content: `${systemPrompt}\n\n---\n\n${buildStageStatusPrompt(session, agent)}` }];
     if (retrievedContextMessage) messages.push(retrievedContextMessage);
     messages.push(...history);
 

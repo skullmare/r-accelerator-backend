@@ -6,6 +6,7 @@ import expressWinston from 'express-winston';
 import swaggerUi from 'swagger-ui-express';
 import { attachHelpers, errorMiddleware } from 'resify-express';
 import logger from '../config/logger.config.js';
+import { logErrorResponses, logThrownErrors } from './middlewares/error-logger.middleware.js';
 import { swaggerSpec } from '../config/swagger.config.js';
 import authRouter from './routes/auth.routes.js';
 import profileRouter from './routes/profile.routes.js';
@@ -34,6 +35,7 @@ app.use(cookieParser());
 
 
 app.use(attachHelpers);
+app.use(logErrorResponses);
 
 app.get('/api/docs/swagger.json', (req, res) => res.json(swaggerSpec));
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
@@ -64,6 +66,7 @@ app.use((req, res) => {
     return res.error({}, 404, `Маршрут ${req.method} ${req.url} не найден`);
 });
 
+app.use(logThrownErrors);
 app.use(errorMiddleware({ includeStack: isDev }));
 
 export default app;

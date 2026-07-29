@@ -8,7 +8,7 @@ const connectDB = async () => {
         });
 
         mongoose.connection.on('error', (error) => {
-            logger.error('Ошибка подключения к MongoDB');
+            logger.error('Ошибка подключения к MongoDB', error);
         });
 
         mongoose.connection.on('disconnected', () => {
@@ -19,7 +19,7 @@ const connectDB = async () => {
 
         return conn;
     } catch (error) {
-        logger.error('Ошибка подключения к MongoDB');
+        logger.error('Ошибка подключения к MongoDB', error);
         process.exit(1);
     }
 };
@@ -29,7 +29,7 @@ const disconnectDB = async () => {
         await mongoose.connection.close();
         logger.info('MongoDB соединение закрыто');
     } catch (error) {
-        logger.error('Ошибка при закрытии базы данных MongoDB');
+        logger.error('Ошибка при закрытии базы данных MongoDB', error);
     }
 };
 

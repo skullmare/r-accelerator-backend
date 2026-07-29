@@ -39,13 +39,34 @@ const ArtifactSchema = new mongoose.Schema({
         trim: true,
         maxlength: 300
     },
-    // Сам артефакт — JSON-объект, который вернула модель, прошедший
-    // проверку requiredFields (и опционально outputSchema через ajv).
+    // Структурированные данные артефакта — JSON-объект, который вернула
+    // модель, прошедший проверку requiredFields (и опционально outputSchema
+    // через ajv). Для пользователя основной результат этапа — PDF (см. поле
+    // file ниже), а этот слой обслуживает передачу контекста дальше по
+    // маршруту: он индексируется в Qdrant и из него берётся summary.
     // Обратите внимание: проверяется только структура/присутствие полей,
     // не правдивость содержимого — модель может «халлюцинировать» здесь.
     content: {
         type: mongoose.Schema.Types.Mixed,
         required: true
+    },
+    // Текст документа в Markdown — то, что модель написала для PDF. Хранится
+    // как исходник вёрстки: позволяет перерендерить файл (например, после
+    // смены шаблона) без повторного обращения к LLM.
+    documentMarkdown: {
+        type: String,
+        default: null
+    },
+    // Сгенерированный PDF в S3 — то, что пользователь скачивает как результат
+    // этапа. Заполняется всегда: артефакт не создаётся, если рендер или
+    // загрузка не удались (ARTIFACT_RENDER_FAILED / ARTIFACT_UPLOAD_FAILED),
+    // поэтому записи без файла в базе не появляются.
+    file: {
+        key: { type: String, default: null },
+        url: { type: String, default: null },
+        mimeType: { type: String, default: 'application/pdf' },
+        size: { type: Number, default: null },
+        generatedAt: { type: Date, default: null }
     },
     // Краткая сводка (берётся из content[summaryField]). Эта строка — то,
     // что реально уходит в Project.contextSummary следующим агентам и в
@@ -61,8 +82,9 @@ const ArtifactSchema = new mongoose.Schema({
     // черновик после первого /complete без confirmArtifact; confirmed —
     // после /complete с confirmArtifact:true (только в этом статусе
     // артефакт индексируется в Qdrant и двигает маршрут проекта);
-    // rejected — не проставляется автоматически нигде, задел под будущий
-    // сценарий отклонения черновика пользователем.
+    // rejected — проставляется, когда пользователь запросил перегенерацию
+    // черновика (/complete с regenerate:true): прежний артефакт остаётся в
+    // базе как история попыток, а сессия перепривязывается к новому.
     status: {
         type: String,
         enum: ['draft', 'ready', 'confirmed', 'rejected'],

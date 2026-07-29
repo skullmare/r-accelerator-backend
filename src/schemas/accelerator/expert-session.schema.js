@@ -18,7 +18,12 @@ const sendMessageSchema = z.object({
 
 const completeSessionSchema = z.object({
     params: z.object({ projectId: objectId, sessionId: objectId }),
-    body: z.object({ confirmArtifact: z.boolean().default(false) }).strict()
+    body: z.object({
+        confirmArtifact: z.boolean().default(false),
+        // Пересоздать черновик артефакта заново (кнопка «сгенерировать
+        // заново»). Для уже подтверждённого артефакта запрещено.
+        regenerate: z.boolean().default(false)
+    }).strict()
 });
 
 export default { createSessionSchema, sessionIdSchema, sendMessageSchema, completeSessionSchema };

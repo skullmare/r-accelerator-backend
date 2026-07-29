@@ -128,28 +128,133 @@ system-сообщения такой границей не является (с�
 JSON-ответ для валидации, а не текст, который можно постепенно показывать
 пользователю.
 
+## Готовность этапа: когда завершение вообще разрешено
+
+Реализация требования DONE-4 («Сервер проверяет `completionCriteria`»).
+До этого `completionCriteria` уходили в промпт агента как текст и ни на что не
+влияли: этап завершался ровно тогда, когда фронт вызывал `/complete`, а
+единственной проверкой была структурная валидация уже сгенерированного JSON.
+Это позволяло «завершить» этап после первой реплики — модель просто выдумывала
+недостающие поля, и валидация их пропускала.
+
+`src/services/accelerator/completion-evaluation.service.js` делает **отдельный
+вызов модели**, работающий не как эксперт, а как аудитор диалога: он сверяет
+собранное с `completionCriteria` и `artifactDefinition.requiredFields` и
+возвращает
+
+```
+{ ready: boolean, missingFields: string[], reason: string }
+```
+
+Особенности:
+
+- **Промпт оценщика** — `Agent.completionEvaluatorPrompt`, если задан; иначе
+  собирается дефолтный из тех же данных агента. Оценщику явно запрещено
+  засчитывать поле по вопросу агента, на который пользователь не ответил.
+- **Модель** — `Agent.modelConfig.evaluatorModel` (fallback на `modelConfig.model`).
+  Оценка идёт на каждый ход диалога, поэтому её можно посадить на модель дешевле
+  основной. `temperature=0`, ответ в режиме `response_format: json_object`.
+- **Пустой диалог** — короткое замыкание без обращения к модели: этап заведомо
+  не готов.
+- **Согласованность важнее самоотчёта**: если модель вернула непустой
+  `missingFields` вместе с `ready:true`, сервер верит списку, а не флагу.
+
+Результат пишется в `ExpertSession.completionState` и отдаётся фронту дважды:
+в SSE-событии `done` после каждого ответа агента (живое состояние кнопки) и в
+`GET .../messages` (восстановление состояния после перезагрузки страницы).
+Поле `evaluatedAfterMessageId` фиксирует, до какого сообщения оценка актуальна;
+если после неё появились новые реплики, `completeSession` пересчитывает
+готовность заново — гейт не опирается на устаревший снимок.
+
+**Гейт.** `completeSession` не начинает генерацию, пока `ready !== true`, и
+отвечает `409 STAGE_NOT_READY` с `missingFields`/`reason`. Обойти можно только
+настройкой агента `allowPartialCompletion: true` (до этого поле существовало в
+модели, но нигде не использовалось). Сбой оценщика трактуется по-разному в двух
+местах намеренно: в чате он не роняет диалог (сообщение агента уже доставлено,
+фронт получает событие `evaluation_error`), а на `/complete` — это явная ошибка
+`502 COMPLETION_EVALUATION_FAILED`, потому что молча пропустить незавершённый
+этап хуже, чем попросить повтор.
+
 ## Создание артефакта
 
-Артефакт не парсится из свободного текста чата. По вызову
-`POST .../expert-sessions/:id/complete` сервер делает отдельный LLM-вызов с
-инструкцией вернуть строго JSON с полями из `artifactDefinition.requiredFields`
-(`src/services/accelerator/artifact-generation.service.js`), затем:
+Артефакт не парсится из свободного текста чата. Результат этапа для
+пользователя — **PDF-документ**, но модель не генерирует бинарный файл: она
+пишет текст, а вёрстку делает сервер. По вызову
+`POST .../expert-sessions/:id/complete` (`artifact-generation.service.js`)
+происходит три шага:
 
-1. проверяет наличие всех `requiredFields`;
-2. если задан `artifactDefinition.outputSchema`, дополнительно валидирует через
-   [ajv](https://ajv.js.org/) — но не роняет создание артефакта, если
+1. **Структурированные поля** — LLM-вызов в режиме `response_format:
+   json_object` с полями из `artifactDefinition.requiredFields`. Раньше «верни
+   строго JSON» было лишь просьбой в тексте промпта, и модель регулярно
+   оборачивала ответ в markdown — это давало ложный
+   `ARTIFACT_VALIDATION_FAILED`; теперь формат обеспечен провайдером. Дальше:
+   проверка наличия всех `requiredFields` и, если задан
+   `artifactDefinition.outputSchema`, валидация через
+   [ajv](https://ajv.js.org/) — но она не роняет создание артефакта, если
    `outputSchema` сам невалиден как JSON Schema (это рабочий инструмент
    администратора, а не production-хранилище схем).
+2. **Текст документа** — отдельный LLM-вызов, возвращающий Markdown из узкого
+   разрешённого подмножества (заголовки, абзацы, списки, таблицы, разделитель,
+   `**жирный**`/`*курсив*`). Отдельным вызовом, а не полем внутри JSON: длинный
+   текст в JSON-строке часто обрывается на лимите токенов и ломает разбор всего
+   ответа.
+3. **Рендер и выгрузка** — `pdf-renderer.service.js` верстает Markdown в PDF
+   (pdfmake, шрифт Roboto) и `s3.service.uploadFile` кладёт файл в S3.
+
+**Почему JSON остался.** Структурированный слой — не дубль PDF, а то, на чём
+держится передача контекста дальше по маршруту: из `content[summaryField]`
+берётся `Artifact.summary` для `Project.contextSummary`. В Qdrant при
+подтверждении индексируется `documentMarkdown` — связная проза документа, по
+которой векторный поиск работает заметно лучше, чем по `JSON.stringify` с его
+кавычками и скобками (JSON остаётся fallback'ом для артефактов, созданных до
+перехода на PDF). PDF для следующего агента непрозрачен, парсить собственный
+же файл обратно в текст незачем.
+
+Artifact хранит `content` (структура), `documentMarkdown` (исходник вёрстки —
+позволяет перерендерить файл после смены шаблона без обращения к LLM) и `file`
+(`key`, `url`, `mimeType`, `size`, `generatedAt`). Записей без файла в базе не
+появляется: артефакт создаётся только после успешного рендера и выгрузки, иначе
+`502 ARTIFACT_RENDER_FAILED` / `ARTIFACT_UPLOAD_FAILED`.
+
+**Замена движка.** Весь pdfmake-специфичный код заперт в
+`pdf-renderer.service.js`, наружу торчит только `renderDocumentToPdf()` —
+движок можно поменять (например, на HTML + headless Chromium), не трогая логику
+артефактов. Обе политики доступа pdfmake закрыты (`setLocalAccessPolicy` —
+только папка шрифтов, `setUrlAccessPolicy` — запрет): определение документа
+приходит от LLM и не должно уметь читать файлы с диска или ходить в сеть.
 
 Два прохода завершения (DONE-3..DONE-5):
 
-- без `confirmArtifact` — создаётся `Artifact.status=ready`,
-  `ExpertSession.status=waiting_user_confirmation`, `Project.currentAgentId`
-  **не меняется**;
+- без `confirmArtifact` — создаётся `Artifact.status=ready` **вместе с готовым
+  PDF**, `ExpertSession.status=waiting_user_confirmation`,
+  `Project.currentAgentId` **не меняется**. Пользователь видит файл до
+  подтверждения и может его отклонить;
 - с `confirmArtifact:true` — `Artifact.status=confirmed`, артефакт
   индексируется в Qdrant (`sourceType=artifact`), `Project.contextSummary`
   дополняется его summary, `Project.currentAgentId` переключается на
   `Agent.nextAgentId`.
+
+**Целостность маршрута.** Перед подтверждением сервер проверяет, что
+`Agent.nextAgentId` (если задан) указывает на существующего агента — иначе
+`409 NEXT_AGENT_UNAVAILABLE`, и ничего не мутируется: артефакт остаётся
+`ready`, сессия — `waiting_user_confirmation`, администратор чинит маршрут,
+пользователь подтверждает повторно. Неактивный агент проверку проходит
+(`isActive=false` — временное отключение по замыслу, не разрыв маршрута).
+Со стороны админки самоссылка `nextAgentId` на самого агента отклоняется
+(`400 NEXT_AGENT_SELF_REFERENCE`) — она означала бы вечный цикл этапа.
+
+**Завершённый маршрут не воскресает.** `currentAgentId=null` у проекта,
+который уже проходил этапы, — это осмысленное состояние «маршрут завершён»
+(DONE-5). Самолечение `resolveCurrentAgent` (подстановка первого активного
+агента) применяется только к свежим проектам без единого пройденного этапа —
+раньше первый же `GET expert-route` после финального агента молча
+перезапускал весь маршрут с начала.
+
+**Перегенерация.** `/complete` с `regenerate:true` помечает прежний черновик
+`rejected`, отвязывает его от сессии и создаёт новый артефакт с новым PDF.
+Подтверждённый артефакт пересоздать нельзя (`409
+ARTIFACT_ALREADY_CONFIRMED`) — он уже ушёл в контекст следующего агента и в
+Qdrant.
 
 ## Knowledge — глобальная база знаний
 
@@ -200,7 +305,14 @@ JSON-ответ для валидации, а не текст, который м
 | `AGENT_NOT_CURRENT` | `POST .../expert-sessions` | Агент существует и активен, но не совпадает с `Project.currentAgentId` — нельзя перепрыгнуть маршрут. |
 | `SESSION_NOT_FOUND` | `loadSessionAndAgent`, `GET .../messages` | Сессии с таким `_id` в этом проекте нет. |
 | `SESSION_ALREADY_COMPLETED` | `sendMessage`, `completeSession` | Сессия уже завершена (`status=completed`), новые сообщения/`complete` для неё недопустимы. |
+| `STAGE_NOT_READY` | `completeSession` (гейт готовности) | Оценщик считает, что данные по `completionCriteria` собраны не полностью. В теле ошибки — `missingFields` и `reason`. Артефакт не создавался, маршрут не двигался. |
+| `COMPLETION_EVALUATION_FAILED` | `completion-evaluation.service.js` | Не удалось оценить готовность этапа (сбой LLM-вызова оценщика или невалидный JSON от него). На `/complete` — ошибка 502; в чате приходит SSE-событием `evaluation_error` и диалог не ломает. |
 | `ARTIFACT_VALIDATION_FAILED` | `artifact-generation.service.js`, только для настоящих ошибок структуры JSON/`requiredFields`/`outputSchema` | Модель вернула невалидный или неполный артефакт. |
+| `ARTIFACT_RENDER_FAILED` | `pdf-renderer.service.js` | Текст документа получен, но вёрстка PDF не удалась. Артефакт не создаётся — повтор `/complete` сгенерирует заново. |
+| `ARTIFACT_UPLOAD_FAILED` | `artifact-generation.service.js` | PDF отрендерен, но не удалось выгрузить его в S3. |
+| `ARTIFACT_ALREADY_CONFIRMED` | `completeSession` (`regenerate:true`) | Попытка пересоздать уже подтверждённый артефакт — запрещено, он ушёл в контекст следующего агента и в Qdrant. |
+| `NEXT_AGENT_UNAVAILABLE` | `completeSession` (`confirmArtifact:true`) | `Agent.nextAgentId` указывает на удалённого агента. Подтверждение отклонено до любых мутаций: артефакт остаётся `ready`, маршрут чинит администратор. |
+| `NEXT_AGENT_SELF_REFERENCE` | `PATCH /accelerator/admin/agents/:id` | Попытка указать агента следующим за самим собой — вечный цикл этапа. |
 | `QDRANT_INDEX_FAILED` | `completeSession` (запись подтверждённого артефакта), `process-file.job.js` (`File.processingErrorCode`), `process-knowledge.job.js` (`Knowledge.processingErrorCode`) | Текст/артефакт/knowledge успешно готовы, упала именно запись в Qdrant. |
 | `SOURCE_FETCH_FAILED` | `process-knowledge.job.js` (`Knowledge.processingErrorCode`) | Не удалось скачать источник knowledge (файл в S3 по `fileId` или внешнюю ссылку `sourceUrl`). |
 | `LLM_PROVIDER_FAILED` | `sendMessage` (SSE `error`-событие), `completeSession` (генерация артефакта) | Сбой самого вызова LLM (сеть, rate limit, авторизация и т.п.), не связанный со структурой ответа. |

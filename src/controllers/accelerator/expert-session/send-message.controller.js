@@ -27,11 +27,18 @@ export async function sendExpertMessage(req, res) {
         };
 
         try {
-            const { assistantMessage } = await sendMessage(req.project, session, agent, content, {
+            const { assistantMessage, completionState } = await sendMessage(req.project, session, agent, content, {
                 onUserMessage: (userMessage) => sendEvent('message_created', { userMessage }),
-                onDelta: (text) => sendEvent('delta', { text })
+                onDelta: (text) => sendEvent('delta', { text }),
+                // Оценщик готовности упал — диалог это не ломает, но фронт
+                // должен понимать, что completionState в событии done мог
+                // остаться от предыдущего хода.
+                onEvaluationError: (error) => sendEvent('evaluation_error', { message: error.message, code: error.code })
             });
-            sendEvent('done', { assistantMessage });
+            // completionState — это то, по чему фронт решает, показывать ли
+            // кнопку завершения этапа: ready=false + missingFields описывают,
+            // чего ещё не хватает.
+            sendEvent('done', { assistantMessage, completionState });
         } catch (error) {
             sendEvent('error', { message: error.message, code: error.code });
         } finally {

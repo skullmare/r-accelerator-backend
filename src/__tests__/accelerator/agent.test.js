@@ -153,4 +153,20 @@ describe('PATCH /accelerator/admin/agents/:agentId', () => {
 
         expect(res.status).toBe(400);
     });
+
+    it('возвращает 400 при самоссылке nextAgentId (вечный цикл этапа)', async () => {
+        const admin = await createAdminUser();
+        const agent = await Agent.create(agentPayload());
+
+        const res = await request(app)
+            .patch(`/api/v1/accelerator/admin/agents/${agent._id}`)
+            .set('Cookie', authCookie(admin._id, admin.email))
+            .send({ nextAgentId: String(agent._id) });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error.code).toBe('NEXT_AGENT_SELF_REFERENCE');
+
+        const after = await Agent.findById(agent._id);
+        expect(after.nextAgentId).toBeNull();
+    });
 });

@@ -27,18 +27,21 @@ export async function sendExpertMessage(req, res) {
         };
 
         try {
-            const { assistantMessage, completionState } = await sendMessage(req.project, session, agent, content, {
+            const { assistantMessage, completionState, collectedFields } = await sendMessage(req.project, session, agent, content, {
                 onUserMessage: (userMessage) => sendEvent('message_created', { userMessage }),
                 onDelta: (text) => sendEvent('delta', { text }),
-                // Оценщик готовности упал — диалог это не ломает, но фронт
-                // должен понимать, что completionState в событии done мог
-                // остаться от предыдущего хода.
-                onEvaluationError: (error) => sendEvent('evaluation_error', { message: error.message, code: error.code })
+                // Агент сохранил данные в карточку этапа посреди хода. Событие
+                // приходит ДО done, пока агент ещё дописывает реплику, — чтобы
+                // прогресс заполнения на фронте обновлялся сразу, а не после
+                // конца стрима.
+                onFieldsUpdated: ({ collectedFields: fields, completionState: state }) =>
+                    sendEvent('fields_updated', { collectedFields: fields, completionState: state })
             });
             // completionState — это то, по чему фронт решает, показывать ли
             // кнопку завершения этапа: ready=false + missingFields описывают,
-            // чего ещё не хватает.
-            sendEvent('done', { assistantMessage, completionState });
+            // чего ещё не хватает. collectedFields рядом — уже собранные данные
+            // с цитатами, для прогресса «заполнено N из M».
+            sendEvent('done', { assistantMessage, completionState, collectedFields });
         } catch (error) {
             sendEvent('error', { message: error.message, code: error.code });
         } finally {

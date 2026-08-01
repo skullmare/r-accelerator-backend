@@ -50,17 +50,31 @@ function validationError(message) {
     return error;
 }
 
+// Карточка этапа (ExpertSession.collectedFields) — данные, которые агент
+// собрал по ходу диалога и подтвердил цитатами из реплик пользователя. Здесь
+// они подаются модели как готовая опора: вычитывать те же факты из истории
+// заново — лишний повод их переформулировать или домыслить.
+function renderCollectedFields(collectedFields) {
+    const entries = collectedFields ? [...collectedFields.entries()] : [];
+    if (!entries.length) return '';
+
+    const lines = entries.map(([name, entry]) => `- ${name}: ${entry.value}`);
+    return '\n\nСобранные в диалоге данные (используй их как основу, не переписывая смысл):\n' +
+        `${lines.join('\n')}`;
+}
+
 // Шаг 1 — структурированные поля. Они не показываются пользователю напрямую,
 // но именно на них держится вся передача контекста дальше по маршруту:
 // summary уходит в Project.contextSummary следующему агенту, а content
 // индексируется в Qdrant. Поэтому structured-слой остаётся даже теперь, когда
 // пользовательский результат этапа — PDF.
-async function generateStructuredContent({ agent, systemPrompt, retrievedContextMessage, conversationMessages }) {
+async function generateStructuredContent({ agent, systemPrompt, retrievedContextMessage, conversationMessages, collectedFields }) {
     const instruction =
         `Сформируй структурированные данные артефакта "${agent.artifactDefinition.artifactType}" по итогам диалога выше.\n` +
         `Ответь JSON-объектом со следующими обязательными полями: ` +
         `${agent.artifactDefinition.requiredFields.join(', ') || '(поля не заданы)'}.` +
         (agent.artifactDefinition.summaryField ? ` Поле "${agent.artifactDefinition.summaryField}" должно содержать краткую сводку артефакта.` : '') +
+        renderCollectedFields(collectedFields) +
         '\nОпирайся только на информацию из диалога и справочного контекста — не выдумывай данные.';
 
     const messages = [
@@ -148,9 +162,9 @@ function safeFileName(title) {
 // Полный цикл создания артефакта: структура -> документ -> PDF -> S3.
 // Возвращает всё, что нужно для записи Artifact; сам документ в MongoDB не
 // пишет — это делает completeSession.
-export async function generateArtifact({ agent, project, systemPrompt, retrievedContextMessage, conversationMessages }) {
+export async function generateArtifact({ agent, project, systemPrompt, retrievedContextMessage, conversationMessages, collectedFields }) {
     const { parsed, tokenUsage: structuredUsage } = await generateStructuredContent({
-        agent, systemPrompt, retrievedContextMessage, conversationMessages
+        agent, systemPrompt, retrievedContextMessage, conversationMessages, collectedFields
     });
 
     const summary = agent.artifactDefinition.summaryField && typeof parsed[agent.artifactDefinition.summaryField] === 'string'

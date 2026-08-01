@@ -91,14 +91,16 @@ GET /api/v1/accelerator/projects/{projectId}/expert-sessions/{sessionId}/message
   "data": {
     "items": [ { "senderType": "user", "content": "..." }, { "senderType": "assistant", "content": "..." } ],
     "completionState": { "ready": false, "missingFields": ["risks"], "reason": "...", "evaluatedAt": "..." },
+    "collectedFields": { "marketDescription": { "value": "...", "quote": "...", "updatedAt": "..." } },
     "artifactId": null,
     "status": "active"
   }
 }
 ```
 
-Здесь же приходит `completionState` — восстановите состояние кнопки
-«сформировать артефакт» без единого лишнего запроса.
+Здесь же приходят `completionState` и `collectedFields` — восстановите и
+состояние кнопки «сформировать артефакт», и прогресс заполнения этапа без
+единого лишнего запроса.
 
 ### Шаг 4. Диалог — POST + SSE (не EventSource!)
 
@@ -157,9 +159,13 @@ async function sendMessage(projectId, sessionId, content, handlers) {
 |---|---|---|
 | `message_created` | `{ userMessage }` | Заменить оптимистично отрисованное сообщение пользователя на серверное (с `_id`). |
 | `delta` | `{ text }` | Дописывать текст в пузырь ответа агента (стриминг). |
-| `done` | `{ assistantMessage, completionState }` | Зафиксировать сообщение агента. **Обновить состояние кнопки по `completionState`** — см. §3. |
+| `fields_updated` | `{ collectedFields, completionState }` | Агент сохранил данные в карточку этапа посреди хода. Обновить прогресс «заполнено N из M». Приходит **до** `done`, пока агент ещё дописывает реплику. Событие необязательное: если в ходу ничего не собрано, его не будет. |
+| `done` | `{ assistantMessage, completionState, collectedFields }` | Зафиксировать сообщение агента. **Обновить состояние кнопки по `completionState`** — см. §3. |
 | `error` | `{ message, code }` | Показать ошибку в чате (обычно `LLM_PROVIDER_FAILED`). Сообщение пользователя при этом уже сохранено. |
-| `evaluation_error` | `{ message, code }` | Не показывать пользователю как ошибку чата! Ответ агента доставлен нормально, просто оценка готовности не пересчиталась — `completionState` в `done` может быть от прошлого хода. Кнопку не трогайте. |
+
+> Событие `evaluation_error` **удалено**. Готовность этапа больше не считается
+> отдельным вызовом модели, поэтому и падать там нечему — обработчик можно
+> убирать.
 
 ### Шаг 5. Черновик артефакта (первая фаза `/complete`)
 
@@ -276,30 +282,40 @@ Body: { "confirmArtifact": true }
 
 ---
 
-## 3. `completionState` — контракт кнопки «сформировать артефакт»
+## 3. `completionState` и `collectedFields` — контракт кнопки и прогресса
 
 ```ts
 type CompletionState = {
   ready: boolean;            // true → кнопку показываем
   missingFields: string[];   // чего не хватает (имена полей артефакта)
-  reason: string | null;     // человекочитаемое пояснение оценщика
-  evaluatedAt: string | null;        // null → оценка ещё не выполнялась
+  reason: string | null;     // человекочитаемое пояснение
+  evaluatedAt: string | null;
   evaluatedAfterMessageId: string | null;
 };
+
+// Карточка этапа: что агент уже собрал, с привязкой к репликам пользователя.
+type CollectedFields = Record<string, {
+  value: string;             // итоговая формулировка данных
+  quote: string;             // дословный фрагмент реплики пользователя
+  sourceMessageId: string | null;
+  updatedAt: string;
+}>;
 ```
 
 Правила:
 
-- **Источники**: SSE-событие `done` (после каждого ответа агента) и
-  `GET .../messages` (при открытии экрана). Отдельного эндпоинта «проверь
-  готовность» нет и не нужно.
+- **Источники**: SSE-события `fields_updated` и `done`, плюс `GET .../messages`
+  (при открытии экрана). Отдельного эндпоинта «проверь готовность» нет.
+- `ready` теперь **арифметика, а не мнение модели**: он становится `true`,
+  когда агент закрыл все поля карточки. Поэтому состояние монотонно —
+  собранное поле само по себе обратно в `missingFields` не вернётся, и кнопка
+  не мигает от хода к ходу.
 - `ready: false` — кнопку скрыть/задизейблить; хорошая практика — показать
-  подсказку из `reason` («агент ещё собирает: конкуренты, риски»).
-- `ready: true` — показать кнопку. Но всё равно обрабатывайте
-  `STAGE_NOT_READY` на `/complete`: если пользователь дописал сообщение после
-  оценки, сервер пересчитает готовность заново и может отказать.
-- Пришло `evaluation_error` — состояние кнопки **не менять** (оно от
-  прошлого хода), это не ошибка диалога.
+  прогресс «заполнено 2 из 4» по `collectedFields` + `missingFields`.
+- `ready: true` — показать кнопку. `STAGE_NOT_READY` на `/complete` всё равно
+  обрабатывайте: конфигурацию агента мог поменять админ.
+- `collectedFields` — готовый материал для чек-листа этапа в UI, если хотите
+  показывать пользователю, что именно уже зафиксировано.
 
 ---
 
@@ -347,10 +363,8 @@ POST /complete {} ──► artifact.file.url ──► ЭКРАН ПОДТВЕ�
 | 409 | `NEXT_AGENT_UNAVAILABLE` | `/complete {confirm}` | Маршрут сломан админкой; артефакт цел. Показать message, оставить экран подтверждения, повторный клик после починки сработает. |
 | 422 | `ARTIFACT_VALIDATION_FAILED` | `/complete` | Модель выдала кривую структуру. Предложить «попробовать ещё раз» (повторный `/complete` или `{regenerate:true}`). |
 | 502 | `LLM_PROVIDER_FAILED` | SSE `error`, `/complete` | Сбой провайдера — «попробуйте ещё раз». Не путать с 422. |
-| 502 | `COMPLETION_EVALUATION_FAILED` | `/complete` | Оценка готовности не удалась — «попробуйте ещё раз». |
 | 502 | `ARTIFACT_RENDER_FAILED` / `ARTIFACT_UPLOAD_FAILED` | `/complete` | Документ/файл не собрался — повторный `/complete` сгенерирует заново. |
 | 502 | `QDRANT_INDEX_FAILED` | `/complete {confirm}` | Повторить подтверждение — безопасно, см. §2 шаг 7. |
-| — | (SSE `evaluation_error`) | сообщения | НЕ ошибка чата. Кнопку не трогать, ничего страшного не случилось. |
 
 ---
 
@@ -363,8 +377,8 @@ POST /complete {} ──► artifact.file.url ──► ЭКРАН ПОДТВЕ�
 - [ ] `/complete` вызывается **дважды**: сначала `{}` (черновик), потом
       `{confirmArtifact: true}`. Одна фаза без другой = «ничего не работает».
 - [ ] Кнопка появляется по `completionState.ready`, а не всегда/никогда.
-- [ ] SSE читается через `fetch`+stream (POST!), обрабатываются **все пять**
-      событий, включая `error` и `evaluation_error`.
+- [ ] SSE читается через `fetch`+stream (POST!), обрабатываются все события,
+      включая `error` и необязательное `fields_updated`.
 - [ ] `nextAgentId: null` при `confirmed: false` не трактуется как «конец
       маршрута» (в черновой фазе он null всегда).
 - [ ] На время `/complete` кнопка задизейблена (защита от даблклика);

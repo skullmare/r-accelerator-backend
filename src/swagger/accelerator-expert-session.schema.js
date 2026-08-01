@@ -26,9 +26,10 @@
  *         completionState:
  *           type: object
  *           description: |
- *             Серверная оценка готовности этапа (DONE-4). Пересчитывается после каждого
- *             ответа агента; фронт показывает кнопку «сформировать артефакт» только при
- *             ready=true. Попытка complete при ready=false вернёт 409 STAGE_NOT_READY.
+ *             Готовность этапа (DONE-4): арифметика по заполненности collectedFields, а не
+ *             оценка отдельной моделью. ready=true, когда агент закрыл все обязательные поля
+ *             артефакта (кроме поля-сводки). Фронт показывает кнопку «сформировать артефакт»
+ *             только при ready=true. Попытка complete при ready=false вернёт 409 STAGE_NOT_READY.
  *           properties:
  *             ready:
  *               type: boolean
@@ -40,16 +41,30 @@
  *             reason:
  *               type: string
  *               nullable: true
- *               description: Человекочитаемое пояснение оценщика (чего не хватает или почему готово).
+ *               description: Человекочитаемое пояснение (сколько полей собрано и каких не хватает).
  *             evaluatedAt:
  *               type: string
  *               format: date-time
  *               nullable: true
- *               description: Когда оценка была рассчитана. null — оценка ещё ни разу не выполнялась.
+ *               description: Когда готовность пересчитывалась в последний раз. null — ещё ни разу.
  *             evaluatedAfterMessageId:
  *               type: string
  *               nullable: true
- *               description: Последнее сообщение, учтённое при оценке. Если после него появились новые реплики, сервер пересчитает готовность перед завершением этапа.
+ *               description: Последнее сообщение на момент пересчёта. Пересчёт не требует вызова модели, поэтому гейт завершения этапа всегда считает поля заново.
+ *         collectedFields:
+ *           type: object
+ *           description: |
+ *             Карточка этапа: данные, собранные агентом в диалоге, по одному ключу на обязательное
+ *             поле артефакта. Заполняется агентом через инструмент save_collected_fields; quote —
+ *             дословный фрагмент реплики пользователя, который сервер сверяет с сообщениями сессии,
+ *             поэтому закрыть поле данными, которых пользователь не давал, нельзя.
+ *           additionalProperties:
+ *             type: object
+ *             properties:
+ *               value: { type: string, description: "Итоговая формулировка данных по полю." }
+ *               quote: { type: string, description: "Дословный фрагмент реплики пользователя — подтверждение происхождения." }
+ *               sourceMessageId: { type: string, nullable: true, description: "Сообщение, после которого поле записали." }
+ *               updatedAt: { type: string, format: date-time }
  *         inputContextSnapshot:
  *           type: object
  *           nullable: true

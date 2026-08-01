@@ -96,6 +96,14 @@ const PERMISSIONS_CONFIG = {
                 key: 'accelerator_knowledge.manage', label: 'Управление базой знаний Р-Акселератора (загрузка файлов/ссылок, векторизация, привязка к агентам)'
             }
         }
+    },
+    SYSTEM: {
+        label: "Системная диагностика",
+        actions: {
+            DIAGNOSTICS: {
+                key: 'system_diagnostics.read', label: 'Просмотр состояния LLM-провайдеров (доступность, баланс, размерность эмбеддингов)'
+            }
+        }
     }
 }
 

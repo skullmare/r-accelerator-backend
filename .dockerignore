@@ -1,0 +1,30 @@
+# Файл был пустой — в образ уезжал весь контекст, включая node_modules хоста
+# (перетирая собранные под alpine нативные модули) и .env с боевыми секретами.
+
+# Зависимости ставятся внутри образа через `npm ci --omit=dev`.
+node_modules
+npm-debug.log*
+
+# Секреты. .env.example остаётся — он часть документации.
+.env
+.env.*
+!.env.example
+
+# История и служебное
+.git
+.gitignore
+.github
+
+# Тесты и нагрузочные сценарии в рантайме не нужны
+src/__tests__
+src/__fixtures__
+k6
+
+# Документация
+docs
+README.md
+
+# Локальный стек — внутрь образа не нужен
+docker-compose.yml
+Dockerfile
+.dockerignore

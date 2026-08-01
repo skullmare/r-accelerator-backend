@@ -1,0 +1,186 @@
+# Локальный стек бэкенда целиком: API + все зависимости, которые в проде
+# внешние (MongoDB, Qdrant, S3, SMTP). Поднимается одной командой:
+#
+#   cp .env.example .env     # достаточно вписать OPENAI_API_KEY и OPENROUTER_API_KEY
+#   docker compose up -d --build
+#
+# Значения инфраструктуры заданы прямо здесь и НЕ читаются из .env: адреса
+# сервисов внутри compose-сети (mongo, qdrant, minio) отличаются от того, что
+# лежит в .env для прода. Из .env подхватываются только секреты — через
+# ${ПЕРЕМЕННАЯ:-дефолт}, поэтому стек поднимется и вообще без .env, просто без
+# доступа к LLM.
+#
+# Только инфраструктура, без API (удобно, когда бэк запущен локально через
+# `npm run dev` — все порты ниже проброшены на localhost):
+#
+#   docker compose up -d mongo qdrant minio minio-init mailpit
+
+name: rocketmind
+
+services:
+  # --------------------------------------------------------------------------
+  # MongoDB — основная БД. Standalone без replica set: транзакций в коде нет,
+  # очередь обработки файлов (src/services/queue) тоже обходится без них.
+  # --------------------------------------------------------------------------
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
+  # Qdrant — векторные индексы (expert_context + knowledge_context).
+  # Коллекции создаются приложением лениво, под размерность EMBEDDING_DIM.
+  # --------------------------------------------------------------------------
+  qdrant:
+    image: qdrant/qdrant:v1.18.3
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    # Healthcheck намеренно нет: в образе Qdrant нет ни curl, ни wget, а
+    # выдумывать проверку «на глаз» смысла мало — приложение обращается к
+    # Qdrant лениво (при индексации и поиске, не на старте), так что гонки при
+    # запуске здесь и не возникает.
+
+  # --------------------------------------------------------------------------
+  # MinIO — S3-совместимое хранилище вместо Timeweb Cloud. Код менять не надо:
+  # s3.config.js уже generic, forcePathStyle=true подходит и сюда.
+  # --------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-minioadmin}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      # Веб-консоль MinIO: http://localhost:9001 (логин/пароль — те же, что выше).
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+
+  # --------------------------------------------------------------------------
+  # Разовая инициализация бакета. anonymous download нужен, чтобы ссылки на
+  # PDF-артефакты (buildUrl в s3.service.js отдаёт прямой URL, не presigned)
+  # открывались в браузере без подписи — как в проде с публичным бакетом.
+  #
+  # Готовность MinIO проверяется здесь же, циклом с ретраями, а не через
+  # healthcheck самого MinIO: так вся цепочка запуска не зависит от того, какие
+  # утилиты лежат внутри конкретного релиза образа.
+  # --------------------------------------------------------------------------
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      - minio
+    environment:
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-minioadmin}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-minioadmin}
+      S3_BUCKET: ${S3_BUCKET:-rocketmind}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        for i in $$(seq 1 40); do
+          if mc alias set local http://minio:9000 "$$S3_ACCESS_KEY_ID" "$$S3_SECRET_ACCESS_KEY" >/dev/null 2>&1; then
+            mc mb --ignore-existing "local/$$S3_BUCKET" &&
+            mc anonymous set download "local/$$S3_BUCKET" &&
+            echo "Бакет $$S3_BUCKET готов" && exit 0
+          fi
+          echo "Жду MinIO... ($$i/40)"; sleep 2
+        done
+        echo "MinIO не поднялся за 80 секунд"; exit 1
+    restart: "no"
+
+  # --------------------------------------------------------------------------
+  # Mailpit — SMTP-заглушка для кодов подтверждения при входе. Никакие письма
+  # наружу не уходят, все видны в веб-интерфейсе: http://localhost:8025
+  # --------------------------------------------------------------------------
+  mailpit:
+    image: axllent/mailpit:v1.30.6
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+
+  # --------------------------------------------------------------------------
+  # Сам бэкенд. Собирается тем же Dockerfile, что уезжает на Amvera, — то есть
+  # локально проверяется ровно тот образ, который поедет в прод.
+  # --------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    # Mongo ждём по healthcheck — она нужна прямо на старте (connectDB и
+    # init-скрипты в server.js). Бакет ждём по факту успешного создания.
+    # Qdrant и Mailpit достаточно просто запустить: обращения к ним ленивые.
+    depends_on:
+      mongo:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      qdrant:
+        condition: service_started
+      mailpit:
+        condition: service_started
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3000
+      HOST: ${HOST:-http://localhost}
+
+      MONGODB_URI: mongodb://mongo:27017/${MONGO_DB:-r-accelerator}
+
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret}
+      # Пусто = host-only cookie. Для localhost это правильное значение:
+      # домен в Set-Cookie сломал бы авторизацию на localhost.
+      MAIN_DOMAIN: ""
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-admin@example.com}
+
+      # S3_ENDPOINT — адрес внутри compose-сети (по нему ходит бэкенд),
+      # S3_PUBLIC_URL — адрес для браузера. Значения РАЗНЫЕ и это не опечатка:
+      # ссылка minio:9000 из браузера не откроется.
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_URL: http://localhost:${MINIO_PORT:-9000}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-minioadmin}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-minioadmin}
+      S3_BUCKET: ${S3_BUCKET:-rocketmind}
+      S3_FORCE_PATH_STYLE: "true"
+
+      EMAIL_HOST: mailpit
+      EMAIL_PORT: "1025"
+      EMAIL_FROM: ${EMAIL_FROM:-no-reply@rocketmind.local}
+
+      # QDRANT_API_KEY намеренно НЕ задаётся: локальный Qdrant без ключа, а
+      # пустая строка всё равно считалась бы заданным ключом — клиент слал бы
+      # заголовок api-key и ругался «Api key is used with unsecure connection».
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-expert_context}
+      QDRANT_KNOWLEDGE_COLLECTION: ${QDRANT_KNOWLEDGE_COLLECTION:-knowledge_context}
+
+      # Единственное, что обязательно принести своё. Без ключей стек поднимется
+      # и API ответит, но любой запрос к агенту упадёт на вызове провайдера.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-google/gemini-embedding-2}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-3072}
+
+volumes:
+  mongo-data:
+  qdrant-data:
+  minio-data:

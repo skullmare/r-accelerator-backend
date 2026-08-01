@@ -21,6 +21,7 @@ import fileRouter from './routes/file.routes.js';
 import projectRouter from './routes/accelerator/project.routes.js';
 import acceleratorAgentRouter from './routes/accelerator/agent.routes.js';
 import acceleratorKnowledgeRouter from './routes/accelerator/knowledge.routes.js';
+import systemRouter from './routes/system.routes.js';
 
 const app = express();
 
@@ -61,6 +62,7 @@ app.use('/api/v1/file', fileRouter);
 app.use('/api/v1/accelerator/projects', projectRouter);
 app.use('/api/v1/accelerator/admin/agents', acceleratorAgentRouter);
 app.use('/api/v1/accelerator/admin/knowledge', acceleratorKnowledgeRouter);
+app.use('/api/v1/system', systemRouter);
 
 app.use((req, res) => {
     return res.error({}, 404, `Маршрут ${req.method} ${req.url} не найден`);

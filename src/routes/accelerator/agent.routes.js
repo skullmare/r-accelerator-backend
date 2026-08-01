@@ -79,7 +79,7 @@ router.get('/', listAgents);
  *               isActive: { type: boolean, default: true, description: "Если false — агент не участвует в пользовательском маршруте." }
  *               systemPrompt: { type: string, description: "Базовая системная инструкция роли — уходит в LLM при каждом сообщении." }
  *               completionCriteria: { type: string, description: "Когда этап считается завершённым (инструкция для модели, не хард-гейт на сервере)." }
- *               completionEvaluatorPrompt: { type: string, nullable: true, description: "Промпт для оценки завершённости этапа моделью-оценщиком (опционально)." }
+ *               completionEvaluatorPrompt: { type: string, nullable: true, description: "УСТАРЕЛО: оценщик удалён, поле ни на что не влияет (оставлено для совместимости)." }
  *               allowPartialCompletion: { type: boolean, default: false, description: "Разрешать завершение с частично заполненным артефактом." }
  *               artifactDefinition:
  *                 type: object
@@ -200,7 +200,7 @@ router.get('/:agentId', validate(agentSchemas.agentIdSchema), getAgent);
  *               isActive: { type: boolean, description: "false — временно исключить агента из пользовательского маршрута." }
  *               systemPrompt: { type: string }
  *               completionCriteria: { type: string }
- *               completionEvaluatorPrompt: { type: string, nullable: true, description: "Промпт для оценки завершённости этапа (опционально)." }
+ *               completionEvaluatorPrompt: { type: string, nullable: true, description: "УСТАРЕЛО: оценщик удалён, поле ни на что не влияет (оставлено для совместимости)." }
  *               allowPartialCompletion: { type: boolean, description: "Разрешать завершение с частично заполненным артефактом." }
  *               artifactDefinition:
  *                 type: object

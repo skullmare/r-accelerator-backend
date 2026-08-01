@@ -5,9 +5,12 @@
 > Что с тех пор сделано (см. `docs/expert-context.md`, актуальное описание там):
 >
 > - реализован серверный гейт готовности этапа (требование DONE-4) —
->   `completion-evaluation.service.js`, ошибка `409 STAGE_NOT_READY`;
-> - задействованы прежде мёртвые поля `completionEvaluatorPrompt` и
->   `allowPartialCompletion`;
+>   ошибка `409 STAGE_NOT_READY`. Первая версия гейта опиралась на отдельную
+>   модель-«оценщик» (`completion-evaluation.service.js`); позже она удалена и
+>   заменена карточкой этапа, которую агент заполняет сам через инструмент
+>   `save_collected_fields` — см. `field-collection.service.js`;
+> - задействовано прежде мёртвое поле `allowPartialCompletion`
+>   (`completionEvaluatorPrompt` вместе с оценщиком снова стало неиспользуемым);
 > - артефакт этапа теперь PDF: модель пишет текст, сервер верстает и кладёт в S3;
 > - генерация структурированных полей переведена на `response_format:
 >   json_object` (устранён ложный `ARTIFACT_VALIDATION_FAILED`);

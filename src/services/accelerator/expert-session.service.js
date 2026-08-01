@@ -5,12 +5,32 @@ import Artifact from '../../models/accelerator/artifact.model.js';
 import { assembleContext } from './context-assembly.service.js';
 import { chatCompleteStream } from '../llm.service.js';
 import { generateArtifact } from './artifact-generation.service.js';
-import { evaluateCompletion, CompletionEvaluationError } from './completion-evaluation.service.js';
+import {
+    SAVE_FIELDS_TOOL_NAME,
+    applyFieldUpdates,
+    backfillCollectedFields,
+    buildFieldChecklistPrompt,
+    buildSaveFieldsTool,
+    collectibleFields,
+    getMissingFields,
+    loadUserUtterances,
+    syncCompletionState
+} from './field-collection.service.js';
 import { upsertChunks } from '../qdrant.service.js';
 import { chunkText } from '../file-processing/chunker.js';
 
 const MAX_CONTEXT_SUMMARY_CHARS = 4000;
 const HISTORY_LIMIT = 30;
+// Сколько раз за один ход агенту позволено вызвать инструмент. После
+// исчерпания финальный проход идёт с tool_choice: 'none' — модель физически не
+// может вызвать тул снова и обязана ответить текстом. Это жёсткий потолок
+// стоимости хода (максимум два вызова LLM) и защита от зацикливания
+// «вызвал -> получил отказ -> вызвал снова».
+const MAX_TOOL_ROUNDS = 1;
+// Ответ на случай, если после принудительного текстового прохода модель всё
+// равно не выдала ни символа: Message.content обязателен, и падать здесь,
+// потеряв уже сохранённое сообщение пользователя, было бы хуже заглушки.
+const EMPTY_REPLY_FALLBACK = 'Записал. Продолжим — что скажете?';
 
 export class ExpertSessionError extends Error {
     constructor(message, status, code, details = null) {
@@ -103,62 +123,82 @@ async function getSessionHistory(sessionId) {
         .map((m) => ({ role: m.senderType === 'assistant' ? 'assistant' : 'user', content: m.content }));
 }
 
-// Оценка готовности этапа + запись её на сессию. Вызывается после каждого
-// ответа агента (живое состояние кнопки на фронте) и перед генерацией
-// артефакта (гейт).
-async function refreshCompletionState(session, agent, { history, lastMessageId }) {
-    const evaluation = await evaluateCompletion({ agent, conversationMessages: history });
+// Разовый перенос старого диалога в карточку этапа. Запускается только если в
+// сессии уже есть ответы агента — то есть диалог шёл до перехода на
+// save_collected_fields. У новой сессии первый ход ассистентских сообщений ещё
+// не имеет, и лишнего вызова модели не будет.
+//
+// Сбой бэкфилла не должен ломать чат: дата попытки проставляется в любом
+// случае, иначе каждая следующая реплика в проблемной сессии тянула бы за
+// собой новый неудачный вызов модели.
+async function maybeBackfillCollectedFields(session, agent, history) {
+    if (session.fieldsBackfilledAt) return;
+    if (session.collectedFields?.size) return;
+    if (!collectibleFields(agent).length) return;
+    if (!history.some((m) => m.role === 'assistant')) return;
 
-    session.completionState = {
-        ...evaluation,
-        evaluatedAt: new Date(),
-        evaluatedAfterMessageId: lastMessageId ?? null
-    };
+    session.fieldsBackfilledAt = new Date();
+    try {
+        const userUtterances = await loadUserUtterances(session._id);
+        await backfillCollectedFields({ session, agent, conversationMessages: history, userUtterances });
+    } catch {
+        // Молча: агент просто переспросит то, что не удалось перенести.
+    }
     await session.save();
-
-    return session.completionState;
 }
 
-function isCompletionStateStale(session, lastMessageId) {
-    if (!session.completionState?.evaluatedAt) return true;
-    if (!lastMessageId) return false;
+// Исполнение вызовов инструмента. Отказ здесь — это не ошибка хода, а обычный
+// результат, который уходит обратно В МОДЕЛЬ (а не пользователю) внутри того
+// же хода: агент видит причину, и вместо прощания задаёт недостающий вопрос.
+// Ровно за этим тул и вводился — прежний оценщик сообщал о своём несогласии
+// только следующим ходом, когда пользователь уже прочитал «этап завершён».
+async function executeToolCalls({ session, agent, toolCalls, sourceMessageId }) {
+    const userUtterances = await loadUserUtterances(session._id);
+    const toolMessages = [];
+    let savedAny = false;
 
-    const evaluatedAfter = session.completionState.evaluatedAfterMessageId;
-    return !evaluatedAfter || String(evaluatedAfter) !== String(lastMessageId);
-}
+    for (const call of toolCalls) {
+        let result;
 
-// Блок статуса этапа для системного промпта агента. Замыкает петлю между
-// двумя независимыми LLM-вызовами: без него агент не знает вердикта оценщика
-// и вольно интерпретирует completionCriteria — прощается «удачи на следующем
-// этапе!», пока оценщик держит этап неготовым, и пользователь видит два
-// противоречащих друг другу сообщения на одном экране. Статус берётся с
-// прошлого хода (оценка выполняется ПОСЛЕ ответа агента) — лаг в одно
-// сообщение осознанный и безвредный: свежие реплики пользователя агент и
-// так видит в истории диалога.
-function buildStageStatusPrompt(session, agent) {
-    const header =
-        'Статус этапа (серверная оценка — единственный источник истины о завершённости, ' +
-        'не противоречь ему):';
+        if (call.function?.name !== SAVE_FIELDS_TOOL_NAME) {
+            result = { ok: false, error: `Неизвестный инструмент: ${call.function?.name}` };
+        } else {
+            let args = null;
+            try {
+                args = JSON.parse(call.function.arguments || '{}');
+            } catch {
+                args = null;
+            }
 
-    if (session.completionState?.ready) {
-        return `${header}\n` +
-            'Все необходимые данные собраны. Можешь кратко подытожить и предложить пользователю ' +
-            'нажать кнопку «Завершить этап», чтобы сформировать итоговый документ. ' +
-            'Сам этап ты не завершаешь и на следующий этап не переводишь.';
+            if (!args) {
+                result = { ok: false, error: 'Аргументы инструмента — невалидный JSON. Повтори вызов корректно.' };
+            } else {
+                const { saved, rejected } = applyFieldUpdates({
+                    session,
+                    agent,
+                    updates: args.fields,
+                    userUtterances,
+                    sourceMessageId
+                });
+                if (saved.length) savedAny = true;
+
+                result = {
+                    ok: rejected.length === 0,
+                    saved,
+                    rejected,
+                    missingFields: getMissingFields(session, agent)
+                };
+            }
+        }
+
+        toolMessages.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            content: JSON.stringify(result)
+        });
     }
 
-    const state = session.completionState;
-    const missing = (state?.missingFields?.length
-        ? state.missingFields
-        : agent.artifactDefinition.requiredFields || []).join(', ');
-
-    return `${header}\n` +
-        'Этап ЕЩЁ НЕ готов к завершению.' +
-        (missing ? ` Не собраны данные: ${missing}.` : '') +
-        (state?.reason ? ` Пояснение оценщика: ${state.reason}` : '') +
-        '\nНе сообщай пользователю, что этап завершён или что можно переходить к следующему этапу, ' +
-        'не прощайся и не желай удачи на следующем этапе. Продолжай диалог и целенаправленно ' +
-        'собирай недостающие данные, задавая вопросы по одному.';
+    return { toolMessages, savedAny };
 }
 
 // Delivers the agent's reply over SSE: onUserMessage fires as soon as the
@@ -167,7 +207,7 @@ function buildStageStatusPrompt(session, agent) {
 // model streams its answer. The full assistant message is only persisted
 // once the stream ends, so a dropped connection mid-stream can't leave a
 // half-written message in the database.
-export async function sendMessage(project, session, agent, content, { onUserMessage, onDelta, onEvaluationError } = {}) {
+export async function sendMessage(project, session, agent, content, { onUserMessage, onDelta, onFieldsUpdated } = {}) {
     if (session.status === 'completed') {
         throw new ExpertSessionError('Сессия уже завершена', 409, 'SESSION_ALREADY_COMPLETED');
     }
@@ -183,90 +223,112 @@ export async function sendMessage(project, session, agent, content, { onUserMess
     const { systemPrompt, retrievedContextMessage, contextSnapshot } = await assembleContext({ project, agent, userMessageText: content });
     const history = await getSessionHistory(session._id);
 
-    const messages = [{ role: 'system', content: `${systemPrompt}\n\n---\n\n${buildStageStatusPrompt(session, agent)}` }];
+    await maybeBackfillCollectedFields(session, agent, history);
+
+    // Чек-лист рендерится из базы прямо здесь, поэтому агент видит
+    // заполненность на ТЕКУЩИЙ ход, а не вердикт, снятый после прошлого ответа.
+    let messages = [{ role: 'system', content: `${systemPrompt}\n\n---\n\n${buildFieldChecklistPrompt(session, agent)}` }];
     if (retrievedContextMessage) messages.push(retrievedContextMessage);
     messages.push(...history);
 
-    let replyText, tokenUsage;
-    try {
-        ({ content: replyText, tokenUsage } = await chatCompleteStream({
-            model: agent.modelConfig.model,
-            temperature: agent.modelConfig.temperature,
-            maxTokens: agent.modelConfig.maxTokens,
-            messages,
-            onDelta
-        }));
-    } catch (error) {
-        // Whatever code the OpenAI SDK attaches (or none) gets normalized to
-        // a stable, documented code — the SSE `error` event must not leak an
-        // unpredictable provider-specific value to the frontend.
-        error.code = error.code || 'LLM_PROVIDER_FAILED';
-        throw error;
+    const saveFieldsTool = buildSaveFieldsTool(agent);
+    const tools = saveFieldsTool ? [saveFieldsTool] : undefined;
+
+    let replyText = '';
+    let tokenUsage = null;
+    let fieldsChanged = false;
+
+    for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
+        const toolsAllowed = Boolean(tools) && round < MAX_TOOL_ROUNDS;
+
+        let roundText, roundUsage, toolCalls;
+        try {
+            ({ content: roundText, tokenUsage: roundUsage, toolCalls } = await chatCompleteStream({
+                model: agent.modelConfig.model,
+                temperature: agent.modelConfig.temperature,
+                maxTokens: agent.modelConfig.maxTokens,
+                messages,
+                tools,
+                toolChoice: toolsAllowed ? 'auto' : 'none',
+                onDelta
+            }));
+        } catch (error) {
+            // Whatever code the OpenAI SDK attaches (or none) gets normalized to
+            // a stable, documented code — the SSE `error` event must not leak an
+            // unpredictable provider-specific value to the frontend.
+            error.code = error.code || 'LLM_PROVIDER_FAILED';
+            throw error;
+        }
+
+        // Текст доклеивается, а не заменяется: модель может выдать реплику и в
+        // том же проходе вызвать инструмент — тогда пользователь уже получил
+        // начало ответа через onDelta, и продолжение просто дописывается.
+        replyText += roundText;
+        if (roundUsage) tokenUsage = roundUsage;
+
+        if (!toolCalls?.length) break;
+
+        const { toolMessages, savedAny } = await executeToolCalls({
+            session,
+            agent,
+            toolCalls,
+            sourceMessageId: userMessage._id
+        });
+        if (savedAny) fieldsChanged = true;
+
+        messages = [
+            ...messages,
+            { role: 'assistant', content: roundText || null, tool_calls: toolCalls },
+            ...toolMessages
+        ];
     }
 
     const assistantMessage = await Message.create({
         sessionId: session._id,
         projectId: project._id,
         senderType: 'assistant',
-        content: replyText,
+        content: replyText.trim() || EMPTY_REPLY_FALLBACK,
         tokenUsage
     });
 
     session.inputContextSnapshot = contextSnapshot;
     session.status = 'active';
+
+    // Готовность — арифметика по карточке этапа, без вызова модели. Поэтому
+    // здесь нет ни отдельного try/catch, ни события evaluation_error: падать
+    // тут нечему, а состояние не может разойтись с тем, что агент только что
+    // видел в промпте.
+    const completionState = syncCompletionState(session, agent, { lastMessageId: assistantMessage._id });
     await session.save();
 
-    // Готовность пересчитывается на каждый ход: фронт получает её в событии
-    // done и по ней решает, показывать ли кнопку завершения этапа. Сбой
-    // оценщика здесь намеренно не роняет диалог — сообщение агента уже
-    // доставлено и сохранено, а гейт всё равно перепроверит состояние в
-    // completeSession (там сбой оценки уже будет явной ошибкой).
-    let completionState = session.completionState;
-    try {
-        completionState = await refreshCompletionState(session, agent, {
-            history: [...history, { role: 'assistant', content: replyText }],
-            lastMessageId: assistantMessage._id
-        });
-    } catch (error) {
-        onEvaluationError?.(error);
+    if (fieldsChanged) {
+        onFieldsUpdated?.({ collectedFields: session.collectedFields, completionState });
     }
 
-    return { userMessage, assistantMessage, completionState };
+    return { userMessage, assistantMessage, completionState, collectedFields: session.collectedFields };
 }
 
-// Гейт завершения этапа. Пропускает дальше, только если оценщик считает
-// собранными все обязательные данные — либо если администратор явно разрешил
-// агенту завершаться с частичным результатом (allowPartialCompletion).
+// Гейт завершения этапа. Пропускает дальше, только если заполнены все поля
+// карточки — либо если администратор явно разрешил агенту завершаться с
+// частичным результатом (allowPartialCompletion).
 //
-// Состояние берётся из session.completionState, но пересчитывается, если оно
-// устарело (после оценки успели появиться новые сообщения) или его нет вовсе:
-// гейт не должен опираться на снимок, снятый до половины диалога.
-async function assertStageReady(session, agent, history) {
+// Состояние пересчитывается прямо здесь, но это уже не оценка, а подсчёт
+// заполненных полей: ни вызова модели, ни разбора «не устарел ли снимок», ни
+// собственного класса ошибок. Считать заново дёшево, поэтому гейт всегда
+// работает по актуальным данным.
+async function assertStageReady(session, agent) {
+    const lastMessage = await Message.findOne({ sessionId: session._id }).sort({ createdAt: -1 }).select('_id');
+    const state = syncCompletionState(session, agent, { lastMessageId: lastMessage?._id });
+    await session.save();
+
     if (agent.allowPartialCompletion) return;
 
-    const lastMessage = await Message.findOne({ sessionId: session._id }).sort({ createdAt: -1 }).select('_id');
-
-    let state = session.completionState;
-    if (isCompletionStateStale(session, lastMessage?._id)) {
-        try {
-            state = await refreshCompletionState(session, agent, { history, lastMessageId: lastMessage?._id });
-        } catch (error) {
-            // В отличие от чата, здесь сбой оценщика — это явная ошибка:
-            // молча пропустить незавершённый этап хуже, чем попросить повтор.
-            const code = error instanceof CompletionEvaluationError ? error.code : 'COMPLETION_EVALUATION_FAILED';
-            throw new ExpertSessionError(error.message, 502, code);
-        }
-    }
-
-    if (!state?.ready) {
+    if (!state.ready) {
         throw new ExpertSessionError(
             'Этап ещё не готов к формированию артефакта: собраны не все необходимые данные',
             409,
             'STAGE_NOT_READY',
-            {
-                missingFields: state?.missingFields ?? agent.artifactDefinition.requiredFields,
-                reason: state?.reason ?? 'Готовность этапа не оценена'
-            }
+            { missingFields: state.missingFields, reason: state.reason }
         );
     }
 }
@@ -315,13 +377,24 @@ export async function completeSession(project, session, agent, { confirmArtifact
         // Гейт готовности (ТЗ спринта 3, DONE-4). Стоит ДО генерации: смысл в
         // том, чтобы не дать сформировать артефакт раньше времени, а заодно не
         // тратить вызовы модели на заведомо неполный этап.
-        await assertStageReady(session, agent, history);
+        await assertStageReady(session, agent);
 
         const { systemPrompt, retrievedContextMessage } = await assembleContext({ project, agent, userMessageText: agent.completionCriteria });
 
         let generated;
         try {
-            generated = await generateArtifact({ agent, project, systemPrompt, retrievedContextMessage, conversationMessages: history });
+            // Карточка этапа уходит в генерацию как опора: это уже выверенные
+            // данные с привязкой к репликам пользователя, поэтому модели не
+            // нужно вычитывать их из истории заново — а значит, и меньше
+            // поводов что-то домыслить.
+            generated = await generateArtifact({
+                agent,
+                project,
+                systemPrompt,
+                retrievedContextMessage,
+                conversationMessages: history,
+                collectedFields: session.collectedFields
+            });
         } catch (error) {
             // Only a real structural/JSON validation failure (tagged by
             // artifact-generation.service.js) is actually ARTIFACT_VALIDATION_FAILED.

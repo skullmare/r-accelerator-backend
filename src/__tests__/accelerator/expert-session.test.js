@@ -1,18 +1,20 @@
 import request from 'supertest';
 
-// Управляемый из тестов вердикт оценщика готовности. Имя обязано начинаться
-// с `mock`, иначе jest не пустит переменную внутрь hoisted-фабрики ниже.
-let mockReadiness = { ready: true, missingFields: [], reason: 'Все данные собраны.' };
+// Очередь вызовов инструмента, которые «сделает» агент на ближайших ходах:
+// каждый элемент — набор tool_calls для одного прохода модели. Имя обязано
+// начинаться с `mock`, иначе jest не пустит переменную внутрь hoisted-фабрики
+// ниже.
+let mockToolCalls = [];
 
-// chatComplete теперь обслуживает три разных вызова, поэтому мок различает их
-// по инструкции в последнем сообщении — ровно как это делает реальный поток:
-// оценка готовности -> структурированные поля -> текст документа.
+// chatComplete обслуживает генерацию артефакта (структурированные поля -> текст
+// документа) и разовый бэкфилл карточки этапа. Мок различает вызовы по
+// инструкции в последнем сообщении — ровно как это делает реальный поток.
 jest.mock('../../services/llm.service.js', () => ({
     chatComplete: jest.fn(async ({ messages }) => {
         const instruction = messages[messages.length - 1].content;
 
-        if (instruction.includes('Оцени, готов ли этап')) {
-            return { content: JSON.stringify(mockReadiness), tokenUsage: null };
+        if (instruction.includes('Перенеси в карточку этапа')) {
+            return { content: JSON.stringify({ fields: [] }), tokenUsage: null };
         }
 
         if (instruction.includes('Напиши финальный документ')) {
@@ -44,10 +46,19 @@ jest.mock('../../services/llm.service.js', () => ({
             tokenUsage: { totalTokens: 42 }
         };
     }),
-    chatCompleteStream: jest.fn(async ({ onDelta }) => {
+    // Модель либо вызывает инструмент, либо пишет текст — как настоящая. Вызов
+    // возможен только когда провайдеру это разрешено (toolChoice !== 'none'),
+    // поэтому мок заодно проверяет, что финальный проход хода действительно
+    // закрыт для инструментов.
+    chatCompleteStream: jest.fn(async ({ onDelta, toolChoice }) => {
+        const pending = toolChoice === 'none' ? null : mockToolCalls.shift();
+        if (pending?.length) {
+            return { content: '', tokenUsage: null, toolCalls: pending };
+        }
+
         const text = 'Ответ агента пользователю';
         onDelta?.(text);
-        return { content: text, tokenUsage: null };
+        return { content: text, tokenUsage: null, toolCalls: [] };
     })
 }));
 
@@ -74,6 +85,7 @@ import { authCookie } from '../../__fixtures__/auth.fixture.js';
 import Project from '../../models/accelerator/project.model.js';
 import Agent from '../../models/accelerator/agent.model.js';
 import Artifact from '../../models/accelerator/artifact.model.js';
+import ExpertSession from '../../models/accelerator/expert-session.model.js';
 import { upsertChunks } from '../../services/qdrant.service.js';
 import { chatComplete, chatCompleteStream } from '../../services/llm.service.js';
 import { uploadFile } from '../../services/s3.service.js';
@@ -83,8 +95,39 @@ afterAll(() => closeDatabase());
 afterEach(async () => {
     await clearDatabase();
     jest.clearAllMocks();
-    mockReadiness = { ready: true, missingFields: [], reason: 'Все данные собраны.' };
+    mockToolCalls = [];
 });
+
+// Реплика пользователя, из которой агент «достаёт» все поля карточки R1.
+// Цитаты в R1_FIELD_UPDATES обязаны дословно встречаться именно здесь — иначе
+// проверка происхождения отклонит сохранение, как и на проде.
+const R1_USER_ANSWER = 'рынок логистики растёт, ниша — B2B SaaS, ' +
+    'конкуренты Альфа и Бета, риски — длинный цикл продаж';
+
+const R1_FIELD_UPDATES = [
+    { name: 'marketDescription', value: 'Рынок логистики растёт', quote: 'рынок логистики растёт' },
+    { name: 'nicheHypothesis', value: 'B2B SaaS для логистики', quote: 'ниша — B2B SaaS' },
+    { name: 'competitors', value: 'Альфа и Бета', quote: 'конкуренты Альфа и Бета' },
+    { name: 'risks', value: 'Длинный цикл продаж', quote: 'риски — длинный цикл продаж' }
+];
+
+function saveFieldsCall(fields) {
+    return [{
+        id: 'call-1',
+        type: 'function',
+        function: { name: 'save_collected_fields', arguments: JSON.stringify({ fields }) }
+    }];
+}
+
+// Один ход диалога, в котором агент складывает данные в карточку этапа. После
+// него completionState.ready=true, и этап проходит гейт завершения.
+async function collectStageFields(project, cookie, sessionId, fields = R1_FIELD_UPDATES) {
+    mockToolCalls.push(saveFieldsCall(fields));
+    return request(app)
+        .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
+        .set('Cookie', cookie)
+        .send({ content: R1_USER_ANSWER });
+}
 
 // SSE responses come back as raw "event: X\ndata: {...}\n\n" blocks.
 function parseSSE(text) {
@@ -145,35 +188,41 @@ describe('Экспертный маршрут R1 -> R2 (сквозной сце�
         expect(sessionRes.status).toBe(201);
         const sessionId = sessionRes.body.data.session._id;
 
-        const messageRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
-            .set('Cookie', cookie)
-            .send({ content: 'Опишите рынок для моего проекта' });
+        const messageRes = await collectStageFields(project, cookie, sessionId);
         expect(messageRes.status).toBe(200);
         expect(messageRes.headers['content-type']).toMatch(/text\/event-stream/);
 
         const events = parseSSE(messageRes.text);
         const createdEvent = events.find((e) => e.event === 'message_created');
         const deltaEvents = events.filter((e) => e.event === 'delta');
+        const fieldsEvent = events.find((e) => e.event === 'fields_updated');
         const doneEvent = events.find((e) => e.event === 'done');
 
-        expect(createdEvent.data.userMessage.content).toBe('Опишите рынок для моего проекта');
+        expect(createdEvent.data.userMessage.content).toBe(R1_USER_ANSWER);
         expect(deltaEvents.length).toBeGreaterThan(0);
         expect(deltaEvents.map((e) => e.data.text).join('')).toBe('Ответ агента пользователю');
         expect(doneEvent.data.assistantMessage.content).toBe('Ответ агента пользователю');
-        // Готовность этапа приходит вместе с ответом — по ней фронт решает,
-        // показывать ли кнопку формирования артефакта.
-        expect(doneEvent.data.completionState.ready).toBe(true);
 
-        // Агент получает вердикт оценщика прямо в системный промпт — без этого
-        // он не знает состояния этапа и прощается «удачи на следующем этапе!»,
-        // пока оценщик держит этап неготовым. На первом ходу оценки ещё не
-        // было -> в промпте статус «не готов» со списком всех требуемых полей.
+        // Агент сложил данные в карточку этапа прямо посреди хода — фронт
+        // узнаёт об этом отдельным событием, не дожидаясь конца стрима.
+        expect(fieldsEvent.data.collectedFields.competitors.value).toBe('Альфа и Бета');
+        expect(fieldsEvent.data.completionState.ready).toBe(true);
+
+        // Готовность этапа приходит вместе с ответом — по ней фронт решает,
+        // показывать ли кнопку формирования артефакта. Это уже не вердикт
+        // отдельной модели, а арифметика по заполненным полям карточки.
+        expect(doneEvent.data.completionState.ready).toBe(true);
+        expect(doneEvent.data.completionState.missingFields).toEqual([]);
+
+        // В системный промпт уходит живой чек-лист заполненности, собранный из
+        // базы: на первом ходу пусто, поэтому агент видит все поля как
+        // несобранные и знает, что спрашивать.
         const [streamCall] = chatCompleteStream.mock.calls[0];
         expect(streamCall.messages[0].role).toBe('system');
-        expect(streamCall.messages[0].content).toContain('Статус этапа');
-        expect(streamCall.messages[0].content).toContain('ЕЩЁ НЕ готов');
-        expect(streamCall.messages[0].content).toContain('marketDescription');
+        expect(streamCall.messages[0].content).toContain('Карточка этапа — заполнено 0 из 4');
+        expect(streamCall.messages[0].content).toContain('[ ] marketDescription — не собрано');
+        // summary — синтез остальных полей, в диалоге он не собирается.
+        expect(streamCall.messages[0].content).not.toContain('[ ] summary');
 
         const draftRes = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
@@ -274,11 +323,8 @@ describe('Экспертный маршрут R1 -> R2 (сквозной сце�
             .send({ agentId: String(r1._id) });
         const sessionId = sessionRes.body.data.session._id;
 
-        // Диалог нужен: без него гейт готовности не пустит этап к завершению.
-        await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
-            .set('Cookie', cookie)
-            .send({ content: 'Рынок — малый бизнес' });
+        // Диалог нужен: без собранной карточки гейт не пустит этап к завершению.
+        await collectStageFields(project, cookie, sessionId);
 
         await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
@@ -297,7 +343,7 @@ describe('Экспертный маршрут R1 -> R2 (сквозной сце�
 });
 
 describe('Гейт готовности этапа (DONE-4)', () => {
-    async function startDialogue(project, cookie, agentId, { withMessage = true } = {}) {
+    async function startDialogue(project, cookie, agentId, { withMessage = true, collect = true } = {}) {
         const sessionRes = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
             .set('Cookie', cookie)
@@ -305,26 +351,27 @@ describe('Гейт готовности этапа (DONE-4)', () => {
         const sessionId = sessionRes.body.data.session._id;
 
         if (withMessage) {
-            await request(app)
-                .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
-                .set('Cookie', cookie)
-                .send({ content: 'Рынок — малый бизнес' });
+            if (collect) {
+                await collectStageFields(project, cookie, sessionId);
+            } else {
+                await request(app)
+                    .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
+                    .set('Cookie', cookie)
+                    .send({ content: R1_USER_ANSWER });
+            }
         }
 
         return sessionId;
     }
 
-    it('не даёт сформировать артефакт, пока оценщик считает этап неготовым', async () => {
-        mockReadiness = {
-            ready: false,
-            missingFields: ['competitors', 'risks'],
-            reason: 'Не собраны конкуренты и риски.'
-        };
-
+    it('не даёт сформировать артефакт, пока карточка этапа заполнена не полностью', async () => {
         const { r1 } = await seedAgents();
         const { owner, project } = await setupProject();
         const cookie = authCookie(owner._id, owner.email);
-        const sessionId = await startDialogue(project, cookie, r1._id);
+        const sessionId = await startDialogue(project, cookie, r1._id, { collect: false });
+
+        // Агент собрал только два поля из четырёх.
+        await collectStageFields(project, cookie, sessionId, R1_FIELD_UPDATES.slice(0, 2));
 
         const res = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
@@ -334,7 +381,6 @@ describe('Гейт готовности этапа (DONE-4)', () => {
         expect(res.status).toBe(409);
         expect(res.body.error.code).toBe('STAGE_NOT_READY');
         expect(res.body.error.missingFields).toEqual(['competitors', 'risks']);
-        expect(res.body.error.reason).toBe('Не собраны конкуренты и риски.');
 
         // Ни артефакта, ни файла: до генерации дело не дошло.
         expect(await Artifact.countDocuments({ projectId: project._id })).toBe(0);
@@ -344,17 +390,74 @@ describe('Гейт готовности этапа (DONE-4)', () => {
         const after = await Project.findById(project._id);
         expect(String(after.currentAgentId)).toBe(String(r1._id));
 
-        // На следующем ходу агент получает конкретный вердикт оценщика в
-        // системный промпт — и инструкцию не объявлять этап завершённым.
+        // На следующем ходу агент видит ту же карточку, что и сервер: два поля
+        // закрыты, два открыты. Расхождение во мнениях невозможно — источник
+        // один, и это база, а не отдельная модель.
         await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
             .set('Cookie', cookie)
             .send({ content: 'Что ещё нужно обсудить?' });
 
         const lastStreamCall = chatCompleteStream.mock.calls.at(-1)[0];
-        expect(lastStreamCall.messages[0].content).toContain('competitors, risks');
-        expect(lastStreamCall.messages[0].content).toContain('Не собраны конкуренты и риски.');
+        expect(lastStreamCall.messages[0].content).toContain('Карточка этапа — заполнено 2 из 4');
+        expect(lastStreamCall.messages[0].content).toContain('[x] marketDescription');
+        expect(lastStreamCall.messages[0].content).toContain('[ ] competitors — не собрано');
         expect(lastStreamCall.messages[0].content).toContain('не желай удачи на следующем этапе');
+    });
+
+    it('поле с выдуманной цитатой не сохраняется, а отказ уходит агенту внутрь хода', async () => {
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+        const sessionId = await startDialogue(project, cookie, r1._id, { withMessage: false });
+
+        // Пользователь про конкурентов ничего не говорил, а агент пытается
+        // закрыть поле цитатой, которой в его репликах нет.
+        await collectStageFields(project, cookie, sessionId, [
+            { name: 'marketDescription', value: 'Рынок логистики растёт', quote: 'рынок логистики растёт' },
+            { name: 'competitors', value: 'Их нет', quote: 'конкурентов на рынке вообще не существует' }
+        ]);
+
+        const session = await ExpertSession.findById(sessionId);
+        expect(session.collectedFields.get('marketDescription').value).toBe('Рынок логистики растёт');
+        expect(session.collectedFields.get('competitors')).toBeUndefined();
+
+        // Отказ ушёл в модель как результат её же вызова — пользователь его не
+        // видит, а агент получает шанс исправиться в том же ходу.
+        const toolResult = chatCompleteStream.mock.calls
+            .at(-1)[0].messages
+            .find((m) => m.role === 'tool');
+        const payload = JSON.parse(toolResult.content);
+        expect(payload.ok).toBe(false);
+        expect(payload.saved).toEqual(['marketDescription']);
+        expect(payload.rejected[0].name).toBe('competitors');
+        expect(payload.rejected[0].reason).toContain('цитата не найдена');
+        expect(payload.missingFields).toEqual(['nicheHypothesis', 'competitors', 'risks']);
+    });
+
+    it('второй вызов инструмента за ход невозможен: финальный проход идёт с tool_choice=none', async () => {
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+        const sessionId = await startDialogue(project, cookie, r1._id, { withMessage: false });
+
+        // Агент «хочет» звать инструмент дважды подряд — потолок раундов не даёт.
+        mockToolCalls.push(saveFieldsCall(R1_FIELD_UPDATES.slice(0, 1)));
+        mockToolCalls.push(saveFieldsCall(R1_FIELD_UPDATES.slice(1, 2)));
+
+        await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
+            .set('Cookie', cookie)
+            .send({ content: R1_USER_ANSWER });
+
+        // Ровно два прохода модели: с инструментом и принудительно текстовый.
+        expect(chatCompleteStream).toHaveBeenCalledTimes(2);
+        expect(chatCompleteStream.mock.calls[0][0].toolChoice).toBe('auto');
+        expect(chatCompleteStream.mock.calls[1][0].toolChoice).toBe('none');
+
+        // Сохранилось только то, что успел первый раунд.
+        const session = await ExpertSession.findById(sessionId);
+        expect([...session.collectedFields.keys()]).toEqual(['marketDescription']);
     });
 
     it('этап без единого сообщения считается неготовым без вызова модели', async () => {
@@ -374,13 +477,13 @@ describe('Гейт готовности этапа (DONE-4)', () => {
     });
 
     it('allowPartialCompletion=true пропускает этап мимо гейта', async () => {
-        mockReadiness = { ready: false, missingFields: ['risks'], reason: 'Риски не собраны.' };
-
         const { r1 } = await seedAgents();
         await Agent.findByIdAndUpdate(r1._id, { allowPartialCompletion: true });
         const { owner, project } = await setupProject();
         const cookie = authCookie(owner._id, owner.email);
-        const sessionId = await startDialogue(project, cookie, r1._id);
+        // Карточка заполнена лишь частично — обычный этап так не завершить.
+        const sessionId = await startDialogue(project, cookie, r1._id, { collect: false });
+        await collectStageFields(project, cookie, sessionId, R1_FIELD_UPDATES.slice(0, 1));
 
         const res = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
@@ -692,6 +795,7 @@ describe('Коды ошибок фронта: AGENT_INACTIVE / QDRANT_INDEX_FAIL
             .set('Cookie', cookie)
             .send({ agentId: String(r1._id) });
         const sessionId = sessionRes.body.data.session._id;
+        await collectStageFields(project, cookie, sessionId);
 
         upsertChunks.mockRejectedValueOnce(new Error('Qdrant недоступен'));
 
@@ -714,6 +818,7 @@ describe('Коды ошибок фронта: AGENT_INACTIVE / QDRANT_INDEX_FAIL
             .set('Cookie', cookie)
             .send({ agentId: String(r1._id) });
         const sessionId = sessionRes.body.data.session._id;
+        await collectStageFields(project, cookie, sessionId);
 
         upsertChunks.mockRejectedValueOnce(new Error('Qdrant недоступен'));
 
@@ -722,7 +827,8 @@ describe('Коды ошибок фронта: AGENT_INACTIVE / QDRANT_INDEX_FAIL
             .set('Cookie', cookie)
             .send({ confirmArtifact: true });
         expect(firstRes.status).toBe(502);
-        expect(chatComplete).toHaveBeenCalledTimes(1);
+        // Генерация артефакта — два вызова: структурированные поля и документ.
+        expect(chatComplete).toHaveBeenCalledTimes(2);
 
         const retryRes = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
@@ -731,8 +837,8 @@ describe('Коды ошибок фронта: AGENT_INACTIVE / QDRANT_INDEX_FAIL
 
         expect(retryRes.status).toBe(200);
         expect(retryRes.body.data.confirmed).toBe(true);
-        // Reused, not regenerated: still only the one LLM call from the first attempt.
-        expect(chatComplete).toHaveBeenCalledTimes(1);
+        // Reused, not regenerated: still only the calls from the first attempt.
+        expect(chatComplete).toHaveBeenCalledTimes(2);
 
         const artifacts = await Artifact.find({ projectId: project._id });
         expect(artifacts).toHaveLength(1);
@@ -749,6 +855,7 @@ describe('Коды ошибок фронта: AGENT_INACTIVE / QDRANT_INDEX_FAIL
             .set('Cookie', cookie)
             .send({ agentId: String(r1._id) });
         const sessionId = sessionRes.body.data.session._id;
+        await collectStageFields(project, cookie, sessionId);
 
         // Ошибка без .code — как обычно бросает сам OpenAI SDK при сетевом сбое/rate limit,
         // а не наша собственная ARTIFACT_VALIDATION_FAILED-логика парсинга JSON.
@@ -810,6 +917,7 @@ describe('Автозавершение Project.status', () => {
             .set('Cookie', cookie)
             .send({ agentId: String(r1._id) });
         const sessionId = sessionRes.body.data.session._id;
+        await collectStageFields(project, cookie, sessionId);
 
         const completeRes = await completeAgent(cookie, project, r1._id, sessionId);
         expect(completeRes.status).toBe(200);
@@ -827,6 +935,7 @@ describe('Автозавершение Project.status', () => {
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
             .set('Cookie', cookie)
             .send({ agentId: String(r1._id) });
+        await collectStageFields(project, cookie, r1SessionRes.body.data.session._id);
         await completeAgent(cookie, project, r1._id, r1SessionRes.body.data.session._id);
 
         const projectAfterR1 = await Project.findById(project._id);
@@ -858,12 +967,9 @@ describe('Гейт обязательных полей артефакта пер
             .send({ agentId: String(r1._id) });
         const sessionId = sessionRes.body.data.session._id;
 
-        // Диалог нужен, чтобы этап прошёл гейт готовности: проверяем именно
-        // валидацию полей артефакта, а не отсутствие собранных данных.
-        await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
-            .set('Cookie', cookie)
-            .send({ content: 'Рынок — малый бизнес' });
+        // Карточка этапа нужна заполненной, чтобы этап прошёл гейт готовности:
+        // проверяем именно валидацию полей артефакта, а не отсутствие данных.
+        await collectStageFields(project, cookie, sessionId);
 
         // Модель вернула JSON, где нет обязательного поля 'risks'
         // (r1.requiredFields = marketDescription, nicheHypothesis, competitors, risks, summary).

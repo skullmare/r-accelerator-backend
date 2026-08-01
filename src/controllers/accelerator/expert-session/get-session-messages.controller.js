@@ -12,12 +12,14 @@ export async function getSessionMessages(req, res) {
 
         const items = await Message.find({ sessionId: session._id }).sort({ createdAt: 1 });
 
-        // completionState отдаётся вместе с историей, чтобы после перезагрузки
-        // страницы фронт восстановил состояние кнопки завершения этапа без
-        // отправки нового сообщения и без лишнего вызова модели.
+        // completionState и карточка этапа отдаются вместе с историей, чтобы
+        // после перезагрузки страницы фронт восстановил и состояние кнопки
+        // завершения этапа, и прогресс заполнения — без отправки нового
+        // сообщения и без единого вызова модели.
         return res.success({
             items,
             completionState: session.completionState,
+            collectedFields: session.collectedFields,
             artifactId: session.artifactId,
             status: session.status
         }, 'История сообщений получена', 200);

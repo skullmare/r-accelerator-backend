@@ -6,7 +6,7 @@ const PROJECT_STAGES = ['idea', 'mvp', 'launched', 'growth', 'scale'];
 const PROJECT_STATUSES = ['active', 'paused', 'completed', 'archived'];
 
 // POST /accelerator/projects — создание проекта (user)
-// ownerId и progress выставляются бэкендом, не принимаются от клиента
+// ownerId выставляется бэкендом, не принимается от клиента
 const createProjectSchema = z.object({
     body: z.object({
         name: z.string().trim().min(1).max(150),
@@ -21,7 +21,7 @@ const createProjectSchema = z.object({
 });
 
 // PATCH /accelerator/projects/:projectId — обновление проекта (user)
-// ownerId и progress выставляются бэкендом, не принимаются от клиента
+// ownerId выставляется бэкендом, не принимается от клиента
 const updateProjectSchema = z.object({
     params: z.object({ projectId: objectId }),
     body: z.object({

@@ -1,51 +1,24 @@
 import request from 'supertest';
 
-// Очередь вызовов инструмента, которые «сделает» агент на ближайших ходах:
+// Очередь вызовов инструментов, которые «сделает» агент на ближайших ходах:
 // каждый элемент — набор tool_calls для одного прохода модели. Имя обязано
-// начинаться с `mock`, иначе jest не пустит переменную внутрь hoisted-фабрики
-// ниже.
+// начинаться с `mock`, иначе jest не пустит переменную внутрь hoisted-фабрики.
 let mockToolCalls = [];
 
-// chatComplete обслуживает генерацию артефакта (структурированные поля -> текст
-// документа) и разовый бэкфилл карточки этапа. Мок различает вызовы по
-// инструкции в последнем сообщении — ровно как это делает реальный поток.
+// chatComplete обслуживает единственный оставшийся не-стриминговый вызов —
+// генерацию текста документа этапа.
 jest.mock('../../services/llm.service.js', () => ({
-    chatComplete: jest.fn(async ({ messages }) => {
-        const instruction = messages[messages.length - 1].content;
-
-        if (instruction.includes('Перенеси в карточку этапа')) {
-            return { content: JSON.stringify({ fields: [] }), tokenUsage: null };
-        }
-
-        if (instruction.includes('Напиши финальный документ')) {
-            return {
-                content: [
-                    '## Рынок',
-                    '',
-                    'Рынок растёт, основной спрос — у малого бизнеса.',
-                    '',
-                    '- Конкурент «Альфа»',
-                    '- Конкурент «Бета»',
-                    '',
-                    '| Конкурент | Доля |',
-                    '|---|---|',
-                    '| Альфа | 35% |'
-                ].join('\n'),
-                tokenUsage: { totalTokens: 120 }
-            };
-        }
-
-        return {
-            content: JSON.stringify({
-                marketDescription: 'Описание рынка',
-                nicheHypothesis: 'Гипотеза ниши',
-                competitors: 'Конкуренты',
-                risks: 'Риски',
-                summary: 'Итоговая сводка по рынку'
-            }),
-            tokenUsage: { totalTokens: 42 }
-        };
-    }),
+    chatComplete: jest.fn(async () => ({
+        content: [
+            '## Рынок',
+            '',
+            'Рынок логистики растёт, основной спрос — у малого бизнеса.',
+            '',
+            '- Конкурент «Альфа»',
+            '- Конкурент «Бета»'
+        ].join('\n'),
+        tokenUsage: { totalTokens: 120 }
+    })),
     // Модель либо вызывает инструмент, либо пишет текст — как настоящая. Вызов
     // возможен только когда провайдеру это разрешено (toolChoice !== 'none'),
     // поэтому мок заодно проверяет, что финальный проход хода действительно
@@ -64,6 +37,7 @@ jest.mock('../../services/llm.service.js', () => ({
 
 jest.mock('../../services/qdrant.service.js', () => ({
     searchContext: jest.fn().mockResolvedValue([]),
+    searchKnowledge: jest.fn().mockResolvedValue([]),
     upsertChunks: jest.fn().mockResolvedValue(['point-1']),
     deleteBySource: jest.fn().mockResolvedValue(undefined)
 }));
@@ -98,38 +72,42 @@ afterEach(async () => {
     mockToolCalls = [];
 });
 
-// Реплика пользователя, из которой агент «достаёт» все поля карточки R1.
-// Цитаты в R1_FIELD_UPDATES обязаны дословно встречаться именно здесь — иначе
-// проверка происхождения отклонит сохранение, как и на проде.
-const R1_USER_ANSWER = 'рынок логистики растёт, ниша — B2B SaaS, ' +
-    'конкуренты Альфа и Бета, риски — длинный цикл продаж';
+const USER_ANSWER = 'рынок логистики растёт, ниша — B2B SaaS, конкуренты Альфа и Бета';
 
-const R1_FIELD_UPDATES = [
-    { name: 'marketDescription', value: 'Рынок логистики растёт', quote: 'рынок логистики растёт' },
-    { name: 'nicheHypothesis', value: 'B2B SaaS для логистики', quote: 'ниша — B2B SaaS' },
-    { name: 'competitors', value: 'Альфа и Бета', quote: 'конкуренты Альфа и Бета' },
-    { name: 'risks', value: 'Длинный цикл продаж', quote: 'риски — длинный цикл продаж' }
+const COLLECTED_ITEMS = [
+    { key: 'market', value: 'Рынок логистики растёт' },
+    { key: 'niche', value: 'B2B SaaS для логистики' },
+    { key: 'competitors', value: 'Альфа и Бета' }
 ];
 
-function saveFieldsCall(fields) {
+function saveDataCall(items) {
     return [{
-        id: 'call-1',
+        id: 'call-save',
         type: 'function',
-        function: { name: 'save_collected_fields', arguments: JSON.stringify({ fields }) }
+        function: { name: 'save_data', arguments: JSON.stringify({ items }) }
     }];
 }
 
-// Один ход диалога, в котором агент складывает данные в карточку этапа. После
-// него completionState.ready=true, и этап проходит гейт завершения.
-async function collectStageFields(project, cookie, sessionId, fields = R1_FIELD_UPDATES) {
-    mockToolCalls.push(saveFieldsCall(fields));
+function stageReadyCall() {
+    return [{
+        id: 'call-ready',
+        type: 'function',
+        function: { name: 'stage_ready', arguments: '{}' }
+    }];
+}
+
+// Один ход диалога, в котором агент сохраняет данные и объявляет этап
+// собранным (оба вызова в одном проходе — так же, как это делает реальная
+// модель).
+async function collectAndMarkReady(project, cookie, sessionId, items = COLLECTED_ITEMS) {
+    mockToolCalls.push([...saveDataCall(items), ...stageReadyCall()]);
     return request(app)
         .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
         .set('Cookie', cookie)
-        .send({ content: R1_USER_ANSWER });
+        .send({ content: USER_ANSWER });
 }
 
-// SSE responses come back as raw "event: X\ndata: {...}\n\n" blocks.
+// SSE-ответ приходит сырыми блоками "event: X\ndata: {...}\n\n".
 function parseSSE(text) {
     return text
         .split('\n\n')
@@ -141,30 +119,21 @@ function parseSSE(text) {
         });
 }
 
+// Маршрут строится по order — связывать агентов через nextAgentId не нужно.
 async function seedAgents() {
-    const r2 = await Agent.create({
-        name: 'Регина',
-        roleTitle: 'Эксперт по аудитории',
-        order: 2,
-        nextAgentId: null,
-        systemPrompt: 'Ты эксперт по аудитории.',
-        completionCriteria: 'Собран бриф аудитории.',
-        artifactDefinition: {
-            artifactType: 'audience_brief',
-            requiredFields: ['summary']
-        }
-    });
     const r1 = await Agent.create({
         name: 'Роман',
-        roleTitle: 'Эксперт по рынку',
+        description: 'Эксперт по рынку',
         order: 1,
-        nextAgentId: r2._id,
         systemPrompt: 'Ты эксперт по рынку.',
-        completionCriteria: 'Собран рыночный бриф.',
-        artifactDefinition: {
-            artifactType: 'market_brief',
-            requiredFields: ['marketDescription', 'nicheHypothesis', 'competitors', 'risks', 'summary']
-        }
+        completionPrompt: 'Этап завершён, когда понятны рынок, ниша и конкуренты.'
+    });
+    const r2 = await Agent.create({
+        name: 'Регина',
+        description: 'Эксперт по аудитории',
+        order: 2,
+        systemPrompt: 'Ты эксперт по аудитории.',
+        completionPrompt: 'Этап завершён, когда описаны сегменты аудитории.'
     });
     return { r1, r2 };
 }
@@ -175,161 +144,191 @@ async function setupProject() {
     return { owner, project };
 }
 
-describe('Экспертный маршрут R1 -> R2 (сквозной сценарий)', () => {
-    it('проходит create session -> message (SSE) -> draft complete -> confirm complete -> R2', async () => {
+async function openSession(project, cookie, agentId = undefined) {
+    const res = await request(app)
+        .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
+        .set('Cookie', cookie)
+        .send(agentId ? { agentId: String(agentId) } : {});
+    return res;
+}
+
+describe('Сквозной маршрут: проект -> диалог -> документ -> следующий агент', () => {
+    it('проводит пользователя от первого агента до последнего', async () => {
         const { r1, r2 } = await seedAgents();
         const { owner, project } = await setupProject();
         const cookie = authCookie(owner._id, owner.email);
 
-        const sessionRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
-            .set('Cookie', cookie)
-            .send({ agentId: String(r1._id) });
+        // 1. Сессия открывается без указания агента — сервер сам берёт текущего.
+        const sessionRes = await openSession(project, cookie);
         expect(sessionRes.status).toBe(201);
+        expect(sessionRes.body.data.agent._id).toBe(String(r1._id));
+        // Промпты обычному пользователю не отдаются.
+        expect(sessionRes.body.data.agent.systemPrompt).toBeUndefined();
         const sessionId = sessionRes.body.data.session._id;
 
-        const messageRes = await collectStageFields(project, cookie, sessionId);
+        // 2. Ход диалога: агент собирает данные и объявляет этап готовым.
+        const messageRes = await collectAndMarkReady(project, cookie, sessionId);
         expect(messageRes.status).toBe(200);
         expect(messageRes.headers['content-type']).toMatch(/text\/event-stream/);
 
         const events = parseSSE(messageRes.text);
         const createdEvent = events.find((e) => e.event === 'message_created');
         const deltaEvents = events.filter((e) => e.event === 'delta');
-        const fieldsEvent = events.find((e) => e.event === 'fields_updated');
+        const dataEvent = events.find((e) => e.event === 'data_updated');
         const doneEvent = events.find((e) => e.event === 'done');
 
-        expect(createdEvent.data.userMessage.content).toBe(R1_USER_ANSWER);
-        expect(deltaEvents.length).toBeGreaterThan(0);
+        expect(createdEvent.data.userMessage.content).toBe(USER_ANSWER);
         expect(deltaEvents.map((e) => e.data.text).join('')).toBe('Ответ агента пользователю');
         expect(doneEvent.data.assistantMessage.content).toBe('Ответ агента пользователю');
 
-        // Агент сложил данные в карточку этапа прямо посреди хода — фронт
-        // узнаёт об этом отдельным событием, не дожидаясь конца стрима.
-        expect(fieldsEvent.data.collectedFields.competitors.value).toBe('Альфа и Бета');
-        expect(fieldsEvent.data.completionState.ready).toBe(true);
+        // Данные приезжают на фронт ещё до конца стрима.
+        expect(dataEvent.data.collectedData.competitors).toBe('Альфа и Бета');
+        expect(dataEvent.data.readyForArtifact).toBe(true);
+        expect(doneEvent.data.readyForArtifact).toBe(true);
 
-        // Готовность этапа приходит вместе с ответом — по ней фронт решает,
-        // показывать ли кнопку формирования артефакта. Это уже не вердикт
-        // отдельной модели, а арифметика по заполненным полям карточки.
-        expect(doneEvent.data.completionState.ready).toBe(true);
-        expect(doneEvent.data.completionState.missingFields).toEqual([]);
-
-        // В системный промпт уходит живой чек-лист заполненности, собранный из
-        // базы: на первом ходу пусто, поэтому агент видит все поля как
-        // несобранные и знает, что спрашивать.
+        // В системный промпт уходит условие завершения и живая карточка данных.
         const [streamCall] = chatCompleteStream.mock.calls[0];
         expect(streamCall.messages[0].role).toBe('system');
-        expect(streamCall.messages[0].content).toContain('Карточка этапа — заполнено 0 из 4');
-        expect(streamCall.messages[0].content).toContain('[ ] marketDescription — не собрано');
-        // summary — синтез остальных полей, в диалоге он не собирается.
-        expect(streamCall.messages[0].content).not.toContain('[ ] summary');
+        expect(streamCall.messages[0].content).toContain('Ты эксперт по рынку.');
+        expect(streamCall.messages[0].content).toContain('Этап завершён, когда понятны рынок');
+        expect(streamCall.messages[0].content).toContain('пока ничего не собрано');
 
-        const draftRes = await request(app)
+        // 3. Завершение этапа — один вызов.
+        const completeRes = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({});
-        expect(draftRes.status).toBe(200);
-        expect(draftRes.body.data.artifact.status).toBe('ready');
-        expect(draftRes.body.data.nextAgentId).toBeNull();
+            .set('Cookie', cookie);
+        expect(completeRes.status).toBe(200);
+        expect(completeRes.body.data.nextAgentId).toBe(String(r2._id));
 
-        // Артефакт этапа — сгенерированный PDF: он отрендерен по-настоящему и
-        // выложен в хранилище уже на стадии черновика, до подтверждения.
-        expect(draftRes.body.data.artifact.file.url).toBe('https://s3.test/artifact-test.pdf');
-        expect(draftRes.body.data.artifact.file.mimeType).toBe('application/pdf');
-        expect(draftRes.body.data.artifact.documentMarkdown).toContain('## Рынок');
+        // Документ этапа — реально отрендеренный PDF в хранилище.
+        const artifact = completeRes.body.data.artifact;
+        expect(artifact.file.url).toBe('https://s3.test/artifact-test.pdf');
+        expect(artifact.file.mimeType).toBe('application/pdf');
+        expect(artifact.documentMarkdown).toContain('## Рынок');
+        // Сводка собрана из данных этапа, а не отдельным вызовом модели.
+        expect(artifact.summary).toContain('Рынок логистики растёт');
 
         const [[uploadArg]] = uploadFile.mock.calls;
         expect(uploadArg.mimetype).toBe('application/pdf');
         expect(uploadArg.buffer.subarray(0, 5).toString()).toBe('%PDF-');
 
-        const projectAfterDraft = await Project.findById(project._id);
-        expect(String(projectAfterDraft.currentAgentId)).toBe(String(r1._id));
-
-        const confirmRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({ confirmArtifact: true });
-        expect(confirmRes.status).toBe(200);
-        expect(confirmRes.body.data.artifact.status).toBe('confirmed');
-        expect(confirmRes.body.data.nextAgentId).toBe(String(r2._id));
-
-        const projectAfterConfirm = await Project.findById(project._id);
-        expect(String(projectAfterConfirm.currentAgentId)).toBe(String(r2._id));
-        expect(projectAfterConfirm.completedAgentIds.map(String)).toContain(String(r1._id));
-        expect(projectAfterConfirm.contextSummary).toContain('Итоговая сводка по рынку');
-
+        // Документ этапа ушёл в индекс связным текстом.
         expect(upsertChunks).toHaveBeenCalledWith(expect.objectContaining({
             projectId: project._id,
             agentId: String(r1._id),
             sourceType: 'artifact'
         }));
-
-        // В индекс уходит связный текст документа (documentMarkdown), а не
-        // JSON.stringify структурированных полей.
         const [[indexArg]] = upsertChunks.mock.calls;
-        expect(indexArg.chunks[0].text).toContain('Рынок растёт');
-        expect(indexArg.chunks[0].text).not.toContain('"marketDescription"');
+        expect(indexArg.chunks[0].text).toContain('Рынок логистики растёт');
 
+        const projectAfterR1 = await Project.findById(project._id);
+        expect(String(projectAfterR1.currentAgentId)).toBe(String(r2._id));
+        expect(projectAfterR1.completedAgentIds.map(String)).toContain(String(r1._id));
+        expect(projectAfterR1.contextSummary).toContain('Рынок логистики растёт');
+        expect(projectAfterR1.status).toBe('active');
+
+        // 4. Маршрут показывает пройденный и текущий этапы.
         const routeRes = await request(app)
             .get(`/api/v1/accelerator/projects/${project._id}/expert-route`)
             .set('Cookie', cookie);
         expect(routeRes.status).toBe(200);
         expect(routeRes.body.data.currentAgentId).toBe(String(r2._id));
-        expect(routeRes.body.data.items).toEqual([
-            { _id: String(r1._id), name: 'Роман', status: 'completed', nextAgentId: String(r2._id) },
-            { _id: String(r2._id), name: 'Регина', status: 'current', nextAgentId: null }
+        expect(routeRes.body.data.items.map((i) => [i.name, i.status])).toEqual([
+            ['Роман', 'completed'],
+            ['Регина', 'current']
         ]);
 
-        const repeatCompleteRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({ confirmArtifact: true });
-        expect(repeatCompleteRes.status).toBe(409);
+        // 5. Последний агент — и проект закрывается.
+        const r2SessionRes = await openSession(project, cookie);
+        expect(r2SessionRes.body.data.agent._id).toBe(String(r2._id));
+        const r2SessionId = r2SessionRes.body.data.session._id;
+        await collectAndMarkReady(project, cookie, r2SessionId, [{ key: 'segments', value: 'Малый бизнес' }]);
+
+        const r2CompleteRes = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${r2SessionId}/complete`)
+            .set('Cookie', cookie);
+        expect(r2CompleteRes.status).toBe(200);
+        expect(r2CompleteRes.body.data.nextAgentId).toBeNull();
+
+        const finished = await Project.findById(project._id);
+        expect(finished.status).toBe('completed');
+        expect(finished.currentAgentId).toBeNull();
+
+        // Пройденный маршрут не воскресает при повторном просмотре.
+        const finalRouteRes = await request(app)
+            .get(`/api/v1/accelerator/projects/${project._id}/expert-route`)
+            .set('Cookie', cookie);
+        expect(finalRouteRes.body.data.currentAgentId).toBeNull();
+        expect(finalRouteRes.body.data.items.map((i) => i.status)).toEqual(['completed', 'completed']);
+    });
+
+    it('повторный вызов открытия сессии возвращает ту же активную сессию', async () => {
+        await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+
+        const first = await openSession(project, cookie);
+        const second = await openSession(project, cookie);
+
+        expect(second.body.data.session._id).toBe(first.body.data.session._id);
+        expect(await ExpertSession.countDocuments({ projectId: project._id })).toBe(1);
+    });
+
+    it('нельзя открыть сессию с агентом, который не является текущим', async () => {
+        const { r2 } = await seedAgents();
+        const { owner, project } = await setupProject();
+
+        const res = await openSession(project, authCookie(owner._id, owner.email), r2._id);
+
+        expect(res.status).toBe(409);
+        expect(res.body.error.code).toBe('AGENT_NOT_CURRENT');
+    });
+
+    it('удаление текущего агента не запирает проект: маршрут продолжается со следующего непройденного', async () => {
+        const { r1, r2 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+
+        // Проект встал на первого агента, и админ его удалил.
+        await openSession(project, cookie);
+        await Agent.deleteOne({ _id: r1._id });
+
+        const res = await openSession(project, cookie);
+
+        expect(res.status).toBe(201);
+        expect(res.body.data.agent._id).toBe(String(r2._id));
+    });
+
+    it('без заведённых агентов сессия не создаётся (409 NO_CURRENT_AGENT)', async () => {
+        const { owner, project } = await setupProject();
+
+        const res = await openSession(project, authCookie(owner._id, owner.email));
+
+        expect(res.status).toBe(409);
+        expect(res.body.error.code).toBe('NO_CURRENT_AGENT');
     });
 
     it('чужой пользователь не может создать сессию в проекте (403)', async () => {
-        const { r1 } = await seedAgents();
+        await seedAgents();
         const { project } = await setupProject();
         const stranger = await createUser();
 
-        const res = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
-            .set('Cookie', authCookie(stranger._id, stranger.email))
-            .send({ agentId: String(r1._id) });
+        const res = await openSession(project, authCookie(stranger._id, stranger.email));
 
         expect(res.status).toBe(403);
     });
 
-    it('возвращает 404 при создании сессии с несуществующим agentId', async () => {
-        const { owner, project } = await setupProject();
-
-        const res = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
-            .set('Cookie', authCookie(owner._id, owner.email))
-            .send({ agentId: '507f1f77bcf86cd799439099' });
-
-        expect(res.status).toBe(404);
-        expect(res.body.error.code).toBe('AGENT_NOT_FOUND');
-    });
-
-    it('возвращает 409 JSON-ошибкой (не SSE), если сессия уже завершена', async () => {
-        const { r1 } = await seedAgents();
+    it('в завершённую сессию нельзя написать: 409 JSON-ошибкой, а не SSE', async () => {
+        await seedAgents();
         const { owner, project } = await setupProject();
         const cookie = authCookie(owner._id, owner.email);
 
-        const sessionRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
-            .set('Cookie', cookie)
-            .send({ agentId: String(r1._id) });
+        const sessionRes = await openSession(project, cookie);
         const sessionId = sessionRes.body.data.session._id;
-
-        // Диалог нужен: без собранной карточки гейт не пустит этап к завершению.
-        await collectStageFields(project, cookie, sessionId);
-
+        await collectAndMarkReady(project, cookie, sessionId);
         await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({ confirmArtifact: true });
+            .set('Cookie', cookie);
 
         const res = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
@@ -342,294 +341,208 @@ describe('Экспертный маршрут R1 -> R2 (сквозной сце�
     });
 });
 
-describe('Гейт готовности этапа (DONE-4)', () => {
-    async function startDialogue(project, cookie, agentId, { withMessage = true, collect = true } = {}) {
-        const sessionRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
-            .set('Cookie', cookie)
-            .send({ agentId: String(agentId) });
-        const sessionId = sessionRes.body.data.session._id;
-
-        if (withMessage) {
-            if (collect) {
-                await collectStageFields(project, cookie, sessionId);
-            } else {
-                await request(app)
-                    .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
-                    .set('Cookie', cookie)
-                    .send({ content: R1_USER_ANSWER });
-            }
-        }
-
-        return sessionId;
-    }
-
-    it('не даёт сформировать артефакт, пока карточка этапа заполнена не полностью', async () => {
-        const { r1 } = await seedAgents();
+describe('Сбор данных этапа', () => {
+    it('сохраняет произвольные ключи и показывает их агенту на следующем ходу', async () => {
+        await seedAgents();
         const { owner, project } = await setupProject();
         const cookie = authCookie(owner._id, owner.email);
-        const sessionId = await startDialogue(project, cookie, r1._id, { collect: false });
+        const sessionId = (await openSession(project, cookie)).body.data.session._id;
 
-        // Агент собрал только два поля из четырёх.
-        await collectStageFields(project, cookie, sessionId, R1_FIELD_UPDATES.slice(0, 2));
-
-        const res = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({});
-
-        expect(res.status).toBe(409);
-        expect(res.body.error.code).toBe('STAGE_NOT_READY');
-        expect(res.body.error.missingFields).toEqual(['competitors', 'risks']);
-
-        // Ни артефакта, ни файла: до генерации дело не дошло.
-        expect(await Artifact.countDocuments({ projectId: project._id })).toBe(0);
-        expect(uploadFile).not.toHaveBeenCalled();
-
-        // Маршрут не сдвинулся.
-        const after = await Project.findById(project._id);
-        expect(String(after.currentAgentId)).toBe(String(r1._id));
-
-        // На следующем ходу агент видит ту же карточку, что и сервер: два поля
-        // закрыты, два открыты. Расхождение во мнениях невозможно — источник
-        // один, и это база, а не отдельная модель.
+        mockToolCalls.push(saveDataCall([{ key: 'market', value: 'Рынок логистики растёт' }]));
         await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
             .set('Cookie', cookie)
-            .send({ content: 'Что ещё нужно обсудить?' });
-
-        const lastStreamCall = chatCompleteStream.mock.calls.at(-1)[0];
-        expect(lastStreamCall.messages[0].content).toContain('Карточка этапа — заполнено 2 из 4');
-        expect(lastStreamCall.messages[0].content).toContain('[x] marketDescription');
-        expect(lastStreamCall.messages[0].content).toContain('[ ] competitors — не собрано');
-        expect(lastStreamCall.messages[0].content).toContain('не желай удачи на следующем этапе');
-    });
-
-    it('поле с выдуманной цитатой не сохраняется, а отказ уходит агенту внутрь хода', async () => {
-        const { r1 } = await seedAgents();
-        const { owner, project } = await setupProject();
-        const cookie = authCookie(owner._id, owner.email);
-        const sessionId = await startDialogue(project, cookie, r1._id, { withMessage: false });
-
-        // Пользователь про конкурентов ничего не говорил, а агент пытается
-        // закрыть поле цитатой, которой в его репликах нет.
-        await collectStageFields(project, cookie, sessionId, [
-            { name: 'marketDescription', value: 'Рынок логистики растёт', quote: 'рынок логистики растёт' },
-            { name: 'competitors', value: 'Их нет', quote: 'конкурентов на рынке вообще не существует' }
-        ]);
+            .send({ content: USER_ANSWER });
 
         const session = await ExpertSession.findById(sessionId);
-        expect(session.collectedFields.get('marketDescription').value).toBe('Рынок логистики растёт');
-        expect(session.collectedFields.get('competitors')).toBeUndefined();
+        expect(session.collectedData.get('market')).toBe('Рынок логистики растёт');
+        // Пока агент не вызвал stage_ready — кнопки завершения на фронте нет.
+        expect(session.readyForArtifact).toBe(false);
 
-        // Отказ ушёл в модель как результат её же вызова — пользователь его не
-        // видит, а агент получает шанс исправиться в том же ходу.
-        const toolResult = chatCompleteStream.mock.calls
-            .at(-1)[0].messages
-            .find((m) => m.role === 'tool');
-        const payload = JSON.parse(toolResult.content);
-        expect(payload.ok).toBe(false);
-        expect(payload.saved).toEqual(['marketDescription']);
-        expect(payload.rejected[0].name).toBe('competitors');
-        expect(payload.rejected[0].reason).toContain('цитата не найдена');
-        expect(payload.missingFields).toEqual(['nicheHypothesis', 'competitors', 'risks']);
+        await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
+            .set('Cookie', cookie)
+            .send({ content: 'Что дальше?' });
+
+        const lastStreamCall = chatCompleteStream.mock.calls.at(-1)[0];
+        expect(lastStreamCall.messages[0].content).toContain('- market: Рынок логистики растёт');
+        expect(lastStreamCall.messages[0].content).toContain('не прощайся');
     });
 
     it('второй вызов инструмента за ход невозможен: финальный проход идёт с tool_choice=none', async () => {
-        const { r1 } = await seedAgents();
+        await seedAgents();
         const { owner, project } = await setupProject();
         const cookie = authCookie(owner._id, owner.email);
-        const sessionId = await startDialogue(project, cookie, r1._id, { withMessage: false });
+        const sessionId = (await openSession(project, cookie)).body.data.session._id;
 
-        // Агент «хочет» звать инструмент дважды подряд — потолок раундов не даёт.
-        mockToolCalls.push(saveFieldsCall(R1_FIELD_UPDATES.slice(0, 1)));
-        mockToolCalls.push(saveFieldsCall(R1_FIELD_UPDATES.slice(1, 2)));
+        mockToolCalls.push(saveDataCall([COLLECTED_ITEMS[0]]));
+        mockToolCalls.push(saveDataCall([COLLECTED_ITEMS[1]]));
 
         await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
             .set('Cookie', cookie)
-            .send({ content: R1_USER_ANSWER });
+            .send({ content: USER_ANSWER });
 
-        // Ровно два прохода модели: с инструментом и принудительно текстовый.
         expect(chatCompleteStream).toHaveBeenCalledTimes(2);
         expect(chatCompleteStream.mock.calls[0][0].toolChoice).toBe('auto');
         expect(chatCompleteStream.mock.calls[1][0].toolChoice).toBe('none');
 
-        // Сохранилось только то, что успел первый раунд.
         const session = await ExpertSession.findById(sessionId);
-        expect([...session.collectedFields.keys()]).toEqual(['marketDescription']);
+        expect([...session.collectedData.keys()]).toEqual(['market']);
     });
+});
 
-    it('этап без единого сообщения считается неготовым без вызова модели', async () => {
-        const { r1 } = await seedAgents();
+describe('Надёжность завершения этапа', () => {
+    it('завершает этап, даже если агент не успел объявить его готовым', async () => {
+        const { r1, r2 } = await seedAgents();
         const { owner, project } = await setupProject();
         const cookie = authCookie(owner._id, owner.email);
-        const sessionId = await startDialogue(project, cookie, r1._id, { withMessage: false });
+        const sessionId = (await openSession(project, cookie)).body.data.session._id;
+
+        mockToolCalls.push(saveDataCall([COLLECTED_ITEMS[0]]));
+        await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
+            .set('Cookie', cookie)
+            .send({ content: USER_ANSWER });
 
         const res = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({});
-
-        expect(res.status).toBe(409);
-        expect(res.body.error.code).toBe('STAGE_NOT_READY');
-        expect(chatComplete).not.toHaveBeenCalled();
-    });
-
-    it('allowPartialCompletion=true пропускает этап мимо гейта', async () => {
-        const { r1 } = await seedAgents();
-        await Agent.findByIdAndUpdate(r1._id, { allowPartialCompletion: true });
-        const { owner, project } = await setupProject();
-        const cookie = authCookie(owner._id, owner.email);
-        // Карточка заполнена лишь частично — обычный этап так не завершить.
-        const sessionId = await startDialogue(project, cookie, r1._id, { collect: false });
-        await collectStageFields(project, cookie, sessionId, R1_FIELD_UPDATES.slice(0, 1));
-
-        const res = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({});
+            .set('Cookie', cookie);
 
         expect(res.status).toBe(200);
-        expect(res.body.data.artifact.status).toBe('ready');
+        expect(res.body.data.nextAgentId).toBe(String(r2._id));
+
+        const after = await Project.findById(project._id);
+        expect(after.completedAgentIds.map(String)).toContain(String(r1._id));
     });
 
-    it('перегенерация создаёт новый черновик, а прежний помечает rejected', async () => {
-        const { r1 } = await seedAgents();
+    it('повторное завершение идемпотентно: тот же документ, без новой генерации', async () => {
+        await seedAgents();
         const { owner, project } = await setupProject();
         const cookie = authCookie(owner._id, owner.email);
-        const sessionId = await startDialogue(project, cookie, r1._id);
+        const sessionId = (await openSession(project, cookie)).body.data.session._id;
+        await collectAndMarkReady(project, cookie, sessionId);
 
         const first = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({});
-        expect(first.status).toBe(200);
-
+            .set('Cookie', cookie);
         const second = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({ regenerate: true });
-        expect(second.status).toBe(200);
-        expect(second.body.data.artifact._id).not.toBe(first.body.data.artifact._id);
-
-        const previous = await Artifact.findById(first.body.data.artifact._id);
-        expect(previous.status).toBe('rejected');
-    });
-
-    it('завершённый маршрут не воскресает: после финального агента currentAgentId остаётся null', async () => {
-        const { r1, r2 } = await seedAgents();
-        const { owner, project } = await setupProject();
-        const cookie = authCookie(owner._id, owner.email);
-
-        // Проходим весь маршрут R1 -> R2 (у R2 nextAgentId=null).
-        for (const agent of [r1, r2]) {
-            const sessionId = await startDialogue(project, cookie, agent._id);
-            const res = await request(app)
-                .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-                .set('Cookie', cookie)
-                .send({ confirmArtifact: true });
-            expect(res.status).toBe(200);
-        }
-
-        const completed = await Project.findById(project._id);
-        expect(completed.status).toBe('completed');
-        expect(completed.currentAgentId).toBeNull();
-
-        // Просмотр маршрута раньше «самолечил» currentAgentId обратно на R1 и
-        // молча перезапускал пройденный маршрут.
-        const routeRes = await request(app)
-            .get(`/api/v1/accelerator/projects/${project._id}/expert-route`)
             .set('Cookie', cookie);
-        expect(routeRes.status).toBe(200);
-        expect(routeRes.body.data.currentAgentId).toBeNull();
-        expect(routeRes.body.data.items.map((i) => i.status)).toEqual(['completed', 'completed']);
 
-        const afterRoute = await Project.findById(project._id);
-        expect(afterRoute.currentAgentId).toBeNull();
-
-        // И новую сессию по пройденному маршруту создать нельзя.
-        const sessionRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
-            .set('Cookie', cookie)
-            .send({ agentId: String(r1._id) });
-        expect(sessionRes.status).toBe(409);
-        expect(sessionRes.body.error.code).toBe('AGENT_NOT_CURRENT');
+        expect(second.status).toBe(200);
+        expect(second.body.data.artifact._id).toBe(first.body.data.artifact._id);
+        expect(chatComplete).toHaveBeenCalledTimes(1);
+        expect(await Artifact.countDocuments({ projectId: project._id })).toBe(1);
     });
 
-    it('подтверждение с «висячим» nextAgentId отклоняется без потери артефакта', async () => {
-        const { r1, r2 } = await seedAgents();
+    it('сбой индексации в Qdrant не мешает пройти этап', async () => {
+        const { r2 } = await seedAgents();
         const { owner, project } = await setupProject();
         const cookie = authCookie(owner._id, owner.email);
-        const sessionId = await startDialogue(project, cookie, r1._id);
+        const sessionId = (await openSession(project, cookie)).body.data.session._id;
+        await collectAndMarkReady(project, cookie, sessionId);
 
-        // Черновик создаётся штатно...
-        const draftRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({});
-        expect(draftRes.status).toBe(200);
-
-        // ...а затем администратор удаляет следующего агента маршрута.
-        await Agent.deleteOne({ _id: r2._id });
-
-        const confirmRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({ confirmArtifact: true });
-
-        expect(confirmRes.status).toBe(409);
-        expect(confirmRes.body.error.code).toBe('NEXT_AGENT_UNAVAILABLE');
-
-        // Ничего не потеряно и не мутировано: артефакт остался черновиком,
-        // сессия ждёт подтверждения, проект стоит на R1, индексации не было.
-        const artifact = await Artifact.findById(draftRes.body.data.artifact._id);
-        expect(artifact.status).toBe('ready');
-
-        const after = await Project.findById(project._id);
-        expect(String(after.currentAgentId)).toBe(String(r1._id));
-        expect(after.completedAgentIds).toHaveLength(0);
-        expect(upsertChunks).not.toHaveBeenCalled();
-    });
-
-    it('подтверждённый артефакт нельзя сгенерировать заново', async () => {
-        const { r1 } = await seedAgents();
-        const { owner, project } = await setupProject();
-        const cookie = authCookie(owner._id, owner.email);
-        const sessionId = await startDialogue(project, cookie, r1._id);
-
-        await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({ confirmArtifact: true });
+        upsertChunks.mockRejectedValueOnce(new Error('Qdrant недоступен'));
 
         const res = await request(app)
             .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({ regenerate: true });
+            .set('Cookie', cookie);
 
-        // Сессия уже completed — до проверки самого артефакта дело не доходит.
-        expect(res.status).toBe(409);
-        expect(res.body.error.code).toBe('SESSION_ALREADY_COMPLETED');
+        expect(res.status).toBe(200);
+        expect(res.body.data.nextAgentId).toBe(String(r2._id));
+        // Итоги этапа всё равно дошли до следующего агента — через сводку проекта.
+        const after = await Project.findById(project._id);
+        expect(after.contextSummary).toContain('Рынок логистики растёт');
+    });
+
+    it('«висячий» nextAgentId не рвёт маршрут — переход идёт по order', async () => {
+        const { r1, r2 } = await seedAgents();
+        // Админ связал агентов вручную и удалил указанного следующего.
+        await Agent.findByIdAndUpdate(r1._id, { nextAgentId: '507f1f77bcf86cd799439099' });
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+        const sessionId = (await openSession(project, cookie)).body.data.session._id;
+        await collectAndMarkReady(project, cookie, sessionId);
+
+        const res = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie);
+
+        expect(res.status).toBe(200);
+        expect(res.body.data.nextAgentId).toBe(String(r2._id));
+    });
+
+    it('nextAgentId переопределяет порядок: маршрут может быть нелинейным', async () => {
+        const { r1, r2 } = await seedAgents();
+        const r3 = await Agent.create({
+            name: 'Тимур',
+            order: 3,
+            systemPrompt: 'Ты эксперт по финансам.',
+            completionPrompt: 'Этап завершён, когда есть финмодель.'
+        });
+        await Agent.findByIdAndUpdate(r1._id, { nextAgentId: r3._id });
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+        const sessionId = (await openSession(project, cookie)).body.data.session._id;
+        await collectAndMarkReady(project, cookie, sessionId);
+
+        const res = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie);
+
+        expect(res.body.data.nextAgentId).toBe(String(r3._id));
+        expect(res.body.data.nextAgentId).not.toBe(String(r2._id));
+    });
+
+    it('сбой генерации документа отдаёт 502 и не двигает маршрут', async () => {
+        const { r1 } = await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+        const sessionId = (await openSession(project, cookie)).body.data.session._id;
+        await collectAndMarkReady(project, cookie, sessionId);
+
+        chatComplete.mockRejectedValueOnce(new Error('OpenAI API недоступен'));
+
+        const res = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
+            .set('Cookie', cookie);
+
+        expect(res.status).toBe(502);
+        expect(res.body.error.code).toBe('LLM_PROVIDER_FAILED');
+        expect(await Artifact.countDocuments({ projectId: project._id })).toBe(0);
+
+        const after = await Project.findById(project._id);
+        expect(String(after.currentAgentId)).toBe(String(r1._id));
+    });
+
+    it('SSE-событие error нормализует код до LLM_PROVIDER_FAILED', async () => {
+        await seedAgents();
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+        const sessionId = (await openSession(project, cookie)).body.data.session._id;
+
+        chatCompleteStream.mockRejectedValueOnce(new Error('Соединение с OpenAI оборвалось'));
+
+        const res = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
+            .set('Cookie', cookie)
+            .send({ content: 'Привет' });
+
+        expect(res.status).toBe(200);
+        const errorEvent = parseSSE(res.text).find((e) => e.event === 'error');
+        expect(errorEvent.data.code).toBe('LLM_PROVIDER_FAILED');
     });
 });
 
 describe('GET /accelerator/projects/:projectId/expert-sessions/:sessionId/messages', () => {
-    it('возвращает историю сообщений сессии в хронологическом порядке', async () => {
-        const { r1 } = await seedAgents();
+    it('возвращает историю и состояние этапа одним запросом', async () => {
+        await seedAgents();
         const { owner, project } = await setupProject();
         const cookie = authCookie(owner._id, owner.email);
+        const sessionId = (await openSession(project, cookie)).body.data.session._id;
 
-        const sessionRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
-            .set('Cookie', cookie)
-            .send({ agentId: String(r1._id) });
-        const sessionId = sessionRes.body.data.session._id;
-
-        await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
-            .set('Cookie', cookie)
-            .send({ content: 'Первое сообщение' });
+        await collectAndMarkReady(project, cookie, sessionId);
 
         const res = await request(app)
             .get(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
@@ -638,21 +551,17 @@ describe('GET /accelerator/projects/:projectId/expert-sessions/:sessionId/messag
         expect(res.status).toBe(200);
         expect(res.body.data.items).toHaveLength(2);
         expect(res.body.data.items[0].senderType).toBe('user');
-        expect(res.body.data.items[0].content).toBe('Первое сообщение');
         expect(res.body.data.items[1].senderType).toBe('assistant');
-        expect(res.body.data.items[1].content).toBe('Ответ агента пользователю');
+        expect(res.body.data.collectedData.market).toBe('Рынок логистики растёт');
+        expect(res.body.data.readyForArtifact).toBe(true);
+        expect(res.body.data.status).toBe('active');
     });
 
     it('чужой пользователь не может прочитать историю сообщений (403)', async () => {
-        const { r1 } = await seedAgents();
+        await seedAgents();
         const { owner, project } = await setupProject();
         const stranger = await createUser();
-
-        const sessionRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
-            .set('Cookie', authCookie(owner._id, owner.email))
-            .send({ agentId: String(r1._id) });
-        const sessionId = sessionRes.body.data.session._id;
+        const sessionId = (await openSession(project, authCookie(owner._id, owner.email))).body.data.session._id;
 
         const res = await request(app)
             .get(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
@@ -683,56 +592,37 @@ describe('GET /accelerator/projects/:projectId/expert-sessions/:sessionId/messag
 });
 
 describe('GET /accelerator/projects/:projectId/artifacts', () => {
-    it('возвращает артефакты проекта в порядке создания', async () => {
+    async function createArtifact(project, agentId, summary) {
+        return Artifact.create({
+            projectId: project._id,
+            expertSessionId: '507f1f77bcf86cd799439011',
+            agentId,
+            title: 'Документ этапа',
+            documentMarkdown: '## Раздел',
+            summary
+        });
+    }
+
+    it('возвращает документы проекта в порядке создания', async () => {
         const { r1, r2 } = await seedAgents();
         const { owner, project } = await setupProject();
 
-        const sessionA = await Artifact.create({
-            projectId: project._id,
-            expertSessionId: '507f1f77bcf86cd799439011',
-            agentId: r1._id,
-            type: 'market_brief',
-            title: 'Рыночный бриф',
-            content: { summary: 'Сводка рынка' },
-            summary: 'Сводка рынка',
-            status: 'confirmed'
-        });
-        const sessionB = await Artifact.create({
-            projectId: project._id,
-            expertSessionId: '507f1f77bcf86cd799439012',
-            agentId: r2._id,
-            type: 'audience_brief',
-            title: 'Бриф аудитории',
-            content: { summary: 'Сводка аудитории' },
-            summary: 'Сводка аудитории',
-            status: 'ready'
-        });
+        const first = await createArtifact(project, r1._id, 'Сводка рынка');
+        const second = await createArtifact(project, r2._id, 'Сводка аудитории');
 
         const res = await request(app)
             .get(`/api/v1/accelerator/projects/${project._id}/artifacts`)
             .set('Cookie', authCookie(owner._id, owner.email));
 
         expect(res.status).toBe(200);
-        expect(res.body.data.items.map((a) => a._id)).toEqual([String(sessionA._id), String(sessionB._id)]);
-        expect(res.body.data.items[0].status).toBe('confirmed');
-        expect(res.body.data.items[1].status).toBe('ready');
+        expect(res.body.data.items.map((a) => a._id)).toEqual([String(first._id), String(second._id)]);
     });
 
-    it('не включает артефакты чужих проектов', async () => {
+    it('не включает документы чужих проектов', async () => {
         const { r1 } = await seedAgents();
         const { owner, project } = await setupProject();
         const { project: otherProject } = await setupProject();
-
-        await Artifact.create({
-            projectId: otherProject._id,
-            expertSessionId: '507f1f77bcf86cd799439011',
-            agentId: r1._id,
-            type: 'market_brief',
-            title: 'Рыночный бриф',
-            content: { summary: 'Сводка' },
-            summary: 'Сводка',
-            status: 'confirmed'
-        });
+        await createArtifact(otherProject, r1._id, 'Чужая сводка');
 
         const res = await request(app)
             .get(`/api/v1/accelerator/projects/${project._id}/artifacts`)
@@ -756,263 +646,8 @@ describe('GET /accelerator/projects/:projectId/artifacts', () => {
     it('возвращает 401 без авторизации', async () => {
         const { project } = await setupProject();
 
-        const res = await request(app)
-            .get(`/api/v1/accelerator/projects/${project._id}/artifacts`);
+        const res = await request(app).get(`/api/v1/accelerator/projects/${project._id}/artifacts`);
 
         expect(res.status).toBe(401);
-    });
-});
-
-describe('Коды ошибок фронта: AGENT_INACTIVE / QDRANT_INDEX_FAILED / LLM_PROVIDER_FAILED', () => {
-    it('POST expert-sessions возвращает 409 AGENT_INACTIVE, если агент существует, но isActive=false (не путать с AGENT_NOT_FOUND)', async () => {
-        const { owner, project } = await setupProject();
-        const r1 = await Agent.create({
-            name: 'Роман',
-            roleTitle: 'Эксперт по рынку',
-            order: 1,
-            isActive: false,
-            systemPrompt: 'Ты эксперт по рынку.',
-            completionCriteria: 'Собран рыночный бриф.',
-            artifactDefinition: { artifactType: 'market_brief', requiredFields: ['summary'] }
-        });
-
-        const res = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
-            .set('Cookie', authCookie(owner._id, owner.email))
-            .send({ agentId: String(r1._id) });
-
-        expect(res.status).toBe(409);
-        expect(res.body.error.code).toBe('AGENT_INACTIVE');
-    });
-
-    it('POST .../complete возвращает 502 QDRANT_INDEX_FAILED (не 500/ARTIFACT_VALIDATION_FAILED), если падает запись подтверждённого артефакта в Qdrant', async () => {
-        const { r1 } = await seedAgents();
-        const { owner, project } = await setupProject();
-        const cookie = authCookie(owner._id, owner.email);
-
-        const sessionRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
-            .set('Cookie', cookie)
-            .send({ agentId: String(r1._id) });
-        const sessionId = sessionRes.body.data.session._id;
-        await collectStageFields(project, cookie, sessionId);
-
-        upsertChunks.mockRejectedValueOnce(new Error('Qdrant недоступен'));
-
-        const res = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({ confirmArtifact: true });
-
-        expect(res.status).toBe(502);
-        expect(res.body.error.code).toBe('QDRANT_INDEX_FAILED');
-    });
-
-    it('повторный вызов .../complete после QDRANT_INDEX_FAILED переиспользует уже созданный артефакт из MongoDB, а не генерирует новый через LLM', async () => {
-        const { r1 } = await seedAgents();
-        const { owner, project } = await setupProject();
-        const cookie = authCookie(owner._id, owner.email);
-
-        const sessionRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
-            .set('Cookie', cookie)
-            .send({ agentId: String(r1._id) });
-        const sessionId = sessionRes.body.data.session._id;
-        await collectStageFields(project, cookie, sessionId);
-
-        upsertChunks.mockRejectedValueOnce(new Error('Qdrant недоступен'));
-
-        const firstRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({ confirmArtifact: true });
-        expect(firstRes.status).toBe(502);
-        // Генерация артефакта — два вызова: структурированные поля и документ.
-        expect(chatComplete).toHaveBeenCalledTimes(2);
-
-        const retryRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({ confirmArtifact: true });
-
-        expect(retryRes.status).toBe(200);
-        expect(retryRes.body.data.confirmed).toBe(true);
-        // Reused, not regenerated: still only the calls from the first attempt.
-        expect(chatComplete).toHaveBeenCalledTimes(2);
-
-        const artifacts = await Artifact.find({ projectId: project._id });
-        expect(artifacts).toHaveLength(1);
-        expect(artifacts[0].status).toBe('confirmed');
-    });
-
-    it('POST .../complete возвращает 502 LLM_PROVIDER_FAILED (не 422/ARTIFACT_VALIDATION_FAILED), если падает сам вызов LLM при генерации артефакта', async () => {
-        const { r1 } = await seedAgents();
-        const { owner, project } = await setupProject();
-        const cookie = authCookie(owner._id, owner.email);
-
-        const sessionRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
-            .set('Cookie', cookie)
-            .send({ agentId: String(r1._id) });
-        const sessionId = sessionRes.body.data.session._id;
-        await collectStageFields(project, cookie, sessionId);
-
-        // Ошибка без .code — как обычно бросает сам OpenAI SDK при сетевом сбое/rate limit,
-        // а не наша собственная ARTIFACT_VALIDATION_FAILED-логика парсинга JSON.
-        chatComplete.mockRejectedValueOnce(new Error('OpenAI API недоступен'));
-
-        const res = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({});
-
-        expect(res.status).toBe(502);
-        expect(res.body.error.code).toBe('LLM_PROVIDER_FAILED');
-    });
-
-    it('SSE-событие error нормализует код до LLM_PROVIDER_FAILED, если падает сам стриминговый вызов LLM', async () => {
-        const { r1 } = await seedAgents();
-        const { owner, project } = await setupProject();
-        const cookie = authCookie(owner._id, owner.email);
-
-        const sessionRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
-            .set('Cookie', cookie)
-            .send({ agentId: String(r1._id) });
-        const sessionId = sessionRes.body.data.session._id;
-
-        chatCompleteStream.mockRejectedValueOnce(new Error('Соединение с OpenAI оборвалось'));
-
-        const res = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
-            .set('Cookie', cookie)
-            .send({ content: 'Привет' });
-
-        expect(res.status).toBe(200);
-        const events = parseSSE(res.text);
-        const errorEvent = events.find((e) => e.event === 'error');
-        expect(errorEvent.data.code).toBe('LLM_PROVIDER_FAILED');
-    });
-});
-
-describe('Автозавершение Project.status', () => {
-    async function completeAgent(cookie, project, agentId, sessionId) {
-        await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({});
-        return request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({ confirmArtifact: true });
-    }
-
-    it('подтверждение артефакта НЕ последнего агента (R1) не меняет Project.status', async () => {
-        const { r1 } = await seedAgents();
-        const { owner, project } = await setupProject();
-        const cookie = authCookie(owner._id, owner.email);
-
-        const sessionRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
-            .set('Cookie', cookie)
-            .send({ agentId: String(r1._id) });
-        const sessionId = sessionRes.body.data.session._id;
-        await collectStageFields(project, cookie, sessionId);
-
-        const completeRes = await completeAgent(cookie, project, r1._id, sessionId);
-        expect(completeRes.status).toBe(200);
-
-        const updatedProject = await Project.findById(project._id);
-        expect(updatedProject.status).toBe('active');
-    });
-
-    it('подтверждение артефакта ПОСЛЕДНЕГО агента маршрута (nextAgentId=null) переводит Project.status в completed', async () => {
-        const { r1, r2 } = await seedAgents();
-        const { owner, project } = await setupProject();
-        const cookie = authCookie(owner._id, owner.email);
-
-        const r1SessionRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
-            .set('Cookie', cookie)
-            .send({ agentId: String(r1._id) });
-        await collectStageFields(project, cookie, r1SessionRes.body.data.session._id);
-        await completeAgent(cookie, project, r1._id, r1SessionRes.body.data.session._id);
-
-        const projectAfterR1 = await Project.findById(project._id);
-        expect(String(projectAfterR1.currentAgentId)).toBe(String(r2._id));
-        expect(projectAfterR1.status).toBe('active');
-
-        const r2SessionRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
-            .set('Cookie', cookie)
-            .send({ agentId: String(r2._id) });
-        const r2CompleteRes = await completeAgent(cookie, project, r2._id, r2SessionRes.body.data.session._id);
-        expect(r2CompleteRes.status).toBe(200);
-        expect(r2CompleteRes.body.data.nextAgentId).toBeNull();
-
-        const projectAfterR2 = await Project.findById(project._id);
-        expect(projectAfterR2.status).toBe('completed');
-    });
-});
-
-describe('Гейт обязательных полей артефакта перед переходом на следующего агента', () => {
-    it('confirmArtifact:true с артефактом без обязательного поля -> 422 ARTIFACT_VALIDATION_FAILED и проект НЕ переходит на R2', async () => {
-        const { r1, r2 } = await seedAgents();
-        const { owner, project } = await setupProject();
-        const cookie = authCookie(owner._id, owner.email);
-
-        const sessionRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions`)
-            .set('Cookie', cookie)
-            .send({ agentId: String(r1._id) });
-        const sessionId = sessionRes.body.data.session._id;
-
-        // Карточка этапа нужна заполненной, чтобы этап прошёл гейт готовности:
-        // проверяем именно валидацию полей артефакта, а не отсутствие данных.
-        await collectStageFields(project, cookie, sessionId);
-
-        // Модель вернула JSON, где нет обязательного поля 'risks'
-        // (r1.requiredFields = marketDescription, nicheHypothesis, competitors, risks, summary).
-        chatComplete.mockResolvedValueOnce({
-            content: JSON.stringify({
-                marketDescription: 'Описание рынка',
-                nicheHypothesis: 'Гипотеза ниши',
-                competitors: 'Конкуренты',
-                summary: 'Сводка'
-            }),
-            tokenUsage: { totalTokens: 10 }
-        });
-
-        const res = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({ confirmArtifact: true });
-
-        expect(res.status).toBe(422);
-        expect(res.body.error.code).toBe('ARTIFACT_VALIDATION_FAILED');
-
-        // Ключевой инвариант: проект остался на R1, маршрут не продвинулся.
-        const projectAfter = await Project.findById(project._id);
-        expect(String(projectAfter.currentAgentId)).toBe(String(r1._id));
-        expect(projectAfter.completedAgentIds.map(String)).not.toContain(String(r1._id));
-        expect(projectAfter.status).toBe('active');
-
-        // Артефакт с неполными полями не должен был создаться вовсе.
-        const artifacts = await Artifact.find({ projectId: project._id });
-        expect(artifacts).toHaveLength(0);
-
-        // Индексация в Qdrant подтверждённого артефакта тоже не запускалась.
-        expect(upsertChunks).not.toHaveBeenCalled();
-
-        // Убедимся, что после этого валидный артефакт всё-таки переводит на R2
-        // (гейт именно на полях, а не общая блокировка).
-        const okRes = await request(app)
-            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/complete`)
-            .set('Cookie', cookie)
-            .send({ confirmArtifact: true });
-        expect(okRes.status).toBe(200);
-
-        const projectAdvanced = await Project.findById(project._id);
-        expect(String(projectAdvanced.currentAgentId)).toBe(String(r2._id));
     });
 });

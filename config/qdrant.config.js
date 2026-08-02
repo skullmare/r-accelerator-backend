@@ -9,7 +9,7 @@ const qdrantClient = new QdrantClient({
 });
 
 // Коллекция приватного проектного контекста (файлы проекта + артефакты
-// этапов), фильтруется по projectId — см. docs/expert-context.md.
+// этапов), фильтруется по projectId — см. docs/accelerator/README.md.
 const QDRANT_COLLECTION = process.env.QDRANT_COLLECTION || 'expert_context';
 
 // Коллекция глобальной базы знаний (сущность Knowledge), фильтруется по

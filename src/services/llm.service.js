@@ -2,13 +2,13 @@ import openai from '../../config/openai.config.js';
 
 // messages: [{ role: 'system'|'user'|'assistant', content }]
 // Single non-streaming call — used where the full response is needed before
-// anything happens next (artifact generation parses the whole JSON reply).
+// anything happens next (writing the stage document).
 //
 // `json: true` switches the provider into structured-output mode
 // (response_format: json_object), which makes the model physically unable to
-// emit prose or markdown fences around the answer. Callers that parse the
-// reply as JSON (artifact fields, completion evaluation) must pass it —
-// asking for JSON in the prompt text alone is a request, not a guarantee.
+// emit prose or markdown fences around the answer. Any caller that parses the
+// reply as JSON must pass it — asking for JSON in the prompt text alone is a
+// request, not a guarantee.
 export async function chatComplete({ model, temperature, maxTokens, messages, json = false }) {
     const result = await openai.chat.completions.create({
         model,

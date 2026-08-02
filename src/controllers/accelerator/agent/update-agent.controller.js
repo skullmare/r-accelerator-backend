@@ -12,8 +12,8 @@ export async function updateAgent(req, res) {
         }
 
         if (updates.nextAgentId) {
-            // Самоссылка = вечный цикл: confirmArtifact переключал бы проект
-            // на этого же агента, и маршрут никогда бы не завершился.
+            // Самоссылка = вечный цикл: завершение этапа переключало бы проект
+            // на этого же агента, и маршрут никогда бы не закончился.
             if (String(updates.nextAgentId) === String(agentId)) {
                 return res.error({ code: 'NEXT_AGENT_SELF_REFERENCE' }, 400, 'Агент не может ссылаться сам на себя как на следующего');
             }

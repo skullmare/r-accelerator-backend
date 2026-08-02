@@ -5,6 +5,7 @@ import { createUser } from '../../__fixtures__/user.fixture.js';
 import { authCookie } from '../../__fixtures__/auth.fixture.js';
 import Role from '../../models/role.model.js';
 import Agent from '../../models/accelerator/agent.model.js';
+import Knowledge from '../../models/accelerator/knowledge.model.js';
 
 beforeAll(() => connect());
 afterAll(() => closeDatabase());
@@ -15,36 +16,82 @@ async function createAdminUser() {
     return createUser({ role: role._id });
 }
 
+// Обязательный минимум агента — четыре поля. Всё остальное необязательно.
 function agentPayload(overrides = {}) {
     return {
         name: 'Роман',
-        roleTitle: 'Эксперт по рынку',
         order: 1,
-        systemPrompt: 'Ты эксперт по рынку и нише.',
-        completionCriteria: 'Собраны marketDescription, nicheHypothesis, competitors, risks.',
-        artifactDefinition: {
-            artifactType: 'market_brief',
-            requiredFields: ['marketDescription', 'nicheHypothesis', 'competitors', 'risks', 'summary']
-        },
+        systemPrompt: 'Ты эксперт по рынку и нише. Задавай вопросы по одному.',
+        completionPrompt: 'Этап завершён, когда понятны рынок, ниша, конкуренты и риски.',
         ...overrides
     };
 }
 
 describe('POST /accelerator/admin/agents', () => {
-    it('создаёт агента, идентифицируемого по _id (без отдельного человекочитаемого кода)', async () => {
+    it('создаёт агента по минимальному набору полей', async () => {
         const admin = await createAdminUser();
 
         const res = await request(app)
             .post('/api/v1/accelerator/admin/agents')
             .set('Cookie', authCookie(admin._id, admin.email))
-            .send(agentPayload({ name: 'Коуч' }));
+            .send(agentPayload({ description: 'Эксперт по рынку', avatarUrl: 'https://cdn.test/roman.png' }));
 
         expect(res.status).toBe(201);
         expect(res.body.data._id).toEqual(expect.any(String));
-        expect(res.body.data.code).toBeUndefined();
-        expect(res.body.data.contextPolicy.qdrantTopK).toBe(6);
-        expect(res.body.data.modelConfig.model).toBe('gpt-4o-mini');
-        expect(res.body.data.modelConfig.provider).toBeUndefined();
+        expect(res.body.data.completionPrompt).toContain('Этап завершён');
+        expect(res.body.data.knowledgeIds).toEqual([]);
+        expect(res.body.data.nextAgentId).toBeNull();
+    });
+
+    it('отклоняет настройки, которых больше нет у агента', async () => {
+        const admin = await createAdminUser();
+
+        const res = await request(app)
+            .post('/api/v1/accelerator/admin/agents')
+            .set('Cookie', authCookie(admin._id, admin.email))
+            .send(agentPayload({
+                modelConfig: { model: 'gpt-4o-mini' },
+                artifactDefinition: { artifactType: 'market_brief' }
+            }));
+
+        expect(res.status).toBe(400);
+    });
+
+    it('требует оба промпта', async () => {
+        const admin = await createAdminUser();
+        const { completionPrompt, ...withoutCompletion } = agentPayload();
+
+        const res = await request(app)
+            .post('/api/v1/accelerator/admin/agents')
+            .set('Cookie', authCookie(admin._id, admin.email))
+            .send(withoutCompletion);
+
+        expect(res.status).toBe(400);
+    });
+
+    it('принимает knowledgeIds существующих баз знаний', async () => {
+        const admin = await createAdminUser();
+        const knowledge = await Knowledge.create({ title: 'Методичка по рынкам', sourceUrl: 'https://test/doc.md' });
+
+        const res = await request(app)
+            .post('/api/v1/accelerator/admin/agents')
+            .set('Cookie', authCookie(admin._id, admin.email))
+            .send(agentPayload({ knowledgeIds: [String(knowledge._id)] }));
+
+        expect(res.status).toBe(201);
+        expect(res.body.data.knowledgeIds).toEqual([String(knowledge._id)]);
+    });
+
+    it('возвращает 400 для несуществующей базы знаний', async () => {
+        const admin = await createAdminUser();
+
+        const res = await request(app)
+            .post('/api/v1/accelerator/admin/agents')
+            .set('Cookie', authCookie(admin._id, admin.email))
+            .send(agentPayload({ knowledgeIds: ['507f1f77bcf86cd799439099'] }));
+
+        expect(res.status).toBe(400);
+        expect(res.body.error.code).toBe('KNOWLEDGE_NOT_FOUND');
     });
 
     it('возвращает 403 без права accelerator_agents.manage', async () => {
@@ -76,19 +123,6 @@ describe('POST /accelerator/admin/agents', () => {
 
         expect(res.status).toBe(400);
     });
-
-    it('создаёт R1 -> R2 маршрут по _id, когда R2 уже существует', async () => {
-        const admin = await createAdminUser();
-        const regina = await Agent.create(agentPayload({ name: 'Регина', order: 2 }));
-
-        const res = await request(app)
-            .post('/api/v1/accelerator/admin/agents')
-            .set('Cookie', authCookie(admin._id, admin.email))
-            .send(agentPayload({ nextAgentId: String(regina._id) }));
-
-        expect(res.status).toBe(201);
-        expect(res.body.data.nextAgentId).toBe(String(regina._id));
-    });
 });
 
 describe('GET /accelerator/admin/agents', () => {
@@ -105,7 +139,7 @@ describe('GET /accelerator/admin/agents', () => {
         expect(res.body.data.map((a) => a.name)).toEqual(['Роман', 'Регина']);
     });
 
-    it('обычный пользователь не видит systemPrompt агентов (403)', async () => {
+    it('обычный пользователь не видит промпты агентов (403)', async () => {
         const user = await createUser();
         await Agent.create(agentPayload());
 
@@ -118,17 +152,17 @@ describe('GET /accelerator/admin/agents', () => {
 });
 
 describe('PATCH /accelerator/admin/agents/:agentId', () => {
-    it('позволяет временно отключить агента (isActive=false)', async () => {
+    it('обновляет промпт агента', async () => {
         const admin = await createAdminUser();
         const agent = await Agent.create(agentPayload());
 
         const res = await request(app)
             .patch(`/api/v1/accelerator/admin/agents/${agent._id}`)
             .set('Cookie', authCookie(admin._id, admin.email))
-            .send({ isActive: false });
+            .send({ completionPrompt: 'Этап завершён, когда есть гипотеза ниши.' });
 
         expect(res.status).toBe(200);
-        expect(res.body.data.isActive).toBe(false);
+        expect(res.body.data.completionPrompt).toBe('Этап завершён, когда есть гипотеза ниши.');
     });
 
     it('возвращает 404 для несуществующего агента', async () => {
@@ -137,7 +171,7 @@ describe('PATCH /accelerator/admin/agents/:agentId', () => {
         const res = await request(app)
             .patch('/api/v1/accelerator/admin/agents/507f1f77bcf86cd799439011')
             .set('Cookie', authCookie(admin._id, admin.email))
-            .send({ isActive: false });
+            .send({ order: 5 });
 
         expect(res.status).toBe(404);
     });

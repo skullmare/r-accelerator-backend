@@ -3,7 +3,7 @@ import OpenAI from "openai";
 // Отдельный клиент под OpenRouter — используется ТОЛЬКО для эмбеддингов
 // (единый провайдер векторизации для обоих контуров: expert_context и
 // knowledge_context). Чат-модели агентов остаются на openai.config.js —
-// см. docs/expert-context.md. OpenRouter полностью OpenAI-совместим, поэтому
+// см. docs/accelerator/README.md. OpenRouter полностью OpenAI-совместим, поэтому
 // достаточно переопределить baseURL и переиспользовать тот же SDK.
 //
 // Ключ: приоритет у OPENROUTER_API_KEY, иначе fallback на OPENAI_API_KEY.

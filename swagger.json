@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "undefined/api/v1"
+      "url": "http://localhost:3000/api/v1"
     }
   ],
   "components": {
@@ -742,42 +742,33 @@
               "completed",
               "archived"
             ],
-            "description": "Статус проекта. Меняется вручную через PATCH, кроме одного автоматического перехода — сервер сам ставит \"completed\", когда подтверждён артефакт последнего агента маршрута (nextAgentId отсутствует). Не влияет на доступ к экспертному маршруту — это отражение состояния, а не гейт."
-          },
-          "progress": {
-            "type": "number",
-            "description": "Общий прогресс проекта в процентах (0-100) — вычисляется отдельно, не связан напрямую с экспертным маршрутом."
+            "description": "Статус проекта. Меняется вручную через PATCH, кроме одного автоматического перехода — сервер сам ставит \"completed\", когда завершён этап последнего агента маршрута. Не влияет на доступ к маршруту — это отражение состояния, а не гейт."
           },
           "currentAgentId": {
             "type": "string",
             "nullable": true,
-            "description": "_id агента, который сейчас активен для этого проекта. null у нового проекта — самолечится при первом обращении к GET expert-route или POST expert-sessions (подставляется первый активный агент по order)."
+            "description": "_id агента, который сейчас активен для этого проекта. У нового проекта проставляется при первом обращении к GET expert-route или POST expert-sessions (первый агент по order); null после прохождения всего маршрута."
           },
           "completedAgentIds": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Список _id агентов, чьи этапы уже пройдены (артефакт подтверждён). Используется, чтобы показать статус \"completed\" в GET expert-route."
+            "description": "Список _id агентов, чьи этапы уже пройдены. Используется, чтобы показать статус \"completed\" в GET expert-route."
           },
           "contextSummary": {
             "type": "string",
             "nullable": true,
-            "description": "Краткая сводка проекта, накапливаемая по мере прохождения этапов — после каждого подтверждения артефакта сюда дописывается его summary. Это единственное поле, которое всегда подмешивается в промпт любого агента (если явно не отключено в contextPolicy агента)."
+            "description": "Краткая сводка проекта, накапливаемая по мере прохождения этапов — после каждого завершённого этапа сюда дописывается summary его документа. Это единственное поле, которое всегда подмешивается в промпт любого агента."
           },
           "contextVersion": {
             "type": "integer",
             "description": "Счётчик версий contextSummary — увеличивается на 1 при каждом обновлении сводки."
           },
-          "qdrantCollection": {
-            "type": "string",
-            "nullable": true,
-            "description": "Переопределение имени коллекции Qdrant для этого проекта. Задел на будущее — сейчас нигде не используется, весь поиск идёт по единой коллекции."
-          },
           "lastActivityAt": {
             "type": "string",
             "format": "date-time",
-            "description": "Дата последней активности по проекту — обновляется при подтверждении артефакта экспертного этапа."
+            "description": "Дата последней активности по проекту — обновляется при завершении этапа."
           },
           "createdAt": {
             "type": "string",
@@ -866,73 +857,64 @@
       },
       "ExpertSession": {
         "type": "object",
-        "description": "Диалог пользователя с одним агентом в рамках одного этапа маршрута проекта.",
+        "description": "Диалог пользователя с одним агентом на одном этапе маршрута.",
         "properties": {
           "_id": {
-            "type": "string",
-            "description": "Идентификатор сессии."
+            "type": "string"
           },
           "projectId": {
-            "type": "string",
-            "description": "Проект, в рамках которого идёт диалог."
+            "type": "string"
           },
           "agentId": {
             "type": "string",
-            "description": "Агент, с которым идёт эта сессия. Сессию можно создать только для агента, совпадающего с текущим Project.currentAgentId — \"перепрыгнуть\" через агента, минуя маршрут, нельзя (409 AGENT_NOT_CURRENT)."
+            "description": "Агент этой сессии. Сессия всегда открывается с текущим агентом проекта — перепрыгнуть этап нельзя."
           },
           "status": {
             "type": "string",
             "enum": [
-              "draft",
               "active",
-              "waiting_user_confirmation",
-              "completed",
-              "failed"
+              "completed"
             ],
-            "description": "Статус сессии:\n * active — обычный диалог идёт;\n * waiting_user_confirmation — черновик артефакта сгенерирован (status=ready), но ещё не подтверждён;\n * completed — артефакт подтверждён, маршрут проекта уже переключён на следующего агента.\n"
+            "description": "active — диалог идёт; completed — этап завершён, документ создан, проект переключён на следующего агента."
           },
-          "inputContextSnapshot": {
+          "collectedData": {
             "type": "object",
-            "nullable": true,
-            "description": "Снимок того, что реально ушло в системный промпт при последнем сообщении (был ли подмешан summary проекта, какие фрагменты подтянулись из Qdrant) — аудит-лог для отладки, не рабочие данные."
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Данные, собранные агентом в диалоге, — простой словарь «ключ:\nзначение». Ключи агент придумывает сам по своему промпту, схемы\nи обязательных полей нет. Из этих данных формируется документ\nэтапа и сводка для следующего агента.\n"
           },
-          "outputSummary": {
-            "type": "string",
-            "nullable": true,
-            "description": "Краткая сводка результата сессии — дублирует summary созданного артефакта."
+          "readyForArtifact": {
+            "type": "boolean",
+            "description": "Агент подтвердил, что условие завершения (completionPrompt)\nвыполнено. По этому флагу фронт показывает кнопку «Сформировать\nдокумент». Сервер завершение не блокирует — флаг подсказывает\nмомент, а не запрещает действие.\n"
           },
           "artifactId": {
             "type": "string",
             "nullable": true,
-            "description": "Ссылка на созданный артефакт этапа. Появляется уже на первом (черновом) вызове complete."
+            "description": "Документ, созданный при завершении этапа."
           },
           "createdAt": {
             "type": "string",
-            "format": "date-time",
-            "description": "Момент создания сессии."
+            "format": "date-time"
           },
           "updatedAt": {
             "type": "string",
-            "format": "date-time",
-            "description": "Момент последнего изменения сессии (новое сообщение, смена статуса)."
+            "format": "date-time"
           }
         }
       },
       "ExpertMessage": {
         "type": "object",
-        "description": "Одна реплика в диалоге экспертной сессии (домен Р-Акселератора — отдельный от StudyMessage обучающих курсов).",
+        "description": "Одна реплика в диалоге (домен Акселератора — отдельный от StudyMessage обучающих курсов).",
         "properties": {
           "_id": {
-            "type": "string",
-            "description": "Идентификатор сообщения."
+            "type": "string"
           },
           "sessionId": {
-            "type": "string",
-            "description": "Сессия, которой принадлежит сообщение."
+            "type": "string"
           },
           "projectId": {
-            "type": "string",
-            "description": "Проект, которому принадлежит сообщение (денормализовано из сессии)."
+            "type": "string"
           },
           "senderType": {
             "type": "string",
@@ -944,287 +926,189 @@
             "description": "Кто автор сообщения. system зарезервирован на будущее, сейчас не создаётся автоматически."
           },
           "content": {
-            "type": "string",
-            "description": "Текст сообщения."
+            "type": "string"
           },
           "tokenUsage": {
             "type": "object",
             "nullable": true,
-            "description": "Статистика по токенам от провайдера LLM, если он её вернул (только для ответов ассистента) — для аудита расходов, на логику не влияет."
+            "description": "Статистика по токенам от провайдера, если он её вернул (только для ответов агента) — для аудита расходов, на логику не влияет."
           },
           "createdAt": {
             "type": "string",
-            "format": "date-time",
-            "description": "Момент отправки сообщения."
+            "format": "date-time"
           }
         }
       },
       "ExpertArtifact": {
         "type": "object",
-        "description": "Структурированный результат экспертного этапа — то, что агент должен произвести для перехода к следующему.",
+        "description": "Итоговый документ этапа. Для пользователя это PDF (file.url), для следующих агентов — summary и текст документа (индексируется в Qdrant).",
         "properties": {
           "_id": {
-            "type": "string",
-            "description": "Идентификатор артефакта."
+            "type": "string"
           },
           "projectId": {
-            "type": "string",
-            "description": "Проект, которому принадлежит артефакт."
+            "type": "string"
           },
           "expertSessionId": {
-            "type": "string",
-            "description": "Сессия, в рамках которой артефакт был сгенерирован."
+            "type": "string"
           },
           "agentId": {
-            "type": "string",
-            "description": "Агент, создавший артефакт."
-          },
-          "type": {
-            "type": "string",
-            "description": "Тип артефакта — копия agent.artifactDefinition.artifactType на момент генерации."
+            "type": "string"
           },
           "title": {
             "type": "string",
-            "description": "Заголовок артефакта."
+            "description": "Заголовок документа — собирается из имени агента."
           },
-          "content": {
-            "type": "object",
-            "description": "Сам артефакт — JSON-объект, сгенерированный моделью, прошедший проверку обязательных полей (и опционально JSON Schema). Проверяется только структура, не правдивость содержимого."
+          "documentMarkdown": {
+            "type": "string",
+            "description": "Исходник документа в Markdown, из которого свёрстан PDF."
           },
           "summary": {
             "type": "string",
-            "description": "Краткая сводка артефакта — именно она уходит в Project.contextSummary следующим агентам и индексируется в Qdrant."
+            "description": "Краткая сводка этапа (собранные данные) — уходит в Project.contextSummary следующему агенту."
           },
-          "status": {
-            "type": "string",
-            "enum": [
-              "draft",
-              "ready",
-              "confirmed",
-              "rejected"
-            ],
-            "description": "Жизненный цикл: ready — черновик после complete без confirmArtifact;\nconfirmed — после complete с confirmArtifact=true (только тогда артефакт индексируется в Qdrant и двигает маршрут проекта).\n"
+          "file": {
+            "type": "object",
+            "description": "Сгенерированный PDF в S3 — основной результат этапа для пользователя.",
+            "properties": {
+              "key": {
+                "type": "string",
+                "nullable": true
+              },
+              "url": {
+                "type": "string",
+                "nullable": true,
+                "description": "Ссылка на PDF — её фронт показывает пользователю."
+              },
+              "mimeType": {
+                "type": "string"
+              },
+              "size": {
+                "type": "integer",
+                "nullable": true
+              }
+            }
           },
           "createdAt": {
             "type": "string",
-            "format": "date-time",
-            "description": "Момент создания артефакта."
+            "format": "date-time"
           },
           "updatedAt": {
             "type": "string",
-            "format": "date-time",
-            "description": "Момент последнего изменения (например, подтверждения)."
+            "format": "date-time"
+          }
+        }
+      },
+      "ExpertRouteAgent": {
+        "type": "object",
+        "description": "Публичное представление агента — то, что отдаётся обычному пользователю. Промпты и знания сюда не попадают.",
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "thinkingAvatarUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "order": {
+            "type": "integer"
           }
         }
       },
       "ExpertRouteItem": {
-        "type": "object",
-        "description": "Один агент в маршруте проекта, с его статусом относительно этого конкретного проекта (не глобальный статус агента).",
-        "properties": {
-          "_id": {
-            "type": "string",
-            "description": "Идентификатор агента."
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ExpertRouteAgent"
           },
-          "name": {
-            "type": "string",
-            "description": "Имя агента для интерфейса."
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "completed",
-              "current",
-              "locked"
-            ],
-            "description": "completed — этап пройден (артефакт подтверждён); current — активный этап проекта прямо сейчас; locked — до этого агента маршрут ещё не дошёл."
-          },
-          "nextAgentId": {
-            "type": "string",
-            "nullable": true,
-            "description": "_id следующего агента по маршруту (для построения UI-цепочки без отдельного запроса)."
+          {
+            "type": "object",
+            "description": "Агент маршрута со статусом относительно конкретного проекта.",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "completed",
+                  "current",
+                  "locked"
+                ],
+                "description": "completed — этап пройден; current — активный этап прямо сейчас; locked — маршрут до него ещё не дошёл."
+              }
+            }
           }
-        }
+        ]
       },
       "AcceleratorAgent": {
         "type": "object",
-        "description": "Универсальный AI-агент Р-Акселератора. Заводится администратором через этот же CRUD — в системе нет захардкоженного набора R1-R5, агент идентифицируется своим _id.",
+        "description": "Агент Акселератора — то, что видит администратор. Полей ровно\nстолько, сколько нужно, чтобы агент гарантированно провёл этап:\nдва промпта, знания, четыре отображаемых поля и два системных.\nПараметры LLM и сборки контекста одинаковы для всех агентов и\nзадаются в config/accelerator.config.js, а не у агента.\n",
         "properties": {
           "_id": {
             "type": "string",
-            "description": "Идентификатор агента. Единственный способ на него сослаться — отдельного человекочитаемого кода нет (см. nextAgentId)."
-          },
-          "name": {
-            "type": "string",
-            "description": "Имя агента для интерфейса (\"Роман\"). В промпт модели не попадает — чисто отображаемое поле."
-          },
-          "roleTitle": {
-            "type": "string",
-            "description": "Короткое описание специализации (\"Эксперт по рынку и нише\"). Тоже только для UI, в промпт не подмешивается."
-          },
-          "description": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 1000,
-            "description": "Развёрнутое описание агента для UI (карточка агента) — чем он занимается. Необязательное, в промпт модели не подмешивается."
-          },
-          "avatarUrl": {
-            "type": "string",
-            "format": "uri",
-            "nullable": true,
-            "description": "Ссылка на аватарку агента (изображение) для UI. Необязательное, в промпт не подмешивается."
-          },
-          "thinkingAvatarUrl": {
-            "type": "string",
-            "format": "uri",
-            "nullable": true,
-            "description": "Ссылка на «думающую» аватарку агента (состояние формирования ответа) для UI. Необязательное, в промпт не подмешивается."
-          },
-          "greeting": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 2000,
-            "description": "Приветственное сообщение агента в начале диалога (UI). Необязательное, в промпт не подмешивается."
-          },
-          "order": {
-            "type": "integer",
-            "description": "Порядковое место агента в маршруте. По нему сортируется список агентов и выбирается \"первый активный агент\", если у проекта ещё не выставлен текущий."
-          },
-          "isActive": {
-            "type": "boolean",
-            "description": "Если false — агент не участвует в пользовательском маршруте (нельзя открыть с ним сессию), но его данные и уже созданные артефакты не удаляются."
+            "description": "Идентификатор агента — единственный способ на него сослаться."
           },
           "systemPrompt": {
             "type": "string",
-            "description": "Базовая системная инструкция роли — первый и главный блок системного промпта, который реально уходит в LLM при каждом сообщении и при генерации артефакта. Виден только пользователям с правом accelerator_agents.manage."
+            "description": "Основная инструкция агента. Уходит в LLM первым блоком системного промпта при каждом сообщении и при генерации документа этапа. Видна только пользователям с правом accelerator_agents.manage."
           },
-          "completionCriteria": {
+          "completionPrompt": {
             "type": "string",
-            "description": "Текстовое описание того, когда этап считается завершённым. Добавляется в промпт как инструкция для модели — сервер не проверяет это как обязательное условие перед вызовом complete."
-          },
-          "completionEvaluatorPrompt": {
-            "type": "string",
-            "nullable": true,
-            "description": "Отдельный промпт для оценки завершённости этапа моделью-«оценщиком». Необязательное; если не задан — оценка опирается на completionCriteria."
-          },
-          "allowPartialCompletion": {
-            "type": "boolean",
-            "description": "Разрешать ли завершение этапа с частично заполненным артефактом. false — требуется полнота по критериям."
-          },
-          "artifactDefinition": {
-            "type": "object",
-            "description": "Описание структуры финального артефакта этапа — используется и в промпте (модели явно говорят, какие поля заполнить), и при проверке её ответа.",
-            "properties": {
-              "artifactType": {
-                "type": "string",
-                "description": "Тип артефакта (\"market_brief\") — попадает в Artifact.type."
-              },
-              "titleTemplate": {
-                "type": "string",
-                "nullable": true,
-                "description": "Шаблон заголовка артефакта. Если не задан, заголовок собирается автоматически из имени агента и artifactType."
-              },
-              "requiredFields": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "Ключи JSON, которые модель обязана заполнить непустыми значениями при генерации артефакта. Отсутствие любого поля в ответе модели даёт ошибку ARTIFACT_VALIDATION_FAILED."
-              },
-              "outputSchema": {
-                "type": "object",
-                "nullable": true,
-                "description": "Необязательная полноценная JSON Schema для более строгой проверки ответа модели (типы полей, а не только \"поле не пустое\"). Если схема сама невалидна как JSON Schema, проверка тихо пропускается."
-              },
-              "summaryField": {
-                "type": "string",
-                "default": "summary",
-                "description": "Какое поле сгенерированного JSON использовать как краткую сводку артефакта — эта сводка попадает и в Project.contextSummary, и в индексируемый текст в Qdrant."
-              }
-            }
-          },
-          "nextAgentId": {
-            "type": "string",
-            "nullable": true,
-            "description": "_id следующего агента маршрута. При подтверждении артефакта (confirmArtifact=true) Project.currentAgentId переключается на это значение; null — маршрут для проекта заканчивается на этом агенте."
-          },
-          "contextPolicy": {
-            "type": "object",
-            "description": "Настройки того, какой контекст подмешивать этому агенту в промпт.",
-            "properties": {
-              "includeProjectSummary": {
-                "type": "boolean",
-                "description": "Включать ли Project.contextSummary в системный промпт этого агента."
-              },
-              "includePreviousArtifacts": {
-                "type": "boolean",
-                "description": "Включать ли артефакты предыдущих этапов (sourceType=artifact) в поиск по Qdrant для этого агента."
-              },
-              "qdrantTopK": {
-                "type": "integer",
-                "description": "Сколько фрагментов забирать из Qdrant-поиска (топ-K по релевантности)."
-              },
-              "maxContextChars": {
-                "type": "integer",
-                "description": "Верхний лимит суммарной длины найденного в Qdrant контекста в символах — защита от разрастания промпта."
-              },
-              "allowedSourceTypes": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "enum": [
-                    "project_summary",
-                    "agent_summary",
-                    "artifact",
-                    "file_chunk",
-                    "user_note"
-                  ]
-                },
-                "description": "Какие типы источников участвуют в Qdrant-поиске для этого агента."
-              },
-              "knowledgeTopK": {
-                "type": "integer",
-                "description": "Сколько фрагментов забирать из базы знаний (knowledge_context) по привязанным knowledgeIds."
-              },
-              "knowledgeMaxContextChars": {
-                "type": "integer",
-                "description": "Отдельный лимит суммарной длины knowledge-контекста в символах."
-              }
-            }
+            "description": "Условие завершения этапа обычным текстом (не схема). Показывается агенту в системном промпте на каждом ходу; выполнив его, агент вызывает инструмент stage_ready, и сессия получает readyForArtifact=true."
           },
           "knowledgeIds": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "_id глобальных баз знаний (Knowledge), привязанных агенту. Поиск в knowledge_context идёт только по этому списку; пустой список — агент не получает знаний."
+            "description": "_id баз знаний (Knowledge), закреплённых за агентом. Поиск в knowledge_context идёт только по ним; пустой список — агент работает без базы знаний."
           },
-          "modelConfig": {
-            "type": "object",
-            "description": "Настройки конкретного LLM-вызова для этого агента. Провайдер сейчас всегда OpenAI.",
-            "properties": {
-              "model": {
-                "type": "string",
-                "description": "Имя модели OpenAI (\"gpt-4o-mini\")."
-              },
-              "temperature": {
-                "type": "number",
-                "description": "Температура генерации — выше значение, разнообразнее и менее предсказуемее ответы."
-              },
-              "maxTokens": {
-                "type": "integer",
-                "description": "Лимит токенов на ответ модели (не на входной контекст — тот ограничивается maxContextChars)."
-              }
-            }
+          "name": {
+            "type": "string",
+            "description": "Имя агента для интерфейса (\"Роман\"). В промпт не подмешивается."
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 1000,
+            "description": "Описание специализации для интерфейса (\"Эксперт по рынку и нише\"). В промпт не подмешивается, но используется как подзаголовок PDF-документа этапа."
+          },
+          "avatarUrl": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true,
+            "description": "Аватарка агента для UI."
+          },
+          "thinkingAvatarUrl": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true,
+            "description": "Аватарка состояния «агент думает» (пока модель формирует ответ)."
+          },
+          "order": {
+            "type": "integer",
+            "description": "Порядковый номер агента. Маршрут пользователя — это агенты, отсортированные по order, поэтому первый агент и переход «дальше» считаются по нему."
+          },
+          "nextAgentId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Необязательное переопределение перехода для нелинейного маршрута. Если не задан (или указывает на удалённого агента) — после этапа проект переходит к следующему агенту по order."
           },
           "createdAt": {
             "type": "string",
-            "format": "date-time",
-            "description": "Момент создания агента."
+            "format": "date-time"
           },
           "updatedAt": {
             "type": "string",
-            "format": "date-time",
-            "description": "Момент последнего изменения агента."
+            "format": "date-time"
           }
         }
       },
@@ -1856,6 +1740,153 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/system/llm-health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Состояние LLM-провайдеров",
+        "description": "Живая диагностика провайдеров: доступны ли, валидны ли ключи, есть ли\nденьги, сходится ли размерность эмбеддингов с коллекциями Qdrant.\nТолько для пользователей с правом `system_diagnostics.read`.\n\n**Зачем.** Снаружи «агент не отвечает» выглядит одинаково, а внутри это\nразные ситуации с разными действиями. Эндпоинт их разделяет:\n\n| `status` проверки | Что случилось | Что делать |\n|---|---|---|\n| `ok` | всё работает | — |\n| `unreachable` | сеть не пустила (DNS/TCP/TLS/таймаут) | смотреть доступ с сервера к провайдеру, а не ключи |\n| `invalid_key` | ключ отклонён | перевыпустить ключ |\n| `no_credits` | закончились деньги | пополнить баланс |\n| `rate_limited` | лимит запросов (деньги есть) | подождать |\n| `misconfigured` | нет такой модели или размерность вектора ≠ `EMBEDDING_DIM` | починить конфигурацию; при смене размерности — пересоздать коллекции Qdrant и переиндексировать |\n| `not_configured` | ключ не задан в окружении | задать переменную |\n\n**Три проверки, потому что провайдера два и падают они независимо:**\n`chat` — прямой OpenAI (чат агентов study и акселератора);\n`openrouterAccount` — ключ и баланс OpenRouter;\n`embeddings` — реальная векторизация через OpenRouter со сверкой размерности.\nУмерший OpenRouter не трогает study, но полностью останавливает\nакселератор: сборка контекста начинается с векторного поиска.\n\n**Итоговый `status`:** `ok` — все проверки прошли; `down` — есть\nблокирующая проблема; `degraded` — есть небезопасная, но не\nблокирующая (например, `rate_limited`).\n\nКаждая проверка — реальный сетевой вызов (проба чата стоит доли цента),\nпоэтому результат кешируется на 60 секунд.\n\nHTTP-код всегда `200`, даже когда провайдеры лежат: это отчёт о\nсостоянии, а не результат операции. Смотрите `data.status`.\n",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true"
+              ]
+            },
+            "description": "Игнорировать кеш и проверить провайдеров заново (например, сразу после смены ключей)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Отчёт о состоянии провайдеров",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "degraded",
+                            "down"
+                          ]
+                        },
+                        "checkedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "cached": {
+                          "type": "boolean",
+                          "description": "true — ответ из кеша (моложе 60 секунд), сеть не дёргалась."
+                        },
+                        "checks": {
+                          "type": "object",
+                          "properties": {
+                            "chat": {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "type": "string"
+                                },
+                                "message": {
+                                  "type": "string"
+                                },
+                                "model": {
+                                  "type": "string"
+                                },
+                                "latencyMs": {
+                                  "type": "integer"
+                                }
+                              }
+                            },
+                            "openrouterAccount": {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "type": "string"
+                                },
+                                "message": {
+                                  "type": "string"
+                                },
+                                "balanceUsd": {
+                                  "type": "number",
+                                  "nullable": true,
+                                  "description": "Остаток на аккаунте: total_credits - total_usage. null — ключу не хватает прав на /credits."
+                                },
+                                "totalCreditsUsd": {
+                                  "type": "number",
+                                  "nullable": true
+                                },
+                                "totalUsageUsd": {
+                                  "type": "number",
+                                  "nullable": true
+                                },
+                                "keyLimitRemainingUsd": {
+                                  "type": "number",
+                                  "nullable": true,
+                                  "description": "Остаток лимита САМОГО КЛЮЧА. null — лимит на ключе не выставлен; это не про баланс аккаунта."
+                                },
+                                "isFreeTier": {
+                                  "type": "boolean"
+                                },
+                                "latencyMs": {
+                                  "type": "integer"
+                                }
+                              }
+                            },
+                            "embeddings": {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "type": "string"
+                                },
+                                "message": {
+                                  "type": "string"
+                                },
+                                "model": {
+                                  "type": "string"
+                                },
+                                "dimensions": {
+                                  "type": "integer",
+                                  "nullable": true,
+                                  "description": "Размерность, которую вернул провайдер."
+                                },
+                                "expectedDimensions": {
+                                  "type": "integer",
+                                  "description": "EMBEDDING_DIM — под неё созданы коллекции Qdrant."
+                                },
+                                "latencyMs": {
+                                  "type": "integer"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Требуется авторизация"
+          },
+          "403": {
+            "description": "Недостаточно прав"
           }
         }
       }
@@ -6521,7 +6552,7 @@
           "Accelerator / Expert Route"
         ],
         "summary": "Текущий агент и маршрут проекта",
-        "description": "Если у проекта ещё нет currentAgentId (новый проект), он самолечится здесь — подставляется первый активный агент по order. Если в системе вообще нет ни одного активного агента, currentAgentId будет null, а items — пустым массивом.",
+        "description": "Все агенты по порядку (order) со статусом относительно этого проекта:\ncompleted / current / locked. Промпты агентов в ответ не попадают —\nтолько отображаемые поля.\n\nУ нового проекта currentAgentId ещё не выставлен: он проставляется\nздесь — первым агентом по order. Если маршрут пройден целиком,\ncurrentAgentId = null и все items имеют статус completed.\n",
         "parameters": [
           {
             "in": "path",
@@ -6608,8 +6639,8 @@
         "tags": [
           "Accelerator / Expert Sessions"
         ],
-        "summary": "Создать (или продолжить активную) экспертную сессию для агента",
-        "description": "agentId должен совпадать с текущим Project.currentAgentId — иначе 409 AGENT_NOT_CURRENT (нельзя перепрыгнуть агента, минуя маршрут). Если для этого агента уже есть активная сессия (draft/active/waiting_user_confirmation), возвращается именно она, новая не создаётся.",
+        "summary": "Начать (или продолжить) сессию с текущим агентом проекта",
+        "description": "Тело запроса можно не передавать: сессия всегда открывается с текущим\nагентом маршрута. Если активная сессия с ним уже есть — возвращается\nона же, новая не создаётся, поэтому эндпоинт безопасно вызывать при\nкаждом входе в проект.\n\nЕсли agentId всё же передан, он должен совпадать с текущим агентом —\nиначе 409 AGENT_NOT_CURRENT (перепрыгнуть этап нельзя).\n",
         "parameters": [
           {
             "in": "path",
@@ -6621,18 +6652,14 @@
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "agentId"
-                ],
                 "properties": {
                   "agentId": {
                     "type": "string",
-                    "description": "_id агента, с которым нужно начать/продолжить диалог."
+                    "description": "Необязательная проверка — _id агента, с которым фронт рассчитывает продолжить диалог."
                   }
                 }
               }
@@ -6660,6 +6687,9 @@
                       "properties": {
                         "session": {
                           "$ref": "#/components/schemas/ExpertSession"
+                        },
+                        "agent": {
+                          "$ref": "#/components/schemas/ExpertRouteAgent"
                         }
                       }
                     }
@@ -6689,7 +6719,7 @@
             }
           },
           "404": {
-            "description": "Проект или агент не найден",
+            "description": "Проект не найден",
             "content": {
               "application/json": {
                 "schema": {
@@ -6699,7 +6729,7 @@
             }
           },
           "409": {
-            "description": "Агент найден, но недоступен: AGENT_INACTIVE (отключён администратором) или AGENT_NOT_CURRENT (не совпадает с текущим агентом маршрута)",
+            "description": "AGENT_NOT_CURRENT (переданный агент не текущий) или NO_CURRENT_AGENT (маршрут пройден либо агенты не заведены)",
             "content": {
               "application/json": {
                 "schema": {
@@ -6717,7 +6747,7 @@
           "Accelerator / Expert Sessions"
         ],
         "summary": "Отправить сообщение агенту (SSE-стриминг)",
-        "description": "Сервер собирает контекст (summary проекта, системный промпт агента,\nрелевантные фрагменты из Qdrant, отфильтрованные по projectId) и\nстримит ответ модели по протоколу Server-Sent Events. Клиент\nникогда не обращается к LLM/Qdrant напрямую.\n\nОшибки, которые можно определить до начала стриминга (сессия/агент\nне найдены, сессия уже завершена), возвращаются обычным JSON-ответом\nс кодом ошибки — заголовки переключаются на text/event-stream только\nпосле этих проверок.\n\n**Формат событий SSE:**\n- `message_created` — сохранённое сообщение пользователя: `{ userMessage }`\n- `delta` — фрагмент ответа агента по мере генерации: `{ text: \"...\" }`\n- `done` — финальное сохранённое сообщение агента: `{ assistantMessage }`\n- `error` — ошибка в процессе стриминга: `{ message, code }`. `code` гарантированно нормализован до `LLM_PROVIDER_FAILED`, если у исходной ошибки не было своего кода (например, сбой самого вызова LLM) — не сырой код провайдера.\n",
+        "description": "Сервер собирает контекст (summary проекта, системный промпт агента,\nрелевантные фрагменты из Qdrant, отфильтрованные по projectId) и\nстримит ответ модели по протоколу Server-Sent Events. Клиент\nникогда не обращается к LLM/Qdrant напрямую.\n\nОшибки, которые можно определить до начала стриминга (сессия/агент\nне найдены, сессия уже завершена), возвращаются обычным JSON-ответом\nс кодом ошибки — заголовки переключаются на text/event-stream только\nпосле этих проверок.\n\n**Формат событий SSE:**\n- `message_created` — сохранённое сообщение пользователя: `{ userMessage }`\n- `delta` — фрагмент ответа агента по мере генерации: `{ text: \"...\" }`\n- `data_updated` — агент сохранил данные посреди хода: `{ collectedData, readyForArtifact }`. Приходит до `done`, пока агент ещё дописывает реплику; если в этом ходу ничего не сохранялось, события не будет.\n- `done` — финальное сообщение агента и состояние этапа: `{ assistantMessage, collectedData, readyForArtifact }`\n- `error` — ошибка в процессе стриминга: `{ message, code }`. `code` нормализован до `LLM_PROVIDER_FAILED`, если у исходной ошибки не было своего кода.\n\n**readyForArtifact — когда показывать кнопку завершения этапа.**\nАгент по ходу диалога складывает собранные данные в свободное\nхранилище сессии (`collectedData`) инструментом `save_data`, а когда\nвыполняется условие из `completionPrompt` — вызывает `stage_ready`,\nи `readyForArtifact` становится `true`. Именно по этому флагу фронт\nпоказывает кнопку «Сформировать документ».\n\nСервер завершение этапа не блокирует: если пользователь нажмёт кнопку\nраньше, документ всё равно будет создан по тем данным, что есть.\nФлаг подсказывает момент, а не запирает пользователя на этапе.\n",
         "parameters": [
           {
             "in": "path",
@@ -6812,8 +6842,8 @@
         "tags": [
           "Accelerator / Expert Sessions"
         ],
-        "summary": "История сообщений сессии",
-        "description": "Возвращает все сообщения сессии в хронологическом порядке (createdAt по возрастанию) — и пользователя, и агента. Используется для восстановления диалога после перезагрузки страницы.",
+        "summary": "История сообщений и состояние сессии",
+        "description": "Все сообщения сессии в хронологическом порядке плюс состояние этапа:\n`collectedData` (что агент уже собрал), `readyForArtifact` (показывать\nли кнопку завершения), `artifactId` и `status`. Одним запросом\nвосстанавливает экран после перезагрузки страницы.\n",
         "parameters": [
           {
             "in": "path",
@@ -6902,8 +6932,8 @@
         "tags": [
           "Accelerator / Expert Sessions"
         ],
-        "summary": "Завершить этап и создать/подтвердить артефакт",
-        "description": "Двухфазное завершение: без confirmArtifact создаётся черновик артефакта\n(status=ready) и сессия переходит в waiting_user_confirmation, но проект\nне переключается на следующего агента. С confirmArtifact=true артефакт\nподтверждается (status=confirmed), индексируется в Qdrant, summary проекта\nобновляется и currentAgentId переключается на nextAgentId агента. Если у\nагента нет nextAgentId (последний в маршруте) — это был финальный этап,\nи Project.status автоматически становится \"completed\".\nПовторный вызов уже завершённой сессии — 409.\n",
+        "summary": "Завершить этап и получить документ",
+        "description": "Один вызов делает всё: модель пишет документ этапа, сервер верстает\nего в PDF и кладёт в S3, сессия закрывается, проект переключается на\nследующего агента. Параметров у запроса нет.\n\nСледующий агент — это следующий по `order` (либо `nextAgentId`, если\nон задан у текущего агента). Когда следующего нет, маршрут пройден:\n`nextAgentId` в ответе = null, а `Project.status` становится\n`completed`.\n\nГотовность этапа сервер не проверяет: фронт показывает кнопку по\n`readyForArtifact`, но если пользователь завершит этап раньше,\nдокумент будет создан по уже собранным данным. Повторный вызов на\nзавершённой сессии идемпотентен — возвращает тот же документ.\n",
         "parameters": [
           {
             "in": "path",
@@ -6922,25 +6952,9 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "confirmArtifact": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "true — подтвердить артефакт и продвинуть маршрут; false/не передано — только создать черновик на проверку."
-                  }
-                }
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
-            "description": "Артефакт создан/подтверждён",
+            "description": "Этап завершён, документ создан",
             "content": {
               "application/json": {
                 "schema": {
@@ -6963,15 +6977,11 @@
                         "nextAgentId": {
                           "type": "string",
                           "nullable": true,
-                          "description": "Новый Project.currentAgentId, если артефакт был подтверждён (confirmArtifact=true); null, если это только черновик."
+                          "description": "Новый Project.currentAgentId. null — маршрут проекта пройден полностью."
                         },
                         "projectContextVersion": {
                           "type": "integer",
                           "description": "Актуальное значение Project.contextVersion после этого вызова."
-                        },
-                        "confirmed": {
-                          "type": "boolean",
-                          "description": "true, если это был подтверждающий вызов (confirmArtifact=true), false — если только черновик."
                         }
                       }
                     }
@@ -7010,28 +7020,8 @@
               }
             }
           },
-          "409": {
-            "description": "Сессия уже завершена",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Артефакт не прошёл валидацию (ARTIFACT_VALIDATION_FAILED)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
           "502": {
-            "description": "Сбой внешней зависимости: LLM_PROVIDER_FAILED (генерация артефакта) или QDRANT_INDEX_FAILED (индексация подтверждённого артефакта)",
+            "description": "Сбой внешней зависимости: LLM_PROVIDER_FAILED (генерация документа), ARTIFACT_RENDER_FAILED (вёрстка PDF), ARTIFACT_UPLOAD_FAILED (загрузка в S3)",
             "content": {
               "application/json": {
                 "schema": {
@@ -7048,8 +7038,8 @@
         "tags": [
           "Accelerator / Expert Sessions"
         ],
-        "summary": "Список артефактов проекта",
-        "description": "Возвращает все артефакты проекта (любого статуса — draft/ready/confirmed/rejected) в порядке создания. Используется для отображения панели готовности результатов по этапам маршрута.",
+        "summary": "Список документов проекта",
+        "description": "Все документы, созданные по завершённым этапам, в порядке создания — по одному на этап. Используется для панели результатов проекта.",
         "parameters": [
           {
             "in": "path",
@@ -7346,8 +7336,8 @@
         "tags": [
           "Accelerator / Admin Agents"
         ],
-        "summary": "Список агентов Р-Акселератора",
-        "description": "Только для пользователей с правом accelerator_agents.manage (или superadmin). Возвращает агентов вместе с systemPrompt и completionCriteria — обычные пользователи этот эндпоинт не видят.",
+        "summary": "Список агентов Акселератора",
+        "description": "Только для пользователей с правом accelerator_agents.manage (или superadmin). Возвращает агентов вместе с промптами — обычные пользователи этот эндпоинт не видят.",
         "responses": {
           "200": {
             "description": "Список агентов, отсортированный по order.",
@@ -7402,7 +7392,7 @@
           "Accelerator / Admin Agents"
         ],
         "summary": "Создать агента",
-        "description": "Агент — универсальная сущность, система не завязана на фиксированный\nнабор R1-R5. Идентифицируется своим _id (Mongo ObjectId) — отдельного\nчеловекочитаемого кода нет. order определяет последовательность,\nnextAgentId — переход после завершения (должен ссылаться на\nсуществующего агента по _id или быть пустым).\n",
+        "description": "У агента ровно девять полей — больше настраивать нечего. Поведение\nзадаётся двумя промптами; параметры LLM и сборки контекста общие для\nвсего сервиса и через API не настраиваются.\n\nМаршрут пользователя — это агенты, отсортированные по `order`.\n`nextAgentId` нужен только для нелинейного перехода; для обычного\nпоследовательного маршрута его можно не задавать вовсе.\n\nПодробно — `docs/accelerator/agent-setup.md`.\n",
         "requestBody": {
           "required": true,
           "content": {
@@ -7411,163 +7401,59 @@
                 "type": "object",
                 "required": [
                   "name",
-                  "roleTitle",
                   "order",
                   "systemPrompt",
-                  "completionCriteria",
-                  "artifactDefinition"
+                  "completionPrompt"
                 ],
                 "properties": {
-                  "name": {
-                    "type": "string",
-                    "description": "Имя агента для интерфейса."
-                  },
-                  "roleTitle": {
-                    "type": "string",
-                    "description": "Короткое описание специализации."
-                  },
-                  "description": {
-                    "type": "string",
-                    "maxLength": 1000,
-                    "nullable": true,
-                    "description": "Развёрнутое описание агента для UI (в промпт не подмешивается)."
-                  },
-                  "avatarUrl": {
-                    "type": "string",
-                    "format": "uri",
-                    "nullable": true,
-                    "description": "Ссылка на аватарку агента (изображение) для UI."
-                  },
-                  "thinkingAvatarUrl": {
-                    "type": "string",
-                    "format": "uri",
-                    "nullable": true,
-                    "description": "Ссылка на «думающую» аватарку агента для UI."
-                  },
-                  "greeting": {
-                    "type": "string",
-                    "maxLength": 2000,
-                    "nullable": true,
-                    "description": "Приветственное сообщение агента в начале диалога (UI)."
-                  },
-                  "order": {
-                    "type": "integer",
-                    "description": "Порядковое место агента в маршруте."
-                  },
-                  "isActive": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Если false — агент не участвует в пользовательском маршруте."
-                  },
                   "systemPrompt": {
                     "type": "string",
-                    "description": "Базовая системная инструкция роли — уходит в LLM при каждом сообщении."
+                    "maxLength": 20000,
+                    "description": "Основная инструкция агента — уходит в LLM при каждом сообщении и при генерации документа этапа."
                   },
-                  "completionCriteria": {
+                  "completionPrompt": {
                     "type": "string",
-                    "description": "Когда этап считается завершённым (инструкция для модели, не хард-гейт на сервере)."
-                  },
-                  "completionEvaluatorPrompt": {
-                    "type": "string",
-                    "nullable": true,
-                    "description": "Промпт для оценки завершённости этапа моделью-оценщиком (опционально)."
-                  },
-                  "allowPartialCompletion": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Разрешать завершение с частично заполненным артефактом."
-                  },
-                  "artifactDefinition": {
-                    "type": "object",
-                    "required": [
-                      "artifactType"
-                    ],
-                    "properties": {
-                      "artifactType": {
-                        "type": "string",
-                        "description": "Тип артефакта, попадает в Artifact.type."
-                      },
-                      "titleTemplate": {
-                        "type": "string",
-                        "nullable": true,
-                        "description": "Шаблон заголовка артефакта."
-                      },
-                      "requiredFields": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        },
-                        "description": "Обязательные ключи JSON-артефакта."
-                      },
-                      "outputSchema": {
-                        "type": "object",
-                        "nullable": true,
-                        "description": "Доп. JSON Schema для строгой валидации."
-                      },
-                      "summaryField": {
-                        "type": "string",
-                        "default": "summary",
-                        "description": "Какое поле артефакта использовать как краткую сводку."
-                      }
-                    }
-                  },
-                  "nextAgentId": {
-                    "type": "string",
-                    "nullable": true,
-                    "description": "_id другого агента — куда переключить проект после подтверждения артефакта."
-                  },
-                  "contextPolicy": {
-                    "type": "object",
-                    "properties": {
-                      "includeProjectSummary": {
-                        "type": "boolean",
-                        "description": "Подмешивать ли Project.contextSummary в промпт."
-                      },
-                      "includePreviousArtifacts": {
-                        "type": "boolean",
-                        "description": "Включать ли артефакты предыдущих этапов в Qdrant-поиск."
-                      },
-                      "qdrantTopK": {
-                        "type": "integer",
-                        "description": "Сколько фрагментов забирать из Qdrant-поиска."
-                      },
-                      "maxContextChars": {
-                        "type": "integer",
-                        "description": "Лимит символов на весь retrieved-контекст."
-                      },
-                      "allowedSourceTypes": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        },
-                        "description": "Какие типы источников участвуют в поиске."
-                      }
-                    }
-                  },
-                  "modelConfig": {
-                    "type": "object",
-                    "description": "Провайдер сейчас всегда OpenAI.",
-                    "properties": {
-                      "model": {
-                        "type": "string",
-                        "description": "Модель OpenAI."
-                      },
-                      "temperature": {
-                        "type": "number",
-                        "description": "Температура генерации."
-                      },
-                      "maxTokens": {
-                        "type": "integer",
-                        "description": "Лимит токенов на ответ модели."
-                      }
-                    }
+                    "maxLength": 5000,
+                    "description": "Условие завершения этапа обычным текстом. Агент видит его в промпте и сам вызывает stage_ready, когда условие выполнено."
                   },
                   "knowledgeIds": {
                     "type": "array",
                     "items": {
                       "type": "string"
                     },
-                    "description": "_id глобальных баз знаний (Knowledge), привязанных агенту. Поиск в knowledge_context идёт только по ним."
+                    "description": "_id баз знаний (Knowledge), закреплённых за агентом. Пустой список — агент работает без базы знаний."
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 150,
+                    "description": "Имя агента для интерфейса."
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "nullable": true,
+                    "description": "Описание специализации для интерфейса."
+                  },
+                  "avatarUrl": {
+                    "type": "string",
+                    "format": "uri",
+                    "nullable": true,
+                    "description": "Аватарка агента."
+                  },
+                  "thinkingAvatarUrl": {
+                    "type": "string",
+                    "format": "uri",
+                    "nullable": true,
+                    "description": "Аватарка состояния «агент думает»."
+                  },
+                  "order": {
+                    "type": "integer",
+                    "description": "Порядковый номер агента в маршруте."
+                  },
+                  "nextAgentId": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Необязательное переопределение перехода: _id агента, к которому перейти после этого этапа. По умолчанию — следующий по order."
                   }
                 }
               }
@@ -7599,7 +7485,7 @@
             }
           },
           "400": {
-            "description": "Ошибка валидации или nextAgentId не существует",
+            "description": "Ошибка валидации, nextAgentId или knowledgeIds не существуют",
             "content": {
               "application/json": {
                 "schema": {
@@ -7708,7 +7594,7 @@
           "Accelerator / Admin Agents"
         ],
         "summary": "Обновить агента",
-        "description": "Позволяет, среди прочего, временно отключить агента полем isActive=false. Все поля запроса опциональны — обновляются только переданные.",
+        "description": "Все поля запроса опциональны — обновляются только переданные.",
         "parameters": [
           {
             "in": "path",
@@ -7725,100 +7611,46 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "name": {
-                    "type": "string"
-                  },
-                  "roleTitle": {
-                    "type": "string"
-                  },
-                  "description": {
-                    "type": "string",
-                    "maxLength": 1000,
-                    "nullable": true,
-                    "description": "Развёрнутое описание агента для UI."
-                  },
-                  "avatarUrl": {
-                    "type": "string",
-                    "format": "uri",
-                    "nullable": true,
-                    "description": "Ссылка на аватарку агента."
-                  },
-                  "thinkingAvatarUrl": {
-                    "type": "string",
-                    "format": "uri",
-                    "nullable": true,
-                    "description": "Ссылка на «думающую» аватарку агента."
-                  },
-                  "greeting": {
-                    "type": "string",
-                    "maxLength": 2000,
-                    "nullable": true,
-                    "description": "Приветственное сообщение агента (UI)."
-                  },
-                  "order": {
-                    "type": "integer"
-                  },
-                  "isActive": {
-                    "type": "boolean",
-                    "description": "false — временно исключить агента из пользовательского маршрута."
-                  },
                   "systemPrompt": {
-                    "type": "string"
-                  },
-                  "completionCriteria": {
-                    "type": "string"
-                  },
-                  "completionEvaluatorPrompt": {
                     "type": "string",
-                    "nullable": true,
-                    "description": "Промпт для оценки завершённости этапа (опционально)."
+                    "maxLength": 20000
                   },
-                  "allowPartialCompletion": {
-                    "type": "boolean",
-                    "description": "Разрешать завершение с частично заполненным артефактом."
-                  },
-                  "artifactDefinition": {
-                    "type": "object",
-                    "properties": {
-                      "artifactType": {
-                        "type": "string"
-                      },
-                      "titleTemplate": {
-                        "type": "string",
-                        "nullable": true
-                      },
-                      "requiredFields": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "outputSchema": {
-                        "type": "object",
-                        "nullable": true
-                      },
-                      "summaryField": {
-                        "type": "string"
-                      }
-                    }
-                  },
-                  "nextAgentId": {
+                  "completionPrompt": {
                     "type": "string",
-                    "nullable": true,
-                    "description": "_id следующего агента; должен существовать."
-                  },
-                  "contextPolicy": {
-                    "type": "object"
-                  },
-                  "modelConfig": {
-                    "type": "object"
+                    "maxLength": 5000
                   },
                   "knowledgeIds": {
                     "type": "array",
                     "items": {
                       "type": "string"
-                    },
-                    "description": "_id баз знаний (Knowledge), привязанных агенту."
+                    }
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 150
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "nullable": true
+                  },
+                  "avatarUrl": {
+                    "type": "string",
+                    "format": "uri",
+                    "nullable": true
+                  },
+                  "thinkingAvatarUrl": {
+                    "type": "string",
+                    "format": "uri",
+                    "nullable": true
+                  },
+                  "order": {
+                    "type": "integer"
+                  },
+                  "nextAgentId": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Должен ссылаться на существующего агента и не на самого себя."
                   }
                 }
               }
@@ -7850,7 +7682,7 @@
             }
           },
           "400": {
-            "description": "Ошибка валидации или nextAgentId не существует",
+            "description": "Ошибка валидации, несуществующий nextAgentId/knowledgeIds или самоссылка (NEXT_AGENT_SELF_REFERENCE)",
             "content": {
               "application/json": {
                 "schema": {

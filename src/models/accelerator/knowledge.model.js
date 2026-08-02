@@ -6,7 +6,7 @@ import mongoose from 'mongoose';
 // ссылка (sourceUrl). Векторизуется в отдельную Qdrant-коллекцию
 // (knowledge_context), точки фильтруются по knowledgeId. Не привязана к
 // проекту/пользователю — одни и те же знания можно раздать разным агентам
-// через Agent.knowledgeIds. См. docs/expert-context.md.
+// через Agent.knowledgeIds. См. docs/accelerator/README.md.
 const KnowledgeSchema = new mongoose.Schema({
     // Название базы знаний для интерфейса админки.
     title: {

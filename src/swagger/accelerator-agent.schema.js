@@ -4,136 +4,55 @@
  *   schemas:
  *     AcceleratorAgent:
  *       type: object
- *       description: Универсальный AI-агент Р-Акселератора. Заводится администратором через этот же CRUD — в системе нет захардкоженного набора R1-R5, агент идентифицируется своим _id.
+ *       description: |
+ *         Агент Акселератора — то, что видит администратор. Полей ровно
+ *         столько, сколько нужно, чтобы агент гарантированно провёл этап:
+ *         два промпта, знания, четыре отображаемых поля и два системных.
+ *         Параметры LLM и сборки контекста одинаковы для всех агентов и
+ *         задаются в config/accelerator.config.js, а не у агента.
  *       properties:
  *         _id:
  *           type: string
- *           description: Идентификатор агента. Единственный способ на него сослаться — отдельного человекочитаемого кода нет (см. nextAgentId).
+ *           description: Идентификатор агента — единственный способ на него сослаться.
+ *         systemPrompt:
+ *           type: string
+ *           description: Основная инструкция агента. Уходит в LLM первым блоком системного промпта при каждом сообщении и при генерации документа этапа. Видна только пользователям с правом accelerator_agents.manage.
+ *         completionPrompt:
+ *           type: string
+ *           description: Условие завершения этапа обычным текстом (не схема). Показывается агенту в системном промпте на каждом ходу; выполнив его, агент вызывает инструмент stage_ready, и сессия получает readyForArtifact=true.
+ *         knowledgeIds:
+ *           type: array
+ *           items: { type: string }
+ *           description: _id баз знаний (Knowledge), закреплённых за агентом. Поиск в knowledge_context идёт только по ним; пустой список — агент работает без базы знаний.
  *         name:
  *           type: string
- *           description: Имя агента для интерфейса ("Роман"). В промпт модели не попадает — чисто отображаемое поле.
- *         roleTitle:
- *           type: string
- *           description: Короткое описание специализации ("Эксперт по рынку и нише"). Тоже только для UI, в промпт не подмешивается.
+ *           description: Имя агента для интерфейса ("Роман"). В промпт не подмешивается.
  *         description:
  *           type: string
  *           nullable: true
  *           maxLength: 1000
- *           description: Развёрнутое описание агента для UI (карточка агента) — чем он занимается. Необязательное, в промпт модели не подмешивается.
+ *           description: Описание специализации для интерфейса ("Эксперт по рынку и нише"). В промпт не подмешивается, но используется как подзаголовок PDF-документа этапа.
  *         avatarUrl:
  *           type: string
  *           format: uri
  *           nullable: true
- *           description: Ссылка на аватарку агента (изображение) для UI. Необязательное, в промпт не подмешивается.
+ *           description: Аватарка агента для UI.
  *         thinkingAvatarUrl:
  *           type: string
  *           format: uri
  *           nullable: true
- *           description: Ссылка на «думающую» аватарку агента (состояние формирования ответа) для UI. Необязательное, в промпт не подмешивается.
- *         greeting:
- *           type: string
- *           nullable: true
- *           maxLength: 2000
- *           description: Приветственное сообщение агента в начале диалога (UI). Необязательное, в промпт не подмешивается.
+ *           description: Аватарка состояния «агент думает» (пока модель формирует ответ).
  *         order:
  *           type: integer
- *           description: Порядковое место агента в маршруте. По нему сортируется список агентов и выбирается "первый активный агент", если у проекта ещё не выставлен текущий.
- *         isActive:
- *           type: boolean
- *           description: Если false — агент не участвует в пользовательском маршруте (нельзя открыть с ним сессию), но его данные и уже созданные артефакты не удаляются.
- *         systemPrompt:
- *           type: string
- *           description: Базовая системная инструкция роли — первый и главный блок системного промпта, который реально уходит в LLM при каждом сообщении и при генерации артефакта. Виден только пользователям с правом accelerator_agents.manage.
- *         completionCriteria:
- *           type: string
- *           description: Текстовое описание того, когда этап считается завершённым. Добавляется в промпт как инструкция для модели — сервер не проверяет это как обязательное условие перед вызовом complete.
- *         completionEvaluatorPrompt:
- *           type: string
- *           nullable: true
- *           description: "УСТАРЕЛО: модель-«оценщик» удалена, поле на поведение не влияет. Готовность этапа считается по заполненности карточки (collectedFields). Оставлено ради совместимости админского API."
- *         allowPartialCompletion:
- *           type: boolean
- *           description: Разрешать ли завершение этапа с частично заполненным артефактом. false — требуется полнота по критериям.
- *         artifactDefinition:
- *           type: object
- *           description: Описание структуры финального артефакта этапа — используется и в промпте (модели явно говорят, какие поля заполнить), и при проверке её ответа.
- *           properties:
- *             artifactType:
- *               type: string
- *               description: Тип артефакта ("market_brief") — попадает в Artifact.type.
- *             titleTemplate:
- *               type: string
- *               nullable: true
- *               description: Шаблон заголовка артефакта. Если не задан, заголовок собирается автоматически из имени агента и artifactType.
- *             requiredFields:
- *               type: array
- *               items: { type: string }
- *               description: Ключи JSON, которые модель обязана заполнить непустыми значениями при генерации артефакта. Отсутствие любого поля в ответе модели даёт ошибку ARTIFACT_VALIDATION_FAILED.
- *             outputSchema:
- *               type: object
- *               nullable: true
- *               description: Необязательная полноценная JSON Schema для более строгой проверки ответа модели (типы полей, а не только "поле не пустое"). Если схема сама невалидна как JSON Schema, проверка тихо пропускается.
- *             summaryField:
- *               type: string
- *               default: summary
- *               description: Какое поле сгенерированного JSON использовать как краткую сводку артефакта — эта сводка попадает и в Project.contextSummary, и в индексируемый текст в Qdrant.
+ *           description: Порядковый номер агента. Маршрут пользователя — это агенты, отсортированные по order, поэтому первый агент и переход «дальше» считаются по нему.
  *         nextAgentId:
  *           type: string
  *           nullable: true
- *           description: _id следующего агента маршрута. При подтверждении артефакта (confirmArtifact=true) Project.currentAgentId переключается на это значение; null — маршрут для проекта заканчивается на этом агенте.
- *         contextPolicy:
- *           type: object
- *           description: Настройки того, какой контекст подмешивать этому агенту в промпт.
- *           properties:
- *             includeProjectSummary:
- *               type: boolean
- *               description: Включать ли Project.contextSummary в системный промпт этого агента.
- *             includePreviousArtifacts:
- *               type: boolean
- *               description: Включать ли артефакты предыдущих этапов (sourceType=artifact) в поиск по Qdrant для этого агента.
- *             qdrantTopK:
- *               type: integer
- *               description: Сколько фрагментов забирать из Qdrant-поиска (топ-K по релевантности).
- *             maxContextChars:
- *               type: integer
- *               description: Верхний лимит суммарной длины найденного в Qdrant контекста в символах — защита от разрастания промпта.
- *             allowedSourceTypes:
- *               type: array
- *               items: { type: string, enum: [project_summary, agent_summary, artifact, file_chunk, user_note] }
- *               description: Какие типы источников участвуют в Qdrant-поиске для этого агента.
- *             knowledgeTopK:
- *               type: integer
- *               description: Сколько фрагментов забирать из базы знаний (knowledge_context) по привязанным knowledgeIds.
- *             knowledgeMaxContextChars:
- *               type: integer
- *               description: Отдельный лимит суммарной длины knowledge-контекста в символах.
- *         knowledgeIds:
- *           type: array
- *           items: { type: string }
- *           description: _id глобальных баз знаний (Knowledge), привязанных агенту. Поиск в knowledge_context идёт только по этому списку; пустой список — агент не получает знаний.
- *         modelConfig:
- *           type: object
- *           description: Настройки конкретного LLM-вызова для этого агента. Провайдер сейчас всегда OpenAI.
- *           properties:
- *             model:
- *               type: string
- *               description: Имя модели OpenAI ("gpt-4o-mini").
- *             evaluatorModel:
- *               type: string
- *               nullable: true
- *               description: Дешёвая вспомогательная модель. После удаления оценщика используется только для разового бэкфилла карточки этапа в сессиях, начатых до перехода на save_collected_fields. Если не задана — используется model.
- *             temperature:
- *               type: number
- *               description: Температура генерации — выше значение, разнообразнее и менее предсказуемее ответы.
- *             maxTokens:
- *               type: integer
- *               description: Лимит токенов на ответ модели (не на входной контекст — тот ограничивается maxContextChars).
+ *           description: Необязательное переопределение перехода для нелинейного маршрута. Если не задан (или указывает на удалённого агента) — после этапа проект переходит к следующему агенту по order.
  *         createdAt:
  *           type: string
  *           format: date-time
- *           description: Момент создания агента.
  *         updatedAt:
  *           type: string
  *           format: date-time
- *           description: Момент последнего изменения агента.
  */

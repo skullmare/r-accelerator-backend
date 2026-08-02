@@ -1,22 +1,32 @@
-# Модель данных: сущности спринта 3
+# Модель данных: Акселератор
 
-Источник истины — MongoDB. Полная ER-схема (включая сущности спринта 2):
-`docs/architecture/er-diagram.dbml`. Здесь — только новые/расширенные
-сущности спринта 3, с типами полей.
+Источник истины — MongoDB. Полная ER-схема (включая сущности обучающего
+контура): `docs/architecture/er-diagram.dbml`. Как эти сущности работают
+вместе — `docs/accelerator/README.md`.
 
-## Project (расширение)
+## Project (поля маршрута)
 
 | Поле | Тип | Обяз. | Назначение |
 |---|---|---|---|
-| `currentAgentId` | ObjectId → Agent \| null | нет | Текущий агент маршрута |
-| `completedAgentIds` | ObjectId[] → Agent | да (default []) | Завершённые агенты |
-| `contextSummary` | string \| null | нет | Краткая сводка, добавляемая в каждый LLM-запрос |
-| `contextVersion` | number | да (default 0) | Инкрементируется при каждом обновлении summary |
-| `qdrantCollection` | string \| null | нет | Переопределение коллекции Qdrant (по умолчанию — `expert_context`) |
+| `currentAgentId` | ObjectId → Agent \| null | нет | Текущий агент маршрута; `null` после его прохождения |
+| `completedAgentIds` | ObjectId[] → Agent | да (default []) | Завершённые этапы |
+| `contextSummary` | string \| null | нет | Накопленная сводка, подмешивается в промпт каждого агента |
+| `contextVersion` | number | да (default 0) | Инкрементируется при каждом обновлении сводки |
 
 ## Agent
 
-См. таблицу полей в `docs/agents-admin.md` — тот же набор полей, что и в форме.
+| Поле | Тип | Обяз. | Назначение |
+|---|---|---|---|
+| `systemPrompt` | string (≤20000) | да | Основная инструкция агента |
+| `completionPrompt` | string (≤5000) | да | Условие завершения этапа, текстом |
+| `name` | string (≤150) | да | Имя для интерфейса |
+| `order` | number | да | Место в маршруте |
+| `knowledgeIds` | ObjectId[] → Knowledge | нет (default []) | Закреплённые базы знаний |
+| `description` | string (≤1000) \| null | нет | Описание для интерфейса и подзаголовок PDF |
+| `avatarUrl` / `thinkingAvatarUrl` | string (≤2000) \| null | нет | Аватарки для интерфейса |
+| `nextAgentId` | ObjectId → Agent \| null | нет | Переопределение перехода (по умолчанию — следующий по `order`) |
+
+Подробно про заполнение — `docs/accelerator/agent-setup.md`.
 
 ## ExpertSession
 
@@ -24,9 +34,9 @@
 |---|---|---|
 | `projectId` | ObjectId → Project | да |
 | `agentId` | ObjectId → Agent | да |
-| `status` | enum: draft, active, waiting_user_confirmation, completed, failed | да |
-| `inputContextSnapshot` | object | нет — снимок того, что реально ушло в LLM-запрос (audit trail) |
-| `outputSummary` | string | нет |
+| `status` | enum: active, completed | да |
+| `collectedData` | Map<string, string> | да (default {}) — данные, собранные агентом в диалоге |
+| `readyForArtifact` | boolean | да (default false) — агент счёл условие завершения выполненным |
 | `artifactId` | ObjectId → Artifact \| null | нет |
 
 ## Message
@@ -46,11 +56,10 @@
 | `projectId` | ObjectId → Project | да |
 | `expertSessionId` | ObjectId → ExpertSession | да |
 | `agentId` | ObjectId → Agent | да |
-| `type` | string | да |
-| `title` | string | да |
-| `content` | object | да |
-| `summary` | string (≤4000) | да |
-| `status` | enum: draft, ready, confirmed, rejected | да |
+| `title` | string (≤300) | да |
+| `documentMarkdown` | string | да — исходник документа, из которого свёрстан PDF |
+| `summary` | string (≤4000) | да — сводка этапа, уходит в `Project.contextSummary` |
+| `file` | object | да — `{ key, url, mimeType, size }`, PDF в S3 |
 
 ## FileAsset (расширение `File`)
 
@@ -78,6 +87,15 @@
 | `runAt` | Date | да |
 | `lastError` | string \| null | нет |
 
-## Qdrant payload
+## Knowledge
 
-См. `docs/expert-context.md` — таблица `payload.*` там же.
+Глобальная база знаний, привязывается к агентам через `Agent.knowledgeIds`.
+Поля — в `src/models/accelerator/knowledge.model.js`; индексируется в отдельную
+Qdrant-коллекцию `knowledge_context` с фильтром по `knowledgeId`.
+
+## Qdrant
+
+Две коллекции: `expert_context` (приватный контекст проекта, все точки
+фильтруются по `projectId`) и `knowledge_context` (глобальные базы знаний,
+фильтр по `knowledgeId`). Payload хранит сам текст фрагмента — см.
+`src/services/qdrant.service.js`.

@@ -2,75 +2,41 @@ import z from 'zod';
 
 const objectId = z.string().regex(/^[0-9a-f]{24}$/, 'Некорректный ID');
 
-const artifactDefinitionSchema = z.object({
-    artifactType: z.string().trim().min(1).max(100),
-    titleTemplate: z.string().trim().max(200).nullable().optional(),
-    requiredFields: z.array(z.string().trim().min(1)).default([]),
-    outputSchema: z.record(z.string(), z.unknown()).nullable().optional(),
-    summaryField: z.string().trim().min(1).max(100).default('summary')
-}).strict();
+const url = z.string().trim().url('Должен быть корректный URL').max(2000);
 
-const contextPolicySchema = z.object({
-    includeProjectSummary: z.boolean().default(true),
-    includePreviousArtifacts: z.boolean().default(true),
-    qdrantTopK: z.number().int().min(1).max(20).default(6),
-    maxContextChars: z.number().int().min(500).max(40000).default(6000),
-    allowedSourceTypes: z.array(z.enum(['project_summary', 'agent_summary', 'artifact', 'file_chunk', 'user_note'])).default(['project_summary', 'artifact', 'file_chunk']),
-    knowledgeTopK: z.number().int().min(1).max(20).default(6),
-    knowledgeMaxContextChars: z.number().int().min(500).max(40000).default(6000)
-}).strict();
+// Набор полей агента намеренно минимален: два промпта, знания, четыре
+// отображаемых поля и два системных. Технические настройки LLM и контекста
+// вынесены в config/accelerator.config.js и через API не задаются.
+const agentFields = {
+    systemPrompt: z.string().trim().min(1).max(20000),
+    completionPrompt: z.string().trim().min(1).max(5000),
+    knowledgeIds: z.array(objectId).default([]),
+    name: z.string().trim().min(1).max(150),
+    description: z.string().trim().max(1000).nullable().optional(),
+    avatarUrl: url.nullable().optional(),
+    thinkingAvatarUrl: url.nullable().optional(),
+    order: z.number().int(),
+    nextAgentId: objectId.nullable().optional()
+};
 
-const modelConfigSchema = z.object({
-    model: z.string().trim().min(1).max(100).default('gpt-4o-mini'),
-    evaluatorModel: z.string().trim().min(1).max(100).nullable().optional(),
-    temperature: z.number().min(0).max(2).default(0.4),
-    maxTokens: z.number().int().min(100).max(8000).default(1500)
-}).strict();
-
-// POST /accelerator/admin/agents — создание агента (agents:manage)
+// POST /accelerator/admin/agents — создание агента (accelerator_agents.manage)
 const createAgentSchema = z.object({
-    body: z.object({
-        name: z.string().trim().min(1).max(150),
-        roleTitle: z.string().trim().min(1).max(150),
-        description: z.string().trim().max(1000).nullable().optional(),
-        avatarUrl: z.string().trim().url('avatarUrl должен быть корректным URL').max(2000).nullable().optional(),
-        thinkingAvatarUrl: z.string().trim().url('thinkingAvatarUrl должен быть корректным URL').max(2000).nullable().optional(),
-        greeting: z.string().trim().max(2000).nullable().optional(),
-        order: z.number().int(),
-        isActive: z.boolean().default(true),
-        systemPrompt: z.string().trim().min(1).max(20000),
-        completionCriteria: z.string().trim().min(1).max(5000),
-        completionEvaluatorPrompt: z.string().trim().max(20000).nullable().optional(),
-        allowPartialCompletion: z.boolean().default(false),
-        artifactDefinition: artifactDefinitionSchema,
-        nextAgentId: objectId.nullable().optional(),
-        contextPolicy: contextPolicySchema.default({}),
-        modelConfig: modelConfigSchema.default({}),
-        knowledgeIds: z.array(objectId).default([])
-    }).strict()
+    body: z.object(agentFields).strict()
 });
 
-// PATCH /accelerator/admin/agents/:agentId — обновление агента (agents:manage)
+// PATCH /accelerator/admin/agents/:agentId — обновление агента
 const updateAgentSchema = z.object({
     params: z.object({ agentId: objectId }),
     body: z.object({
-        name: z.string().trim().min(1).max(150).optional(),
-        roleTitle: z.string().trim().min(1).max(150).optional(),
-        description: z.string().trim().max(1000).nullable().optional(),
-        avatarUrl: z.string().trim().url('avatarUrl должен быть корректным URL').max(2000).nullable().optional(),
-        thinkingAvatarUrl: z.string().trim().url('thinkingAvatarUrl должен быть корректным URL').max(2000).nullable().optional(),
-        greeting: z.string().trim().max(2000).nullable().optional(),
-        order: z.number().int().optional(),
-        isActive: z.boolean().optional(),
-        systemPrompt: z.string().trim().min(1).max(20000).optional(),
-        completionCriteria: z.string().trim().min(1).max(5000).optional(),
-        completionEvaluatorPrompt: z.string().trim().max(20000).nullable().optional(),
-        allowPartialCompletion: z.boolean().optional(),
-        artifactDefinition: artifactDefinitionSchema.optional(),
-        nextAgentId: objectId.nullable().optional(),
-        contextPolicy: contextPolicySchema.optional(),
-        modelConfig: modelConfigSchema.optional(),
-        knowledgeIds: z.array(objectId).optional()
+        systemPrompt: agentFields.systemPrompt.optional(),
+        completionPrompt: agentFields.completionPrompt.optional(),
+        knowledgeIds: z.array(objectId).optional(),
+        name: agentFields.name.optional(),
+        description: agentFields.description,
+        avatarUrl: agentFields.avatarUrl,
+        thinkingAvatarUrl: agentFields.thinkingAvatarUrl,
+        order: agentFields.order.optional(),
+        nextAgentId: agentFields.nextAgentId
     }).strict()
 });
 

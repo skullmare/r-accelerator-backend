@@ -164,11 +164,10 @@ Table accelerator_projects {
   description          string
   stage                string   [note: "enum: idea|mvp|launched|growth|scale"]
   status               string   [note: "enum: active|paused|completed|archived"]
-  currentAgentId       ObjectId [ref: > accelerator_agents._id, note: "nullable — self-heals to first active agent by order"]
+  currentAgentId       ObjectId [ref: > accelerator_agents._id, note: "nullable — set to the first agent by order for a fresh project, null once the route is finished"]
   completedAgentIds    ObjectId[]
-  contextSummary       string   [note: "always included in the LLM prompt (CTX-2)"]
+  contextSummary       string   [note: "always included in the LLM prompt"]
   contextVersion       int      [default: 0]
-  qdrantCollection     string   [note: "nullable — overrides the default expert_context collection"]
   lastActivityAt       datetime
   createdAt            datetime
   updatedAt            datetime
@@ -176,27 +175,48 @@ Table accelerator_projects {
 
 Table accelerator_agents {
   _id                 ObjectId [pk, note: "the only identifier — no separate human-readable code (see open-questions.md)"]
+  systemPrompt        string   [not null, note: "the agent's main instruction"]
+  completionPrompt    string   [not null, note: "plain-text stage completion condition — no schema"]
+  knowledgeIds        ObjectId[] [ref: > accelerator_knowledge._id, note: "knowledge bases attached to this agent"]
   name                string   [not null]
-  roleTitle           string   [not null]
-  order               int      [not null]
-  isActive            boolean  [default: true]
-  systemPrompt        string   [not null]
-  completionCriteria  string   [not null]
-  artifactDefinition  json     [not null, note: "{ artifactType, titleTemplate, requiredFields[], outputSchema, summaryField }"]
-  nextAgentId         ObjectId [ref: > accelerator_agents._id, note: "nullable — must reference an existing agent"]
-  contextPolicy       json     [note: "{ includeProjectSummary, includePreviousArtifacts, qdrantTopK, maxContextChars, allowedSourceTypes[] }"]
-  modelConfig         json     [note: "{ provider: openai|openrouter, model, temperature, maxTokens }"]
+  description         string   [note: "nullable — UI only"]
+  avatarUrl           string   [note: "nullable — UI only"]
+  thinkingAvatarUrl   string   [note: "nullable — UI only"]
+  order               int      [not null, note: "the route is agents sorted by order"]
+  nextAgentId         ObjectId [ref: > accelerator_agents._id, note: "nullable — optional override; defaults to the next agent by order"]
   createdAt           datetime
   updatedAt           datetime
+
+  Note: "LLM and context settings are service-wide (config/accelerator.config.js), not per agent"
+}
+
+Table accelerator_knowledge {
+  _id                 ObjectId [pk]
+  title               string   [not null]
+  description         string
+  fileId              ObjectId [ref: > files._id, note: "nullable — exactly one of fileId/sourceUrl is set"]
+  sourceUrl           string   [note: "nullable — external link fetched over HTTP"]
+  status              string   [note: "enum: pending|processing|indexed|unsupported|failed"]
+  chunksCount         int      [default: 0]
+  qdrantPointIds      string[]
+  textHash            string
+  processingError     string
+  processingErrorCode string
+  indexedAt           datetime
+  createdBy           ObjectId [ref: > users._id]
+  createdAt           datetime
+  updatedAt           datetime
+
+  Note: "Indexed into the separate knowledge_context Qdrant collection, filtered by knowledgeId"
 }
 
 Table expert_sessions {
   _id                     ObjectId [pk]
   projectId               ObjectId [ref: > accelerator_projects._id, not null]
   agentId                 ObjectId [ref: > accelerator_agents._id, not null]
-  status                  string   [note: "enum: draft|active|waiting_user_confirmation|completed|failed"]
-  inputContextSnapshot    json     [note: "audit trail of what was actually sent to the LLM"]
-  outputSummary           string
+  status                  string   [note: "enum: active|completed"]
+  collectedData           json     [note: "free-form key/value store filled by the agent via save_data"]
+  readyForArtifact        boolean  [default: false, note: "set by the agent via stage_ready — a UI hint, not a server-side gate"]
   artifactId              ObjectId [ref: > accelerator_artifacts._id, note: "nullable"]
   createdAt               datetime
   updatedAt               datetime
@@ -219,11 +239,10 @@ Table accelerator_artifacts {
   projectId        ObjectId [ref: > accelerator_projects._id, not null]
   expertSessionId  ObjectId [ref: > expert_sessions._id, not null]
   agentId          ObjectId [ref: > accelerator_agents._id, not null]
-  type             string   [not null]
   title            string   [not null]
-  content          json     [not null]
-  summary          string   [not null]
-  status           string   [note: "enum: draft|ready|confirmed|rejected"]
+  documentMarkdown string   [not null, note: "source of the rendered PDF"]
+  summary          string   [not null, note: "folded into accelerator_projects.contextSummary"]
+  file             json     [note: "{ key, url, mimeType, size } — PDF in S3"]
   createdAt        datetime
   updatedAt        datetime
 }

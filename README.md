@@ -4,9 +4,10 @@
 
 Документация по устройству — в `docs/`:
 
-- `docs/expert-context.md` — сборка контекста агентов, карточка этапа, артефакты;
-- `docs/frontend-integration-expert-flow.md` — контракт с фронтом (SSE, кнопки, коды ошибок);
-- `docs/data-model.md`, `docs/agents-admin.md`, `docs/file-storage.md` — модель данных, админка, хранилище;
+- `docs/accelerator/README.md` — как работает пайплайн Акселератора;
+- `docs/accelerator/agent-setup.md` — настройка агента: какие поля обязательны и как писать промпты;
+- `docs/accelerator/frontend-integration.md` — контракт с фронтом (SSE, кнопки, коды ошибок);
+- `docs/data-model.md`, `docs/file-storage.md` — модель данных и хранилище;
 - Swagger живой: `GET /api/docs` (спека — `/api/docs/swagger.json`).
 
 ## Локальный запуск через Docker

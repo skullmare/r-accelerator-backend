@@ -18,8 +18,8 @@ router.use(authMiddleware, checkPermission(MANAGE));
  * /accelerator/admin/agents:
  *   get:
  *     tags: [Accelerator / Admin Agents]
- *     summary: Список агентов Р-Акселератора
- *     description: Только для пользователей с правом accelerator_agents.manage (или superadmin). Возвращает агентов вместе с systemPrompt и completionCriteria — обычные пользователи этот эндпоинт не видят.
+ *     summary: Список агентов Акселератора
+ *     description: Только для пользователей с правом accelerator_agents.manage (или superadmin). Возвращает агентов вместе с промптами — обычные пользователи этот эндпоинт не видят.
  *     responses:
  *       200:
  *         description: Список агентов, отсортированный по order.
@@ -56,60 +56,32 @@ router.get('/', listAgents);
  *     tags: [Accelerator / Admin Agents]
  *     summary: Создать агента
  *     description: |
- *       Агент — универсальная сущность, система не завязана на фиксированный
- *       набор R1-R5. Идентифицируется своим _id (Mongo ObjectId) — отдельного
- *       человекочитаемого кода нет. order определяет последовательность,
- *       nextAgentId — переход после завершения (должен ссылаться на
- *       существующего агента по _id или быть пустым).
+ *       У агента ровно девять полей — больше настраивать нечего. Поведение
+ *       задаётся двумя промптами; параметры LLM и сборки контекста общие для
+ *       всего сервиса и через API не настраиваются.
+ *
+ *       Маршрут пользователя — это агенты, отсортированные по `order`.
+ *       `nextAgentId` нужен только для нелинейного перехода; для обычного
+ *       последовательного маршрута его можно не задавать вовсе.
+ *
+ *       Подробно — `docs/accelerator/agent-setup.md`.
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [name, roleTitle, order, systemPrompt, completionCriteria, artifactDefinition]
+ *             required: [name, order, systemPrompt, completionPrompt]
  *             properties:
- *               name: { type: string, description: "Имя агента для интерфейса." }
- *               roleTitle: { type: string, description: "Короткое описание специализации." }
- *               description: { type: string, maxLength: 1000, nullable: true, description: "Развёрнутое описание агента для UI (в промпт не подмешивается)." }
- *               avatarUrl: { type: string, format: uri, nullable: true, description: "Ссылка на аватарку агента (изображение) для UI." }
- *               thinkingAvatarUrl: { type: string, format: uri, nullable: true, description: "Ссылка на «думающую» аватарку агента для UI." }
- *               greeting: { type: string, maxLength: 2000, nullable: true, description: "Приветственное сообщение агента в начале диалога (UI)." }
- *               order: { type: integer, description: "Порядковое место агента в маршруте." }
- *               isActive: { type: boolean, default: true, description: "Если false — агент не участвует в пользовательском маршруте." }
- *               systemPrompt: { type: string, description: "Базовая системная инструкция роли — уходит в LLM при каждом сообщении." }
- *               completionCriteria: { type: string, description: "Когда этап считается завершённым (инструкция для модели, не хард-гейт на сервере)." }
- *               completionEvaluatorPrompt: { type: string, nullable: true, description: "УСТАРЕЛО: оценщик удалён, поле ни на что не влияет (оставлено для совместимости)." }
- *               allowPartialCompletion: { type: boolean, default: false, description: "Разрешать завершение с частично заполненным артефактом." }
- *               artifactDefinition:
- *                 type: object
- *                 required: [artifactType]
- *                 properties:
- *                   artifactType: { type: string, description: "Тип артефакта, попадает в Artifact.type." }
- *                   titleTemplate: { type: string, nullable: true, description: "Шаблон заголовка артефакта." }
- *                   requiredFields: { type: array, items: { type: string }, description: "Обязательные ключи JSON-артефакта." }
- *                   outputSchema: { type: object, nullable: true, description: "Доп. JSON Schema для строгой валидации." }
- *                   summaryField: { type: string, default: summary, description: "Какое поле артефакта использовать как краткую сводку." }
- *               nextAgentId: { type: string, nullable: true, description: "_id другого агента — куда переключить проект после подтверждения артефакта." }
- *               contextPolicy:
- *                 type: object
- *                 properties:
- *                   includeProjectSummary: { type: boolean, description: "Подмешивать ли Project.contextSummary в промпт." }
- *                   includePreviousArtifacts: { type: boolean, description: "Включать ли артефакты предыдущих этапов в Qdrant-поиск." }
- *                   qdrantTopK: { type: integer, description: "Сколько фрагментов забирать из Qdrant-поиска." }
- *                   maxContextChars: { type: integer, description: "Лимит символов на весь retrieved-контекст." }
- *                   allowedSourceTypes: { type: array, items: { type: string }, description: "Какие типы источников участвуют в поиске." }
- *               modelConfig:
- *                 type: object
- *                 description: Провайдер сейчас всегда OpenAI.
- *                 properties:
- *                   model: { type: string, description: "Модель OpenAI." }
- *                   temperature: { type: number, description: "Температура генерации." }
- *                   maxTokens: { type: integer, description: "Лимит токенов на ответ модели." }
- *               knowledgeIds:
- *                 type: array
- *                 items: { type: string }
- *                 description: "_id глобальных баз знаний (Knowledge), привязанных агенту. Поиск в knowledge_context идёт только по ним."
+ *               systemPrompt: { type: string, maxLength: 20000, description: "Основная инструкция агента — уходит в LLM при каждом сообщении и при генерации документа этапа." }
+ *               completionPrompt: { type: string, maxLength: 5000, description: "Условие завершения этапа обычным текстом. Агент видит его в промпте и сам вызывает stage_ready, когда условие выполнено." }
+ *               knowledgeIds: { type: array, items: { type: string }, description: "_id баз знаний (Knowledge), закреплённых за агентом. Пустой список — агент работает без базы знаний." }
+ *               name: { type: string, maxLength: 150, description: "Имя агента для интерфейса." }
+ *               description: { type: string, maxLength: 1000, nullable: true, description: "Описание специализации для интерфейса." }
+ *               avatarUrl: { type: string, format: uri, nullable: true, description: "Аватарка агента." }
+ *               thinkingAvatarUrl: { type: string, format: uri, nullable: true, description: "Аватарка состояния «агент думает»." }
+ *               order: { type: integer, description: "Порядковый номер агента в маршруте." }
+ *               nextAgentId: { type: string, nullable: true, description: "Необязательное переопределение перехода: _id агента, к которому перейти после этого этапа. По умолчанию — следующий по order." }
  *     responses:
  *       201:
  *         description: Агент создан
@@ -123,7 +95,7 @@ router.get('/', listAgents);
  *                 data:
  *                   $ref: '#/components/schemas/AcceleratorAgent'
  *       400:
- *         description: Ошибка валидации или nextAgentId не существует
+ *         description: Ошибка валидации, nextAgentId или knowledgeIds не существуют
  *         content:
  *           application/json:
  *             schema:
@@ -178,7 +150,7 @@ router.get('/:agentId', validate(agentSchemas.agentIdSchema), getAgent);
  *   patch:
  *     tags: [Accelerator / Admin Agents]
  *     summary: Обновить агента
- *     description: Позволяет, среди прочего, временно отключить агента полем isActive=false. Все поля запроса опциональны — обновляются только переданные.
+ *     description: Все поля запроса опциональны — обновляются только переданные.
  *     parameters:
  *       - in: path
  *         name: agentId
@@ -190,30 +162,15 @@ router.get('/:agentId', validate(agentSchemas.agentIdSchema), getAgent);
  *           schema:
  *             type: object
  *             properties:
- *               name: { type: string }
- *               roleTitle: { type: string }
- *               description: { type: string, maxLength: 1000, nullable: true, description: "Развёрнутое описание агента для UI." }
- *               avatarUrl: { type: string, format: uri, nullable: true, description: "Ссылка на аватарку агента." }
- *               thinkingAvatarUrl: { type: string, format: uri, nullable: true, description: "Ссылка на «думающую» аватарку агента." }
- *               greeting: { type: string, maxLength: 2000, nullable: true, description: "Приветственное сообщение агента (UI)." }
+ *               systemPrompt: { type: string, maxLength: 20000 }
+ *               completionPrompt: { type: string, maxLength: 5000 }
+ *               knowledgeIds: { type: array, items: { type: string } }
+ *               name: { type: string, maxLength: 150 }
+ *               description: { type: string, maxLength: 1000, nullable: true }
+ *               avatarUrl: { type: string, format: uri, nullable: true }
+ *               thinkingAvatarUrl: { type: string, format: uri, nullable: true }
  *               order: { type: integer }
- *               isActive: { type: boolean, description: "false — временно исключить агента из пользовательского маршрута." }
- *               systemPrompt: { type: string }
- *               completionCriteria: { type: string }
- *               completionEvaluatorPrompt: { type: string, nullable: true, description: "УСТАРЕЛО: оценщик удалён, поле ни на что не влияет (оставлено для совместимости)." }
- *               allowPartialCompletion: { type: boolean, description: "Разрешать завершение с частично заполненным артефактом." }
- *               artifactDefinition:
- *                 type: object
- *                 properties:
- *                   artifactType: { type: string }
- *                   titleTemplate: { type: string, nullable: true }
- *                   requiredFields: { type: array, items: { type: string } }
- *                   outputSchema: { type: object, nullable: true }
- *                   summaryField: { type: string }
- *               nextAgentId: { type: string, nullable: true, description: "_id следующего агента; должен существовать." }
- *               contextPolicy: { type: object }
- *               modelConfig: { type: object }
- *               knowledgeIds: { type: array, items: { type: string }, description: "_id баз знаний (Knowledge), привязанных агенту." }
+ *               nextAgentId: { type: string, nullable: true, description: "Должен ссылаться на существующего агента и не на самого себя." }
  *     responses:
  *       200:
  *         description: Агент обновлён
@@ -226,7 +183,7 @@ router.get('/:agentId', validate(agentSchemas.agentIdSchema), getAgent);
  *                 message: { type: string, example: "Агент обновлён" }
  *                 data:
  *                   $ref: '#/components/schemas/AcceleratorAgent'
- *       400: { description: Ошибка валидации или nextAgentId не существует, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       400: { description: "Ошибка валидации, несуществующий nextAgentId/knowledgeIds или самоссылка (NEXT_AGENT_SELF_REFERENCE)", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       403: { description: Недостаточно прав, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       404: { description: Агент не найден, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

@@ -1,153 +1,69 @@
-import Ajv from 'ajv';
+import { LLM } from '../../../config/accelerator.config.js';
 import { chatComplete } from '../llm.service.js';
+import { renderCollectedData } from './data-collection.service.js';
 import { renderDocumentToPdf } from './pdf-renderer.service.js';
 import { uploadFile } from '../s3.service.js';
 
-const ajv = new Ajv({ allErrors: true, strict: false });
+// Сколько символов сводки уходит в контекст следующего агента.
+const MAX_SUMMARY_CHARS = 2000;
 
-// Документ артефакта — основной результат этапа для пользователя, он длиннее
-// набора полей, поэтому у него свой лимит токенов, не связанный с
-// modelConfig.maxTokens (тот рассчитан на реплику в чате).
-const DOCUMENT_MIN_MAX_TOKENS = 4000;
-
-function stripCodeFence(text) {
-    const trimmed = text.trim();
-    const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-    return fenceMatch ? fenceMatch[1] : trimmed;
-}
-
-function validateArtifactContent(content, artifactDefinition) {
-    if (typeof content !== 'object' || content === null || Array.isArray(content)) {
-        return 'Артефакт должен быть JSON-объектом';
-    }
-
-    for (const field of artifactDefinition.requiredFields) {
-        const value = content[field];
-        if (value === undefined || value === null || value === '') {
-            return `Отсутствует обязательное поле артефакта: ${field}`;
-        }
-    }
-
-    if (artifactDefinition.outputSchema && typeof artifactDefinition.outputSchema === 'object') {
-        try {
-            const validateFn = ajv.compile(artifactDefinition.outputSchema);
-            if (!validateFn(content)) {
-                return `Артефакт не соответствует outputSchema: ${ajv.errorsText(validateFn.errors)}`;
-            }
-        } catch {
-            // Admin-authored schemas aren't guaranteed valid JSON Schema — this is a
-            // best-effort admin tool, not a production-hardened schema store, so we
-            // fall back to the requiredFields check above instead of failing hard.
-        }
-    }
-
-    return null;
-}
-
-function validationError(message) {
+function generationError(message, code) {
     const error = new Error(message);
-    error.code = 'ARTIFACT_VALIDATION_FAILED';
+    error.code = code;
     return error;
 }
 
-// Карточка этапа (ExpertSession.collectedFields) — данные, которые агент
-// собрал по ходу диалога и подтвердил цитатами из реплик пользователя. Здесь
-// они подаются модели как готовая опора: вычитывать те же факты из истории
-// заново — лишний повод их переформулировать или домыслить.
-function renderCollectedFields(collectedFields) {
-    const entries = collectedFields ? [...collectedFields.entries()] : [];
-    if (!entries.length) return '';
+// Документ этапа. Один вызов модели, обычный текст на выходе — никакого JSON
+// и никаких схем: раньше артефакт сначала собирался как JSON по
+// requiredFields (и падал с ARTIFACT_VALIDATION_FAILED, если модель не
+// заполнила поле), а потом переписывался в документ вторым вызовом. Теперь
+// опорой служат данные, которые агент сам собрал в диалоге.
+async function generateDocumentMarkdown({ agent, systemPrompt, retrievedContextMessage, conversationMessages, collectedData }) {
+    const collected = renderCollectedData(collectedData);
 
-    const lines = entries.map(([name, entry]) => `- ${name}: ${entry.value}`);
-    return '\n\nСобранные в диалоге данные (используй их как основу, не переписывая смысл):\n' +
-        `${lines.join('\n')}`;
-}
-
-// Шаг 1 — структурированные поля. Они не показываются пользователю напрямую,
-// но именно на них держится вся передача контекста дальше по маршруту:
-// summary уходит в Project.contextSummary следующему агенту, а content
-// индексируется в Qdrant. Поэтому structured-слой остаётся даже теперь, когда
-// пользовательский результат этапа — PDF.
-async function generateStructuredContent({ agent, systemPrompt, retrievedContextMessage, conversationMessages, collectedFields }) {
     const instruction =
-        `Сформируй структурированные данные артефакта "${agent.artifactDefinition.artifactType}" по итогам диалога выше.\n` +
-        `Ответь JSON-объектом со следующими обязательными полями: ` +
-        `${agent.artifactDefinition.requiredFields.join(', ') || '(поля не заданы)'}.` +
-        (agent.artifactDefinition.summaryField ? ` Поле "${agent.artifactDefinition.summaryField}" должно содержать краткую сводку артефакта.` : '') +
-        renderCollectedFields(collectedFields) +
-        '\nОпирайся только на информацию из диалога и справочного контекста — не выдумывай данные.';
-
-    const messages = [
-        { role: 'system', content: systemPrompt },
-        ...(retrievedContextMessage ? [retrievedContextMessage] : []),
-        ...conversationMessages,
-        { role: 'user', content: instruction }
-    ];
-
-    const { content: rawContent, tokenUsage } = await chatComplete({
-        model: agent.modelConfig.model,
-        temperature: agent.modelConfig.temperature,
-        maxTokens: agent.modelConfig.maxTokens,
-        messages,
-        // Раньше "верни строго JSON" было только просьбой в тексте промпта, и
-        // модель регулярно оборачивала ответ в markdown или пояснения — это
-        // давало ложный ARTIFACT_VALIDATION_FAILED. Теперь формат обеспечен
-        // самим провайдером.
-        json: true
-    });
-
-    let parsed;
-    try {
-        parsed = JSON.parse(stripCodeFence(rawContent));
-    } catch {
-        throw validationError('Модель вернула невалидный JSON для артефакта');
-    }
-
-    const message = validateArtifactContent(parsed, agent.artifactDefinition);
-    if (message) throw validationError(message);
-
-    return { parsed, tokenUsage };
-}
-
-// Шаг 2 — сам документ. Отдельным вызовом, а не полем внутри JSON: длинный
-// текст, упакованный в JSON-строку, часто обрывается на лимите токенов и
-// ломает разбор всего ответа. Здесь модель пишет обычный текст, поэтому
-// испортить нечего.
-async function generateDocumentMarkdown({ agent, systemPrompt, retrievedContextMessage, conversationMessages, structuredContent }) {
-    const instruction =
-        `Напиши финальный документ этапа — "${agent.artifactDefinition.artifactType}". ` +
-        'Это готовый деловой документ для основателя стартапа, а не пересказ диалога: ' +
-        'связный текст, по существу, без обращений к пользователю и без фраз вроде «как мы обсудили».\n\n' +
+        'Напиши итоговый документ этапа по результатам диалога выше. Это готовый деловой документ ' +
+        'для основателя стартапа, а не пересказ разговора: связный текст по существу, без обращений ' +
+        'к пользователю и без фраз вроде «как мы обсудили».\n\n' +
+        (collected
+            ? `Собранные в диалоге данные — опирайся прежде всего на них:\n${collected}\n\n`
+            : '') +
         'Строго соблюдай ограничения формата (текст будет автоматически свёрстан в PDF):\n' +
         '- Только Markdown следующего вида: заголовки #, ##, ###; абзацы; списки «- » и «1. »; ' +
         'таблицы вида | ячейка | ячейка |; горизонтальный разделитель ---; выделение **жирным** и *курсивом*.\n' +
         '- НЕ используй: блоки кода, картинки, ссылки, HTML, цитаты.\n' +
         '- Не дублируй название документа заголовком первого уровня — титул добавляется автоматически.\n\n' +
-        'Документ должен раскрывать те же данные, что и структурированный результат этапа:\n' +
-        `${JSON.stringify(structuredContent, null, 2)}\n\n` +
-        'Опирайся только на собранную в диалоге информацию. Если по какому-то пункту данных недостаточно — ' +
-        'честно отметь это в тексте, а не выдумывай.';
+        'Опирайся только на собранную в диалоге информацию. Если по какому-то пункту данных ' +
+        'недостаточно — честно отметь это в тексте, а не выдумывай.';
 
-    const messages = [
-        { role: 'system', content: systemPrompt },
-        ...(retrievedContextMessage ? [retrievedContextMessage] : []),
-        ...conversationMessages,
-        { role: 'user', content: instruction }
-    ];
-
-    const { content, tokenUsage } = await chatComplete({
-        model: agent.modelConfig.model,
-        temperature: agent.modelConfig.temperature,
-        maxTokens: Math.max(agent.modelConfig.maxTokens, DOCUMENT_MIN_MAX_TOKENS),
-        messages
+    const { content } = await chatComplete({
+        model: LLM.model,
+        temperature: LLM.temperature,
+        maxTokens: LLM.documentMaxTokens,
+        messages: [
+            { role: 'system', content: systemPrompt },
+            ...(retrievedContextMessage ? [retrievedContextMessage] : []),
+            ...conversationMessages,
+            { role: 'user', content: instruction }
+        ]
     });
 
     const markdown = String(content ?? '').trim();
     if (!markdown) {
-        throw validationError('Модель вернула пустой документ артефакта');
+        throw generationError('Модель вернула пустой документ этапа', 'ARTIFACT_EMPTY');
     }
 
-    return { markdown, tokenUsage };
+    return markdown;
+}
+
+// Сводка для следующего агента строится из собранных данных, а не отдельным
+// вызовом модели: это уже выжимка этапа, она детерминирована и не может
+// провалиться. Fallback на начало документа — для этапов, где агент ничего не
+// сохранил (например, пользователь завершил этап досрочно).
+function buildSummary(collectedData, markdown) {
+    const collected = renderCollectedData(collectedData);
+    const text = collected || markdown.replace(/[#*|>-]/g, ' ').replace(/\s+/g, ' ').trim();
+    return text.slice(0, MAX_SUMMARY_CHARS);
 }
 
 function safeFileName(title) {
@@ -159,28 +75,19 @@ function safeFileName(title) {
     return `${base || 'artifact'}.pdf`;
 }
 
-// Полный цикл создания артефакта: структура -> документ -> PDF -> S3.
-// Возвращает всё, что нужно для записи Artifact; сам документ в MongoDB не
-// пишет — это делает completeSession.
-export async function generateArtifact({ agent, project, systemPrompt, retrievedContextMessage, conversationMessages, collectedFields }) {
-    const { parsed, tokenUsage: structuredUsage } = await generateStructuredContent({
-        agent, systemPrompt, retrievedContextMessage, conversationMessages, collectedFields
+// Полный цикл: текст документа -> PDF -> S3. В MongoDB ничего не пишет —
+// это делает completeSession.
+export async function generateArtifact({ agent, project, systemPrompt, retrievedContextMessage, conversationMessages, collectedData }) {
+    const markdown = await generateDocumentMarkdown({
+        agent, systemPrompt, retrievedContextMessage, conversationMessages, collectedData
     });
 
-    const summary = agent.artifactDefinition.summaryField && typeof parsed[agent.artifactDefinition.summaryField] === 'string'
-        ? parsed[agent.artifactDefinition.summaryField]
-        : JSON.stringify(parsed).slice(0, 500);
-
-    const title = agent.artifactDefinition.titleTemplate || `${agent.name}: ${agent.artifactDefinition.artifactType}`;
-
-    const { markdown, tokenUsage: documentUsage } = await generateDocumentMarkdown({
-        agent, systemPrompt, retrievedContextMessage, conversationMessages, structuredContent: parsed
-    });
+    const title = `${agent.name}: итоги этапа`;
 
     const pdfBuffer = await renderDocumentToPdf({
         markdown,
         title,
-        subtitle: agent.roleTitle,
+        subtitle: agent.description,
         meta: {
             projectName: project.name,
             agentName: agent.name,
@@ -196,23 +103,18 @@ export async function generateArtifact({ agent, project, systemPrompt, retrieved
             originalname: safeFileName(title)
         });
     } catch (error) {
-        const uploadError = new Error(`Не удалось загрузить PDF артефакта в хранилище: ${error.message}`);
-        uploadError.code = 'ARTIFACT_UPLOAD_FAILED';
-        throw uploadError;
+        throw generationError(`Не удалось загрузить PDF документа в хранилище: ${error.message}`, 'ARTIFACT_UPLOAD_FAILED');
     }
 
     return {
-        content: parsed,
-        summary,
         title,
         documentMarkdown: markdown,
+        summary: buildSummary(collectedData, markdown),
         file: {
             key: uploaded.key,
             url: uploaded.url,
             mimeType: 'application/pdf',
-            size: pdfBuffer.length,
-            generatedAt: new Date()
-        },
-        tokenUsage: { structured: structuredUsage ?? null, document: documentUsage ?? null }
+            size: pdfBuffer.length
+        }
     };
 }

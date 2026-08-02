@@ -1,9 +1,9 @@
-// Демонстрационные тестовые агенты R1 (Роман) и R2 (Регина) для сквозной
-// проверки маршрута R1 -> R2 из ТЗ спринта 3. Это не часть бизнес-логики —
-// это просто данные, заведённые через ту же generic-модель Agent, которой
-// пользуется административный CRUD (POST /accelerator/admin/agents).
-// Агенты ссылаются друг на друга по _id (nextAgentId), поэтому Регина
-// создаётся первой, а её _id подставляется в nextAgentId Романа.
+// Демонстрационные агенты для сквозной проверки маршрута: Роман (order 1) ->
+// Регина (order 2). Это не часть бизнес-логики — просто данные, заведённые
+// через ту же модель Agent, что и админский CRUD.
+//
+// Агенты не связаны через nextAgentId: маршрут строится по order, и для
+// линейной цепочки этого достаточно.
 // Запуск: node scripts/seed-demo-agents.js
 import 'dotenv/config';
 import db from '../config/mongo.config.js';
@@ -20,65 +20,41 @@ async function upsertByName(name, data) {
 async function seedDemoAgents() {
     await db.connectDB();
 
-    const regina = await upsertByName('Регина', {
-        name: 'Регина',
-        roleTitle: 'Эксперт по целевой аудитории',
-        order: 2,
-        isActive: true,
-        systemPrompt:
-            'Ты Регина, эксперт по целевой аудитории. Опираясь на рыночный бриф от Романа, ' +
-            'помоги пользователю определить сегменты аудитории, их задачи (jobs to be done), ' +
-            'боли и альтернативы, а затем выбрать приоритетный сегмент.',
-        completionCriteria:
-            'Этап завершён, когда собраны: сегменты аудитории, jobs to be done, боли, альтернативы ' +
-            'и выбран приоритетный сегмент с кратким обоснованием.',
-        artifactDefinition: {
-            artifactType: 'audience_brief',
-            titleTemplate: 'Бриф целевой аудитории',
-            requiredFields: ['targetSegments', 'jobsToBeDone', 'pains', 'alternatives', 'prioritySegment', 'summary'],
-            summaryField: 'summary'
-        },
-        nextAgentId: null,
-        contextPolicy: {
-            includeProjectSummary: true,
-            includePreviousArtifacts: true,
-            qdrantTopK: 6,
-            maxContextChars: 6000,
-            allowedSourceTypes: ['project_summary', 'artifact', 'file_chunk']
-        },
-        modelConfig: { model: 'gpt-4o-mini', temperature: 0.4, maxTokens: 1500 }
-    });
-    console.log(`Агент "Регина" готов (_id: ${regina._id})`);
-
     const roman = await upsertByName('Роман', {
         name: 'Роман',
-        roleTitle: 'Эксперт по рынку и нише',
+        description: 'Эксперт по рынку и нише',
         order: 1,
-        isActive: true,
         systemPrompt:
-            'Ты Роман, эксперт по рынку и нише для стартап-акселератора. ' +
-            'Помоги пользователю описать рынок, сформулировать гипотезу ниши, ' +
-            'выявить конкурентов и риски. Задавай уточняющие вопросы по одному.',
-        completionCriteria:
-            'Этап завершён, когда собраны: описание рынка, гипотеза ниши, список конкурентов, ' +
-            'ключевые риски и краткая сводка. Открытые вопросы допустимы, но должны быть перечислены явно.',
-        artifactDefinition: {
-            artifactType: 'market_brief',
-            titleTemplate: 'Рыночный бриф',
-            requiredFields: ['marketDescription', 'nicheHypothesis', 'competitors', 'risks', 'summary'],
-            summaryField: 'summary'
-        },
-        nextAgentId: regina._id,
-        contextPolicy: {
-            includeProjectSummary: true,
-            includePreviousArtifacts: true,
-            qdrantTopK: 6,
-            maxContextChars: 6000,
-            allowedSourceTypes: ['project_summary', 'artifact', 'file_chunk']
-        },
-        modelConfig: { model: 'gpt-4o-mini', temperature: 0.4, maxTokens: 1500 }
+            'Ты Роман, эксперт по рынку и нише для стартап-акселератора. Помоги основателю описать рынок, ' +
+            'сформулировать гипотезу ниши, выявить конкурентов и ключевые риски.\n\n' +
+            'Веди живой диалог: задавай вопросы по одному, уточняй расплывчатые ответы, предлагай ' +
+            'формулировки, если человек затрудняется. Всё существенное, что узнал, сразу сохраняй ' +
+            'инструментом save_data — например, под ключами market, niche, competitors, risks.',
+        completionPrompt:
+            'Этап завершён, когда понятно: какой это рынок, в чём гипотеза ниши, кто основные конкуренты ' +
+            'и какие риски у затеи. Формулировки могут быть черновыми — важно, чтобы по каждому из ' +
+            'четырёх пунктов был осмысленный ответ пользователя, а не догадка.',
+        nextAgentId: null
     });
-    console.log(`Агент "Роман" готов (_id: ${roman._id}, nextAgentId -> Регина)`);
+    console.log(`Агент "Роман" готов (_id: ${roman._id})`);
+
+    const regina = await upsertByName('Регина', {
+        name: 'Регина',
+        description: 'Эксперт по целевой аудитории',
+        order: 2,
+        systemPrompt:
+            'Ты Регина, эксперт по целевой аудитории. Опираясь на рыночный бриф предыдущего этапа, ' +
+            'помоги основателю определить сегменты аудитории, их задачи и боли, а затем выбрать ' +
+            'приоритетный сегмент.\n\n' +
+            'Веди живой диалог: задавай вопросы по одному. Всё существенное сразу сохраняй ' +
+            'инструментом save_data — например, под ключами segments, jobsToBeDone, pains, ' +
+            'prioritySegment.',
+        completionPrompt:
+            'Этап завершён, когда описаны сегменты аудитории с их задачами и болями и выбран ' +
+            'приоритетный сегмент с кратким обоснованием.',
+        nextAgentId: null
+    });
+    console.log(`Агент "Регина" готов (_id: ${regina._id})`);
 
     await db.disconnectDB();
 }

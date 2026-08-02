@@ -375,7 +375,14 @@ router.get('/:projectId/files/:fileId/processing-status', authMiddleware, valida
  *   get:
  *     tags: [Accelerator / Expert Route]
  *     summary: Текущий агент и маршрут проекта
- *     description: Если у проекта ещё нет currentAgentId (новый проект), он самолечится здесь — подставляется первый активный агент по order. Если в системе вообще нет ни одного активного агента, currentAgentId будет null, а items — пустым массивом.
+ *     description: |
+ *       Все агенты по порядку (order) со статусом относительно этого проекта:
+ *       completed / current / locked. Промпты агентов в ответ не попадают —
+ *       только отображаемые поля.
+ *
+ *       У нового проекта currentAgentId ещё не выставлен: он проставляется
+ *       здесь — первым агентом по order. Если маршрут пройден целиком,
+ *       currentAgentId = null и все items имеют статус completed.
  *     parameters:
  *       - in: path
  *         name: projectId
@@ -414,24 +421,29 @@ router.get('/:projectId/expert-route', authMiddleware, validate(projectSchemas.p
  * /accelerator/projects/{projectId}/expert-sessions:
  *   post:
  *     tags: [Accelerator / Expert Sessions]
- *     summary: Создать (или продолжить активную) экспертную сессию для агента
- *     description: agentId должен совпадать с текущим Project.currentAgentId — иначе 409 AGENT_NOT_CURRENT (нельзя перепрыгнуть агента, минуя маршрут). Если для этого агента уже есть активная сессия (draft/active/waiting_user_confirmation), возвращается именно она, новая не создаётся.
+ *     summary: Начать (или продолжить) сессию с текущим агентом проекта
+ *     description: |
+ *       Тело запроса можно не передавать: сессия всегда открывается с текущим
+ *       агентом маршрута. Если активная сессия с ним уже есть — возвращается
+ *       она же, новая не создаётся, поэтому эндпоинт безопасно вызывать при
+ *       каждом входе в проект.
+ *
+ *       Если agentId всё же передан, он должен совпадать с текущим агентом —
+ *       иначе 409 AGENT_NOT_CURRENT (перепрыгнуть этап нельзя).
  *     parameters:
  *       - in: path
  *         name: projectId
  *         required: true
  *         schema: { type: string }
  *     requestBody:
- *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [agentId]
  *             properties:
  *               agentId:
  *                 type: string
- *                 description: _id агента, с которым нужно начать/продолжить диалог.
+ *                 description: Необязательная проверка — _id агента, с которым фронт рассчитывает продолжить диалог.
  *     responses:
  *       201:
  *         description: Сессия создана или найдена активная
@@ -447,10 +459,12 @@ router.get('/:projectId/expert-route', authMiddleware, validate(projectSchemas.p
  *                   properties:
  *                     session:
  *                       $ref: '#/components/schemas/ExpertSession'
+ *                     agent:
+ *                       $ref: '#/components/schemas/ExpertRouteAgent'
  *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       403: { description: Нет доступа к проекту, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
- *       404: { description: Проект или агент не найден, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
- *       409: { description: "Агент найден, но недоступен: AGENT_INACTIVE (отключён администратором) или AGENT_NOT_CURRENT (не совпадает с текущим агентом маршрута)", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       404: { description: Проект не найден, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       409: { description: "AGENT_NOT_CURRENT (переданный агент не текущий) или NO_CURRENT_AGENT (маршрут пройден либо агенты не заведены)", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
 router.post('/:projectId/expert-sessions', authMiddleware, validate(expertSessionSchemas.createSessionSchema), checkAccessProject, createExpertSession);
 
@@ -474,24 +488,20 @@ router.post('/:projectId/expert-sessions', authMiddleware, validate(expertSessio
  *       **Формат событий SSE:**
  *       - `message_created` — сохранённое сообщение пользователя: `{ userMessage }`
  *       - `delta` — фрагмент ответа агента по мере генерации: `{ text: "..." }`
- *       - `fields_updated` — агент сохранил собранные данные в карточку этапа посреди хода: `{ collectedFields, completionState }`. Приходит до `done`, пока агент ещё дописывает реплику; если в этом ходу ничего не собрано, события не будет.
- *       - `done` — финальное сохранённое сообщение агента, готовность этапа и карточка: `{ assistantMessage, completionState, collectedFields }`
- *       - `error` — ошибка в процессе стриминга: `{ message, code }`. `code` гарантированно нормализован до `LLM_PROVIDER_FAILED`, если у исходной ошибки не было своего кода (например, сбой самого вызова LLM) — не сырой код провайдера.
+ *       - `data_updated` — агент сохранил данные посреди хода: `{ collectedData, readyForArtifact }`. Приходит до `done`, пока агент ещё дописывает реплику; если в этом ходу ничего не сохранялось, события не будет.
+ *       - `done` — финальное сообщение агента и состояние этапа: `{ assistantMessage, collectedData, readyForArtifact }`
+ *       - `error` — ошибка в процессе стриминга: `{ message, code }`. `code` нормализован до `LLM_PROVIDER_FAILED`, если у исходной ошибки не было своего кода.
  *
- *       **completionState — когда показывать кнопку завершения этапа.**
- *       Агент по ходу диалога складывает собранные данные в карточку этапа
- *       (`collectedFields`) через инструмент `save_collected_fields`, а сервер
- *       считает готовность арифметикой: `ready=true`, когда закрыты все
- *       обязательные поля артефакта, кроме поля-сводки (ТЗ спринта 3, DONE-4).
- *       Отдельной модели-оценщика больше нет, поэтому состояние не может
- *       разойтись с тем, что агент говорит в чате:
- *       ```
- *       { ready: boolean, missingFields: string[], reason: string, evaluatedAt: string }
- *       ```
- *       Кнопку «сформировать артефакт» следует показывать только при
- *       `ready: true`. При `ready: false` в `missingFields` перечислено, каких
- *       именно данных не хватает, а в `reason` — человекочитаемое пояснение.
- *       Попытка вызвать `/complete` при `ready: false` вернёт `409 STAGE_NOT_READY`.
+ *       **readyForArtifact — когда показывать кнопку завершения этапа.**
+ *       Агент по ходу диалога складывает собранные данные в свободное
+ *       хранилище сессии (`collectedData`) инструментом `save_data`, а когда
+ *       выполняется условие из `completionPrompt` — вызывает `stage_ready`,
+ *       и `readyForArtifact` становится `true`. Именно по этому флагу фронт
+ *       показывает кнопку «Сформировать документ».
+ *
+ *       Сервер завершение этапа не блокирует: если пользователь нажмёт кнопку
+ *       раньше, документ всё равно будет создан по тем данным, что есть.
+ *       Флаг подсказывает момент, а не запирает пользователя на этапе.
  *     parameters:
  *       - in: path
  *         name: projectId
@@ -531,8 +541,12 @@ router.post('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, v
  * /accelerator/projects/{projectId}/expert-sessions/{sessionId}/messages:
  *   get:
  *     tags: [Accelerator / Expert Sessions]
- *     summary: История сообщений сессии
- *     description: Возвращает все сообщения сессии в хронологическом порядке (createdAt по возрастанию) — и пользователя, и агента. Используется для восстановления диалога после перезагрузки страницы.
+ *     summary: История сообщений и состояние сессии
+ *     description: |
+ *       Все сообщения сессии в хронологическом порядке плюс состояние этапа:
+ *       `collectedData` (что агент уже собрал), `readyForArtifact` (показывать
+ *       ли кнопку завершения), `artifactId` и `status`. Одним запросом
+ *       восстанавливает экран после перезагрузки страницы.
  *     parameters:
  *       - in: path
  *         name: projectId
@@ -570,33 +584,21 @@ router.get('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, va
  * /accelerator/projects/{projectId}/expert-sessions/{sessionId}/complete:
  *   post:
  *     tags: [Accelerator / Expert Sessions]
- *     summary: Завершить этап и создать/подтвердить артефакт
+ *     summary: Завершить этап и получить документ
  *     description: |
- *       Двухфазное завершение: без confirmArtifact создаётся черновик артефакта
- *       (status=ready) и сессия переходит в waiting_user_confirmation, но проект
- *       не переключается на следующего агента. С confirmArtifact=true артефакт
- *       подтверждается (status=confirmed), индексируется в Qdrant, summary проекта
- *       обновляется и currentAgentId переключается на nextAgentId агента. Если у
- *       агента нет nextAgentId (последний в маршруте) — это был финальный этап,
- *       и Project.status автоматически становится "completed".
- *       Повторный вызов уже завершённой сессии — 409.
+ *       Один вызов делает всё: модель пишет документ этапа, сервер верстает
+ *       его в PDF и кладёт в S3, сессия закрывается, проект переключается на
+ *       следующего агента. Параметров у запроса нет.
  *
- *       **Гейт готовности (DONE-4).** Перед генерацией сервер проверяет, что
- *       этап действительно собран (см. `completionState` в SSE-событии `done`).
- *       Если нет — `409 STAGE_NOT_READY`, в теле ошибки `missingFields` и
- *       `reason`; артефакт не создаётся и маршрут не двигается. Обойти гейт
- *       можно только настройкой агента `allowPartialCompletion: true`.
+ *       Следующий агент — это следующий по `order` (либо `nextAgentId`, если
+ *       он задан у текущего агента). Когда следующего нет, маршрут пройден:
+ *       `nextAgentId` в ответе = null, а `Project.status` становится
+ *       `completed`.
  *
- *       **Целостность маршрута.** Если `nextAgentId` текущего агента указывает
- *       на удалённого агента, подтверждение отклоняется —
- *       `409 NEXT_AGENT_UNAVAILABLE` — до любых изменений: артефакт остаётся
- *       `ready`, сессия — `waiting_user_confirmation`.
- *
- *       **Артефакт — PDF.** Модель пишет текст документа, сервер верстает его
- *       в PDF и кладёт в S3 уже на стадии черновика: пользователь видит готовый
- *       файл (`artifact.file.url`) до подтверждения. Поле `artifact.content`
- *       (структурированный JSON) сохраняется как служебный слой — из него
- *       берётся summary для следующего агента и текст для индексации в Qdrant.
+ *       Готовность этапа сервер не проверяет: фронт показывает кнопку по
+ *       `readyForArtifact`, но если пользователь завершит этап раньше,
+ *       документ будет создан по уже собранным данным. Повторный вызов на
+ *       завершённой сессии идемпотентен — возвращает тот же документ.
  *     parameters:
  *       - in: path
  *         name: projectId
@@ -606,23 +608,9 @@ router.get('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, va
  *         name: sessionId
  *         required: true
  *         schema: { type: string }
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               confirmArtifact:
- *                 type: boolean
- *                 default: false
- *                 description: true — подтвердить артефакт и продвинуть маршрут; false/не передано — только создать черновик на проверку.
- *               regenerate:
- *                 type: boolean
- *                 default: false
- *                 description: Сгенерировать черновик заново (кнопка «переделать»). Прежний артефакт помечается rejected, создаётся новый с новым PDF. Для уже подтверждённого артефакта — 409 ARTIFACT_ALREADY_CONFIRMED.
  *     responses:
  *       200:
- *         description: Артефакт создан/подтверждён
+ *         description: Этап завершён, документ создан
  *         content:
  *           application/json:
  *             schema:
@@ -638,29 +626,24 @@ router.get('/:projectId/expert-sessions/:sessionId/messages', authMiddleware, va
  *                     nextAgentId:
  *                       type: string
  *                       nullable: true
- *                       description: Новый Project.currentAgentId, если артефакт был подтверждён (confirmArtifact=true); null, если это только черновик.
+ *                       description: Новый Project.currentAgentId. null — маршрут проекта пройден полностью.
  *                     projectContextVersion:
  *                       type: integer
  *                       description: Актуальное значение Project.contextVersion после этого вызова.
- *                     confirmed:
- *                       type: boolean
- *                       description: true, если это был подтверждающий вызов (confirmArtifact=true), false — если только черновик.
  *       401: { description: Требуется авторизация, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       403: { description: Нет доступа к проекту, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  *       404: { description: Проект или сессия не найдена, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
- *       409: { description: Сессия уже завершена, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
- *       422: { description: Артефакт не прошёл валидацию (ARTIFACT_VALIDATION_FAILED), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
- *       502: { description: "Сбой внешней зависимости: LLM_PROVIDER_FAILED (генерация артефакта) или QDRANT_INDEX_FAILED (индексация подтверждённого артефакта)", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       502: { description: "Сбой внешней зависимости: LLM_PROVIDER_FAILED (генерация документа), ARTIFACT_RENDER_FAILED (вёрстка PDF), ARTIFACT_UPLOAD_FAILED (загрузка в S3)", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
  */
-router.post('/:projectId/expert-sessions/:sessionId/complete', authMiddleware, validate(expertSessionSchemas.completeSessionSchema), checkAccessProject, completeExpertSession);
+router.post('/:projectId/expert-sessions/:sessionId/complete', authMiddleware, validate(expertSessionSchemas.sessionIdSchema), checkAccessProject, completeExpertSession);
 
 /**
  * @swagger
  * /accelerator/projects/{projectId}/artifacts:
  *   get:
  *     tags: [Accelerator / Expert Sessions]
- *     summary: Список артефактов проекта
- *     description: Возвращает все артефакты проекта (любого статуса — draft/ready/confirmed/rejected) в порядке создания. Используется для отображения панели готовности результатов по этапам маршрута.
+ *     summary: Список документов проекта
+ *     description: Все документы, созданные по завершённым этапам, в порядке создания — по одному на этап. Используется для панели результатов проекта.
  *     parameters:
  *       - in: path
  *         name: projectId

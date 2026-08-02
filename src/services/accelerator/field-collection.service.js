@@ -242,12 +242,24 @@ export function syncCompletionState(session, agent, { lastMessageId = null } = {
     const missingFields = getMissingFields(session, agent);
     const ready = missingFields.length === 0;
 
+    // Агент без обязательных полей — незаполненная настройка, а не «этап без
+    // требований». Гейту в этом случае не на чем держаться: пустой список полей
+    // сходится с пустой карточкой на первом же ходу. Держать этап вечно
+    // незавершаемым нельзя (пользователь окажется в тупике), поэтому ready
+    // остаётся true, но причина говорит прямо, что проверки нет, — иначе
+    // «Собраны все данные этапа (0 из 0)» читалось бы как успех.
+    const reason = !fields.length
+        ? 'Гейт готовности отключён: у агента не заданы обязательные поля артефакта ' +
+          '(artifactDefinition.requiredFields пуст). Этап можно завершить в любой момент — ' +
+          'серверу нечего проверять.'
+        : ready
+            ? `Собраны все данные этапа (${fields.length} из ${fields.length}).`
+            : `Собрано ${fields.length - missingFields.length} из ${fields.length}. Не хватает: ${missingFields.join(', ')}.`;
+
     session.completionState = {
         ready,
         missingFields,
-        reason: ready
-            ? `Собраны все данные этапа (${fields.length} из ${fields.length}).`
-            : `Собрано ${fields.length - missingFields.length} из ${fields.length}. Не хватает: ${missingFields.join(', ')}.`,
+        reason,
         evaluatedAt: new Date(),
         evaluatedAfterMessageId: lastMessageId
     };
@@ -270,9 +282,17 @@ function truncate(text) {
 export function buildFieldChecklistPrompt(session, agent) {
     const fields = collectibleFields(agent);
 
+    // Полей нет — значит и чек-листа нет. Раньше здесь агенту прямо
+    // разрешалось «завершать по своему усмотрению», и он честно это делал:
+    // подытоживал и звал нажимать кнопку сразу после первой же реплики
+    // пользователя. Незаполненная настройка агента не должна превращаться в
+    // указание свернуть этап, поэтому инструкция обратная — работать по
+    // completionCriteria и не объявлять завершение самому.
     if (!fields.length) {
-        return 'Карточка этапа: обязательных полей не задано — этап можно завершать по своему усмотрению, ' +
-            'предложив пользователю нажать кнопку «Завершить этап».';
+        return 'Карточка этапа не настроена: администратор не задал обязательные поля артефакта. ' +
+            'Ориентируйся на критерии завершения этапа выше и продолжай собирать по ним информацию.\n' +
+            'Не объявляй этап завершённым, не подводи итоги по собственной инициативе и не предлагай ' +
+            'перейти к следующему этапу — момент завершения выбирает пользователь.';
     }
 
     const lines = fields.map((field) => {

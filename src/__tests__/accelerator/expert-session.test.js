@@ -460,6 +460,42 @@ describe('Гейт готовности этапа (DONE-4)', () => {
         expect([...session.collectedFields.keys()]).toEqual(['marketDescription']);
     });
 
+    it('агент с пустым requiredFields не получает указания сворачивать этап', async () => {
+        // Боевой случай: у агента «Роза» artifactDefinition.requiredFields = [].
+        // Гейту не на чем держаться (пустой список сходится с пустой карточкой
+        // сразу), и раньше промпт прямо разрешал «завершать по своему
+        // усмотрению» — агент подводил итоги после первой же реплики.
+        const agent = await Agent.create({
+            name: 'Роза',
+            roleTitle: 'Синтетик аудитории',
+            order: 6,
+            systemPrompt: 'Ты Роза.',
+            completionCriteria: 'Собраны портреты и ответы синтетических пользователей.',
+            artifactDefinition: { artifactType: 'audience_sim', requiredFields: [] }
+        });
+        const { owner, project } = await setupProject();
+        const cookie = authCookie(owner._id, owner.email);
+        const sessionId = await startDialogue(project, cookie, agent._id, { withMessage: false });
+
+        const res = await request(app)
+            .post(`/api/v1/accelerator/projects/${project._id}/expert-sessions/${sessionId}/messages`)
+            .set('Cookie', cookie)
+            .send({ content: 'Привет, помоги с аудиторией' });
+        expect(res.status).toBe(200);
+
+        const systemPrompt = chatCompleteStream.mock.calls.at(-1)[0].messages[0].content;
+        expect(systemPrompt).toContain('Карточка этапа не настроена');
+        expect(systemPrompt).toContain('Не объявляй этап завершённым');
+        expect(systemPrompt).not.toContain('можно завершать по своему усмотрению');
+
+        // Тупика при этом нет: завершить этап по-прежнему можно, а причина
+        // прямо сообщает, что проверять нечего, — вместо бодрого «0 из 0».
+        const state = parseSSE(res.text).find((e) => e.event === 'done').data.completionState;
+        expect(state.ready).toBe(true);
+        expect(state.reason).toContain('Гейт готовности отключён');
+        expect(state.reason).not.toContain('Собраны все данные');
+    });
+
     it('этап без единого сообщения считается неготовым без вызова модели', async () => {
         const { r1 } = await seedAgents();
         const { owner, project } = await setupProject();

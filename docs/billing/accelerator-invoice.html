@@ -1,0 +1,99 @@
+<meta charset="utf-8">
+<title>Разработка бэкенда акселератора</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 32px; background: #fff; }
+  h1 { font-size: 30px; font-weight: 400; margin: 0 0 10px; }
+  .repo { font-size: 15px; color: #222; margin-bottom: 22px; }
+  table { border-collapse: collapse; width: 100%; max-width: 780px; }
+  th, td { border: 1px solid #b9b9b9; padding: 10px 12px; font-size: 14px; vertical-align: top; }
+  th { background: #d9d9d9; text-align: left; font-weight: bold; }
+  td:nth-child(2), td:nth-child(3) { white-space: nowrap; }
+  tr.total td { border: none; }
+  tr.total td.label { text-align: right; font-weight: bold; }
+  tr.total td.value { border: 1px solid #b9b9b9; background: #d9d9d9; font-weight: bold; }
+</style>
+
+<h1>Разработка бэкенда акселератора</h1>
+<div class="repo">https://github.com/skullmare/rocketmind-services</div>
+
+<table>
+  <tr>
+    <th>Задача</th>
+    <th>Кол-во часов</th>
+    <th>Стоимость</th>
+  </tr>
+  <tr>
+    <td>Проектирование структуры модуля акселератора: ODM-модель проекта, zod-схемы валидации, middleware проверки доступа</td>
+    <td>2 часа</td>
+    <td>3000 руб</td>
+  </tr>
+  <tr>
+    <td>Разработка контроллеров управления проектами акселератора (создание, список, получение, редактирование)</td>
+    <td>2 часа</td>
+    <td>3000 руб</td>
+  </tr>
+  <tr>
+    <td>Логика прогресса по этапам и эндпоинт завершения работы с агентом</td>
+    <td>1 час</td>
+    <td>1500 руб</td>
+  </tr>
+  <tr>
+    <td>Ядро экспертного контура: модели агентов, сессий, сообщений и артефактов, сервис ведения сессии</td>
+    <td>4 часа</td>
+    <td>6000 руб</td>
+  </tr>
+  <tr>
+    <td>Интеграция векторной базы Qdrant, изоляция контекста по проектам</td>
+    <td>2 часа</td>
+    <td>3000 руб</td>
+  </tr>
+  <tr>
+    <td>Асинхронный пайплайн обработки файлов: S3, экстракторы PDF/DOCX/TXT, чанкер, очередь задач и воркер</td>
+    <td>3 часа</td>
+    <td>4500 руб</td>
+  </tr>
+  <tr>
+    <td>LLM-сервис и SSE-стриминг ответов агента в чате</td>
+    <td>2 часа</td>
+    <td>3000 руб</td>
+  </tr>
+  <tr>
+    <td>База знаний Knowledge и эмбеддинги, синхронная векторизация источников</td>
+    <td>2 часа</td>
+    <td>3000 руб</td>
+  </tr>
+  <tr>
+    <td>Расширение карточки агента: описание, аватарки, приветствие, промпт оценщика, частичное завершение</td>
+    <td>1 час</td>
+    <td>1500 руб</td>
+  </tr>
+  <tr>
+    <td>Серверный гейт готовности этапа и генерация PDF-артефакта</td>
+    <td>3 часа</td>
+    <td>4500 руб</td>
+  </tr>
+  <tr>
+    <td>Сбор карточки этапа самим агентом вместо отдельного агента-проверяльщика</td>
+    <td>2 часа</td>
+    <td>3000 руб</td>
+  </tr>
+  <tr>
+    <td>Эндпоинт диагностики LLM-провайдеров /system/llm-health</td>
+    <td>1 час</td>
+    <td>1500 руб</td>
+  </tr>
+  <tr>
+    <td>Исправления по итогам ревью: дублирование артефактов, коды ошибок, эмбеддинги, имена файлов</td>
+    <td>1 час</td>
+    <td>1500 руб</td>
+  </tr>
+  <tr>
+    <td>Документация экспертного контура, Swagger и docker-compose для локального запуска</td>
+    <td>40 мин</td>
+    <td>1000 руб</td>
+  </tr>
+  <tr class="total">
+    <td class="label" colspan="2">Итого</td>
+    <td class="value">40000 руб</td>
+  </tr>
+</table>
